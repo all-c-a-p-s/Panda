@@ -86,19 +86,28 @@ pub fn str_to_square_idx(square: String) -> usize {
     } as usize;
     let first: char = square.chars().collect::<Vec<char>>()[0];
     let file: usize = files_indexes()[&first];
-    rank * 8 + file
+    (rank - 1) * 8 + file
 }
 
 pub fn print_bitboard(bitboard: u64) {
+    let mut board_ranks: Vec<String> = Vec::new();
     for rank in 0..8 {
+        let mut rank_str = String::new();
         for file in 0..8 {
             let square = rank * 8 + file;
-            let mut d: usize = 0;
+            let mut d: String = String::from("0 ");
             if (bitboard & (1 << square)) != 0 {
-                d = 1
+                d = String::from("1 ")
             }
-            print!("{}", d)
+            rank_str = format!("{}{}", rank_str, d);
         }
+        board_ranks.push(rank_str);
+    }
+
+    for i in (0..board_ranks.len()).rev() {
+        print!("{} ", i + 1);
+        print!("{}", board_ranks[i]);
         println!()
     }
+    println!("  a b c d e f g h");
 }
