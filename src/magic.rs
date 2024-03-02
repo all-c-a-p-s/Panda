@@ -100,6 +100,10 @@ pub const fn mask_rook_attacks(square: usize) -> u64 {
     attacks
 }
 
+pub const fn mask_queen_attacks(square: usize) -> u64 {
+    mask_bishop_attacks(square) | mask_rook_attacks(square)
+}
+
 pub const WP_ATTACKS: [u64; 64] = {
     let mut i: usize = 0;
     let mut table: [u64; 64] = [0; 64];
