@@ -72,7 +72,27 @@ pub const fn pop_bit(square: usize, bitboard: u64) -> u64 {
     bitboard
 }
 
-pub fn str_to_square_idx(square: String) -> usize {
+pub const fn count(bitboard: u64) -> usize {
+    let mut prev: u64 = bitboard;
+    let mut count: usize = 0;
+    while prev > 0 {
+        prev &= prev - 1; //toggle least significant bit
+        count += 1;
+    }
+    count
+}
+
+pub fn lsfb(bitboard: u64) -> Option<usize> {
+    // TODO: investigate if using Option<> slows this down
+    // also check that type casting isn't too slow
+    if bitboard != 0 {
+        return Some(count(((bitboard as i64) & -(bitboard as i64)) as u64 - 1));
+    }
+    None
+}
+
+pub fn square(sq: &str) -> usize {
+    let square = sq.to_string();
     if square.len() != 2 {
         panic!("invalid square name")
     }
@@ -87,6 +107,18 @@ pub fn str_to_square_idx(square: String) -> usize {
     let first: char = square.chars().collect::<Vec<char>>()[0];
     let file: usize = files_indexes()[&first];
     (rank - 1) * 8 + file
+}
+
+pub fn coordinate(sq: usize) -> String {
+    let mut files: HashMap<usize, char> = HashMap::new();
+    for (file, idx) in files_indexes() {
+        files.insert(idx, file); //invert hashmap
+    }
+    let rank: usize = sq / 8;
+    let r = format!("{}", rank + 1); //+1 for zero-indexed
+    let file = sq - rank * 8;
+    let f = files[&file];
+    format!("{}{}", f, r)
 }
 
 pub fn print_bitboard(bitboard: u64) {

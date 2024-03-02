@@ -33,9 +33,10 @@ pub const fn mask_king_attacks(square: usize) -> u64 {
         | (k >> 8)
 }
 
-pub const fn mask_bishop_attacks(square: usize) -> u64 {
+pub const fn mask_bishop_attacks(square: usize, blockers: u64) -> u64 {
     //does not include squares on the edge of the board as
     //bishop cannot go past these anyway
+    //blockers are treated as pieces of opposite colour (can be captured)
     let mut attacks: u64 = 0;
     let square_rank: usize = square / 8;
     let square_file: usize = square % 8;
@@ -44,7 +45,10 @@ pub const fn mask_bishop_attacks(square: usize) -> u64 {
     while rank > 1 && file > 1 {
         rank -= 1;
         file -= 1; //file and rank decreasing
-        attacks = set_bit(rank * 8 + file, attacks)
+        attacks = set_bit(rank * 8 + file, attacks);
+        if (set_bit(rank * 8 + file, 0) & blockers) > 0 {
+            break;
+        }
     }
 
     rank = square_rank;
@@ -52,7 +56,10 @@ pub const fn mask_bishop_attacks(square: usize) -> u64 {
     while rank < 6 && file > 1 {
         rank += 1;
         file -= 1; // rank increasing, file decreasing
-        attacks = set_bit(rank * 8 + file, attacks)
+        attacks = set_bit(rank * 8 + file, attacks);
+        if (set_bit(rank * 8 + file, 0) & blockers) > 0 {
+            break;
+        }
     }
 
     rank = square_rank;
@@ -60,7 +67,10 @@ pub const fn mask_bishop_attacks(square: usize) -> u64 {
     while rank > 1 && file < 6 {
         rank -= 1;
         file += 1; //rank increasing, file decreasing
-        attacks = set_bit(rank * 8 + file, attacks)
+        attacks = set_bit(rank * 8 + file, attacks);
+        if (set_bit(rank * 8 + file, 0) & blockers) > 0 {
+            break;
+        }
     }
 
     rank = square_rank;
@@ -68,12 +78,15 @@ pub const fn mask_bishop_attacks(square: usize) -> u64 {
     while rank < 6 && file < 6 {
         rank += 1;
         file += 1; //both increasing
-        attacks = set_bit(rank * 8 + file, attacks)
+        attacks = set_bit(rank * 8 + file, attacks);
+        if (set_bit(rank * 8 + file, 0) & blockers) > 0 {
+            break;
+        }
     }
     attacks
 }
 
-pub const fn mask_rook_attacks(square: usize) -> u64 {
+pub const fn mask_rook_attacks(square: usize, blockers: u64) -> u64 {
     let mut attacks: u64 = 0;
     let square_rank: usize = square / 8;
     let square_file: usize = square % 8;
@@ -81,27 +94,39 @@ pub const fn mask_rook_attacks(square: usize) -> u64 {
     let mut file = square_file;
     while rank < 6 {
         rank += 1;
-        attacks = set_bit(rank * 8 + square_file, attacks)
+        attacks = set_bit(rank * 8 + square_file, attacks);
+        if (set_bit(rank * 8 + file, 0) & blockers) > 0 {
+            break;
+        }
     }
     rank = square_rank;
     while rank > 1 {
         rank -= 1;
-        attacks = set_bit(rank * 8 + square_file, attacks)
+        attacks = set_bit(rank * 8 + square_file, attacks);
+        if (set_bit(rank * 8 + file, 0) & blockers) > 0 {
+            break;
+        }
     }
     while file < 6 {
         file += 1;
-        attacks = set_bit(square_rank * 8 + file, attacks)
+        attacks = set_bit(square_rank * 8 + file, attacks);
+        if (set_bit(rank * 8 + file, 0) & blockers) > 0 {
+            break;
+        }
     }
     file = square_file;
     while file > 1 {
         file -= 1;
-        attacks = set_bit(square_rank * 8 + file, attacks)
+        attacks = set_bit(square_rank * 8 + file, attacks);
+        if (set_bit(rank * 8 + file, 0) & blockers) > 0 {
+            break;
+        }
     }
     attacks
 }
 
-pub const fn mask_queen_attacks(square: usize) -> u64 {
-    mask_bishop_attacks(square) | mask_rook_attacks(square)
+pub const fn mask_queen_attacks(square: usize, blockers: u64) -> u64 {
+    mask_bishop_attacks(square, blockers) | mask_rook_attacks(square, blockers)
 }
 
 pub const WP_ATTACKS: [u64; 64] = {
