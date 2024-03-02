@@ -67,7 +67,7 @@ pub const fn get_bit(square: usize, bitboard: u64) -> usize {
 
 pub const fn pop_bit(square: usize, bitboard: u64) -> u64 {
     if get_bit(square, bitboard) == 1 {
-        return bitboard ^ set_bit(square, bitboard);
+        return bitboard ^ set_bit(square, 0);
     }
     bitboard
 }
@@ -82,7 +82,7 @@ pub const fn count(bitboard: u64) -> usize {
     count
 }
 
-pub fn lsfb(bitboard: u64) -> Option<usize> {
+pub const fn lsfb(bitboard: u64) -> Option<usize> {
     // TODO: investigate if using Option<> slows this down
     // also check that type casting isn't too slow
     if bitboard != 0 {
