@@ -7,6 +7,7 @@ pub enum SliderType {
     Rook,
 }
 
+// bits attacked for each square
 #[rustfmt::skip]
 pub const BISHOP_RELEVANT_BITS: [usize; 64] = [
     6, 5, 5, 5, 5, 5, 5, 6,
@@ -31,6 +32,7 @@ pub const ROOK_RELEVANT_BITS: [usize; 64] = [
     12, 11, 11, 11, 11, 11, 11, 12,
 ];
 
+//functions with attack maps for non-sliders
 pub const fn mask_pawn_attacks(square: usize, side: SideToMove) -> u64 {
     //generate capturing attacks
     let p: u64 = set_bit(square, 0);
@@ -160,6 +162,7 @@ pub const fn mask_bishop_attacks(square: usize, blockers: u64) -> u64 {
 }
 
 pub const fn rook_rays(square: usize) -> u64 {
+    //rook attacks without blockers
     //separate function for hashing
     let mut attacks: u64 = 0;
     let square_rank: usize = square / 8;
@@ -188,6 +191,7 @@ pub const fn rook_rays(square: usize) -> u64 {
 }
 
 pub const fn mask_rook_attacks(square: usize, blockers: u64) -> u64 {
+    //rook attacks accounting for blockers
     let mut attacks: u64 = 0;
     let square_rank: usize = square / 8;
     let square_file: usize = square % 8;
@@ -250,6 +254,7 @@ pub const fn set_blockers(index: usize, bits_in_mask: usize, m: u64) -> u64 {
     blocker
 }
 
+//generate magic for given square
 pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> u64 {
     let (mut blockers, mut attacks) = ([0u64; 4096], [0u64; 4096]);
     let attack_mask = match slider {
@@ -312,6 +317,7 @@ pub fn init_magics() {
     }
 }
 
+// magic constants copy-pasted from output of init_magics()
 pub const BISHOP_MAGICS: [u64; 64] = [
     865289279978471456,
     5188859263535153152,
@@ -486,29 +492,28 @@ pub const K_ATTACKS: [u64; 64] = {
     table
 };
 
-pub static mut BISHOP_MASKS: [u64; 64] = [0u64; 64];
-pub static mut ROOK_MASKS: [u64; 64] = [0u64; 64];
+pub static mut BISHOP_RAYS: [u64; 64] = [0u64; 64];
+pub static mut ROOK_RAYS: [u64; 64] = [0u64; 64];
 
 pub static mut BISHOP_ATTACKS: [[u64; 512]; 64] = [[0u64; 512]; 64];
 pub static mut ROOK_ATTACKS: [[u64; 4096]; 64] = [[0u64; 4096]; 64];
 
+// init() functions calculate BISHOP_RAYS, BISHOP_ATTACKS, ROOK_RAYS, ROOK_ATTACKS
 pub fn init_bishop_attacks() {
     let mut square: usize = 0;
     while square < 64 {
         let relevant_bits: usize = unsafe {
-            BISHOP_MASKS[square] = bishop_rays(square);
-            count(BISHOP_MASKS[square])
+            BISHOP_RAYS[square] = bishop_rays(square);
+            count(BISHOP_RAYS[square])
         };
         let blocker_indices = 1 << relevant_bits;
-        let mut i: usize = 0;
-        while i < blocker_indices {
-            let blockers = unsafe { set_blockers(i, relevant_bits, BISHOP_MASKS[square]) };
+        for i in 0..blocker_indices {
+            let blockers = unsafe { set_blockers(i, relevant_bits, BISHOP_RAYS[square]) };
             let magic_index =
                 (blockers * BISHOP_MAGICS[square]) >> (64 - BISHOP_RELEVANT_BITS[square]);
             unsafe {
                 BISHOP_ATTACKS[square][magic_index as usize] = mask_bishop_attacks(square, blockers)
             };
-            i += 1;
         }
         square += 1;
     }
@@ -518,18 +523,16 @@ pub fn init_rook_attacks() {
     let mut square: usize = 0;
     while square < 64 {
         let relevant_bits: usize = unsafe {
-            ROOK_MASKS[square] = rook_rays(square);
-            count(ROOK_MASKS[square])
+            ROOK_RAYS[square] = rook_rays(square);
+            count(ROOK_RAYS[square])
         };
         let blocker_indices = 1 << relevant_bits;
-        let mut i: usize = 0;
-        while i < blocker_indices {
-            let blockers = unsafe { set_blockers(i, relevant_bits, ROOK_MASKS[square]) };
+        for i in 0..blocker_indices {
+            let blockers = unsafe { set_blockers(i, relevant_bits, ROOK_RAYS[square]) };
             let magic_index = (blockers * ROOK_MAGICS[square]) >> (64 - ROOK_RELEVANT_BITS[square]);
             unsafe {
                 ROOK_ATTACKS[square][magic_index as usize] = mask_rook_attacks(square, blockers)
             };
-            i += 1;
         }
         square += 1;
     }
@@ -543,19 +546,19 @@ pub fn init_slider_attacks() {
 pub fn get_bishop_attacks(square: usize, blockers: u64) -> u64 {
     let mut b: u64 = blockers;
     unsafe {
-        b &= BISHOP_MASKS[square];
-        b *= BISHOP_MAGICS[square];
+        b &= BISHOP_RAYS[square]; //bits where blockers block rays
+        b *= BISHOP_MAGICS[square]; //magic hashing
         b >>= 64 - BISHOP_RELEVANT_BITS[square];
-    }
+    };
     unsafe { BISHOP_ATTACKS[square][b as usize] }
 }
 
 pub fn get_rook_attacks(square: usize, blockers: u64) -> u64 {
     let mut b: u64 = blockers;
     unsafe {
-        b &= ROOK_MASKS[square];
+        b &= ROOK_RAYS[square];
         b *= ROOK_MAGICS[square];
         b >>= 64 - ROOK_RELEVANT_BITS[square];
-    }
+    };
     unsafe { ROOK_ATTACKS[square][b as usize] }
 }
