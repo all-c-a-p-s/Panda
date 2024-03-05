@@ -1,21 +1,34 @@
 use crate::helper::*;
 use crate::rng::*;
-// max number of relevant occupancy bits
+// max number of relevant blocker bits
 
 pub enum SliderType {
     Bishop,
     Rook,
 }
 
+#[rustfmt::skip]
 pub const BISHOP_RELEVANT_BITS: [usize; 64] = [
-    6, 5, 5, 5, 5, 5, 5, 6, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 7, 7, 7, 7, 5, 5, 5, 5, 7, 9, 9, 7, 5, 5,
-    5, 5, 7, 9, 9, 7, 5, 5, 5, 5, 7, 7, 7, 7, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 5, 5, 5, 5, 5, 5, 6,
+    6, 5, 5, 5, 5, 5, 5, 6,
+    5, 5, 5, 5, 5, 5, 5, 5,
+    5, 5, 7, 7, 7, 7, 5, 5,
+    5, 5, 7, 9, 9, 7, 5, 5,
+    5, 5, 7, 9, 9, 7, 5, 5,
+    5, 5, 7, 7, 7, 7, 5, 5,
+    5, 5, 5, 5, 5, 5, 5, 5,
+    6, 5, 5, 5, 5, 5, 5, 6,
 ];
 
+#[rustfmt::skip]
 pub const ROOK_RELEVANT_BITS: [usize; 64] = [
-    12, 11, 11, 11, 11, 11, 11, 12, 11, 10, 10, 10, 10, 10, 10, 11, 11, 10, 10, 10, 10, 10, 10, 11,
-    11, 10, 10, 10, 10, 10, 10, 11, 11, 10, 10, 10, 10, 10, 10, 11, 11, 10, 10, 10, 10, 10, 10, 11,
-    11, 10, 10, 10, 10, 10, 10, 11, 12, 11, 11, 11, 11, 11, 11, 12,
+    12, 11, 11, 11, 11, 11, 11, 12,
+    11, 10, 10, 10, 10, 10, 10, 11,
+    11, 10, 10, 10, 10, 10, 10, 11,
+    11, 10, 10, 10, 10, 10, 10, 11,
+    11, 10, 10, 10, 10, 10, 10, 11,
+    11, 10, 10, 10, 10, 10, 10, 11,
+    11, 10, 10, 10, 10, 10, 10, 11,
+    12, 11, 11, 11, 11, 11, 11, 12,
 ];
 
 pub const fn mask_pawn_attacks(square: usize, side: SideToMove) -> u64 {
@@ -217,10 +230,10 @@ pub const fn mask_queen_attacks(square: usize, blockers: u64) -> u64 {
     mask_bishop_attacks(square, blockers) | mask_rook_attacks(square, blockers)
 }
 
-pub const fn set_occupancy(index: usize, bits_in_mask: usize, m: u64) -> u64 {
+pub const fn set_blockers(index: usize, bits_in_mask: usize, m: u64) -> u64 {
     //essentially count to 2^bits_in_mask - 1 in binary by toggling
     //the bits in the attack mask
-    let mut occupancy: u64 = 0;
+    let mut blocker: u64 = 0;
     let mut i: usize = 0;
     let mut mask = m;
     while i < bits_in_mask {
@@ -230,15 +243,15 @@ pub const fn set_occupancy(index: usize, bits_in_mask: usize, m: u64) -> u64 {
         };
         mask = pop_bit(b, mask);
         if index & (1 << i) > 0 {
-            occupancy |= 1 << b;
+            blocker |= 1 << b;
         }
         i += 1;
     }
-    occupancy
+    blocker
 }
 
 pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> u64 {
-    let (mut occupancies, mut attacks) = ([0u64; 4096], [0u64; 4096]);
+    let (mut blockers, mut attacks) = ([0u64; 4096], [0u64; 4096]);
     let attack_mask = match slider {
         SliderType::Bishop => bishop_rays(square),
         SliderType::Rook => rook_rays(square),
@@ -246,10 +259,10 @@ pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> u64
     let blocker_combinations = 1 << relevant_bits;
     // max number of blocker combinations = 2 ^ k
     for i in 0..blocker_combinations {
-        occupancies[i] = set_occupancy(i, relevant_bits, attack_mask);
+        blockers[i] = set_blockers(i, relevant_bits, attack_mask);
         attacks[i] = match slider {
-            SliderType::Bishop => mask_bishop_attacks(square, occupancies[i]),
-            SliderType::Rook => mask_rook_attacks(square, occupancies[i]),
+            SliderType::Bishop => mask_bishop_attacks(square, blockers[i]),
+            SliderType::Rook => mask_rook_attacks(square, blockers[i]),
         };
     }
 
@@ -263,7 +276,7 @@ pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> u64
         }
         let mut ok: bool = true;
         for i in 0..blocker_combinations {
-            let magic_index: usize = ((occupancies[i] * magic) >> (64 - relevant_bits))
+            let magic_index: usize = ((blockers[i] * magic) >> (64 - relevant_bits))
                 .try_into()
                 .unwrap();
             //test magic number multiplication
@@ -302,8 +315,8 @@ pub fn init_magics() {
 pub const BISHOP_MAGICS: [u64; 64] = [
     865289279978471456,
     5188859263535153152,
-    1267745530323008,    
-    298367875691839488,  
+    1267745530323008,
+    298367875691839488,
     13839711328349978628,
     36593465093720320,
     2344207186181309512,
@@ -363,7 +376,7 @@ pub const BISHOP_MAGICS: [u64; 64] = [
     1134700431212800,
     2377903635639107840,
     4899926084042228736,
-    578836831324357120
+    578836831324357120,
 ];
 
 pub const ROOK_MAGICS: [u64; 64] = [
@@ -430,7 +443,7 @@ pub const ROOK_MAGICS: [u64; 64] = [
     11790986792126681218,
     594756642969618433,
     180152852324091396,
-    10570091814458818882
+    10570091814458818882,
 ];
 
 pub const WP_ATTACKS: [u64; 64] = {
@@ -472,3 +485,77 @@ pub const K_ATTACKS: [u64; 64] = {
     }
     table
 };
+
+pub static mut BISHOP_MASKS: [u64; 64] = [0u64; 64];
+pub static mut ROOK_MASKS: [u64; 64] = [0u64; 64];
+
+pub static mut BISHOP_ATTACKS: [[u64; 512]; 64] = [[0u64; 512]; 64];
+pub static mut ROOK_ATTACKS: [[u64; 4096]; 64] = [[0u64; 4096]; 64];
+
+pub fn init_bishop_attacks() {
+    let mut square: usize = 0;
+    while square < 64 {
+        let relevant_bits: usize = unsafe {
+            BISHOP_MASKS[square] = bishop_rays(square);
+            count(BISHOP_MASKS[square])
+        };
+        let blocker_indices = 1 << relevant_bits;
+        let mut i: usize = 0;
+        while i < blocker_indices {
+            let blockers = unsafe { set_blockers(i, relevant_bits, BISHOP_MASKS[square]) };
+            let magic_index =
+                (blockers * BISHOP_MAGICS[square]) >> (64 - BISHOP_RELEVANT_BITS[square]);
+            unsafe {
+                BISHOP_ATTACKS[square][magic_index as usize] = mask_bishop_attacks(square, blockers)
+            };
+            i += 1;
+        }
+        square += 1;
+    }
+}
+
+pub fn init_rook_attacks() {
+    let mut square: usize = 0;
+    while square < 64 {
+        let relevant_bits: usize = unsafe {
+            ROOK_MASKS[square] = rook_rays(square);
+            count(ROOK_MASKS[square])
+        };
+        let blocker_indices = 1 << relevant_bits;
+        let mut i: usize = 0;
+        while i < blocker_indices {
+            let blockers = unsafe { set_blockers(i, relevant_bits, ROOK_MASKS[square]) };
+            let magic_index = (blockers * ROOK_MAGICS[square]) >> (64 - ROOK_RELEVANT_BITS[square]);
+            unsafe {
+                ROOK_ATTACKS[square][magic_index as usize] = mask_rook_attacks(square, blockers)
+            };
+            i += 1;
+        }
+        square += 1;
+    }
+}
+
+pub fn init_slider_attacks() {
+    init_bishop_attacks();
+    init_rook_attacks();
+}
+
+pub fn get_bishop_attacks(square: usize, blockers: u64) -> u64 {
+    let mut b: u64 = blockers;
+    unsafe {
+        b &= BISHOP_MASKS[square];
+        b *= BISHOP_MAGICS[square];
+        b >>= 64 - BISHOP_RELEVANT_BITS[square];
+    }
+    unsafe { BISHOP_ATTACKS[square][b as usize] }
+}
+
+pub fn get_rook_attacks(square: usize, blockers: u64) -> u64 {
+    let mut b: u64 = blockers;
+    unsafe {
+        b &= ROOK_MASKS[square];
+        b *= ROOK_MAGICS[square];
+        b >>= 64 - ROOK_RELEVANT_BITS[square];
+    }
+    unsafe { ROOK_ATTACKS[square][b as usize] }
+}
