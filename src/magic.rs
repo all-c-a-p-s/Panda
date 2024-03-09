@@ -38,8 +38,8 @@ pub const fn mask_pawn_attacks(square: usize, side: Colour) -> u64 {
     //generate capturing attacks
     let p: u64 = set_bit(square, 0);
     match side {
-        Colour::White => ((p >> 9) & !A_FILE) | ((p >> 7) & !H_FILE),
-        Colour::Black => ((p << 7) & !A_FILE) | ((p << 9) & !H_FILE),
+        Colour::Black => ((p >> 9) & !A_FILE) | ((p >> 7) & !H_FILE),
+        Colour::White => ((p << 7) & !A_FILE) | ((p << 9) & !H_FILE),
     }
 }
 
@@ -577,9 +577,9 @@ pub fn get_queen_attacks(square: usize, blockers: u64) -> u64 {
     let mut res = unsafe { BISHOP_ATTACKS[square][bishop_blockers as usize] };
 
     unsafe {
-        rook_blockers &= BISHOP_RAYS[square];
-        rook_blockers *= BISHOP_MAGICS[square];
-        rook_blockers >>= 64 - BISHOP_RELEVANT_BITS[square];
+        rook_blockers &= ROOK_RAYS[square];
+        rook_blockers *= ROOK_MAGICS[square];
+        rook_blockers >>= 64 - ROOK_RELEVANT_BITS[square];
     };
 
     unsafe { res |= ROOK_ATTACKS[square][rook_blockers as usize] };

@@ -21,7 +21,7 @@ pub const RANK_6: u64 = 0x0000000000FF0000;
 pub const RANK_7: u64 = 0x000000000000FF00;
 pub const RANK_8: u64 = 0x00000000000000FF;
 
-pub fn files_indexes() -> HashMap<char, usize> {
+pub fn file_indices() -> HashMap<char, usize> {
     let mut files = HashMap::new();
     files.insert('a', 0);
     files.insert('b', 1);
@@ -65,7 +65,6 @@ pub const fn count(bitboard: u64) -> usize {
 
 pub const fn lsfb(bitboard: u64) -> Option<usize> {
     // TODO: investigate if using Option<> slows this down
-    // also check that type casting isn't too slow
     if bitboard != 0 {
         return Some(count(((bitboard as i64) & -(bitboard as i64)) as u64 - 1));
     }
@@ -86,13 +85,13 @@ pub fn square(sq: &str) -> usize {
         None => panic!("failed to convert rank to int"),
     } as usize;
     let first: char = square.chars().collect::<Vec<char>>()[0];
-    let file: usize = files_indexes()[&first];
+    let file: usize = file_indices()[&first];
     (rank - 1) * 8 + file
 }
 
 pub fn coordinate(sq: usize) -> String {
     let mut files: HashMap<usize, char> = HashMap::new();
-    for (file, idx) in files_indexes() {
+    for (file, idx) in file_indices() {
         files.insert(idx, file); //invert hashmap
     }
     let rank: usize = sq / 8;
@@ -100,6 +99,14 @@ pub fn coordinate(sq: usize) -> String {
     let file = sq - rank * 8;
     let f = files[&file];
     format!("{}{}", f, r)
+}
+
+pub fn rank(sq: usize) -> usize {
+    sq / 8
+}
+
+pub fn file(sq: usize) -> usize {
+    sq % 8
 }
 
 pub fn print_bitboard(bitboard: u64) {

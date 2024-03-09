@@ -3,6 +3,7 @@ use crate::helper::*;
 #[derive(Debug)]
 pub struct Board {
     pub bitboards: [u64; 12],
+    pub occupancies: [u64; 3], //white, black, both
     pub castling: u8, //4 bits only should be used 0001 = wk, 0010 = wq, 0100 = bk, 1000 = bq
     pub en_passant: usize, //ep square index
     pub side_to_move: Colour,
@@ -37,6 +38,7 @@ pub fn ascii_to_piece_index(ascii: char) -> usize {
 pub fn fen_to_board(fen: &str) -> Board {
     let mut new_board = Board {
         bitboards: [0u64; 12],
+        occupancies: [0u64; 3],
         castling: 0,
         en_passant: 64,
         side_to_move: Colour::White,
@@ -122,6 +124,15 @@ pub fn fen_to_board(fen: &str) -> Board {
             }
             _ => panic!("unexpected character {}", c),
         }
+    }
+
+    for i in 0..12 {
+        if i < 6 {
+            new_board.occupancies[0] |= new_board.bitboards[i]
+        } else {
+            new_board.occupancies[1] |= new_board.bitboards[i]
+        }
+        new_board.occupancies[2] |= new_board.bitboards[i]
     }
 
     new_board
