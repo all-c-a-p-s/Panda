@@ -563,3 +563,25 @@ pub fn get_rook_attacks(square: usize, blockers: u64) -> u64 {
     };
     unsafe { ROOK_ATTACKS[square][b as usize] }
 }
+
+pub fn get_queen_attacks(square: usize, blockers: u64) -> u64 {
+    let mut bishop_blockers: u64 = blockers;
+    let mut rook_blockers: u64 = blockers;
+
+    unsafe {
+        bishop_blockers &= BISHOP_RAYS[square];
+        bishop_blockers *= BISHOP_MAGICS[square];
+        bishop_blockers >>= 64 - BISHOP_RELEVANT_BITS[square];
+    };
+
+    let mut res = unsafe { BISHOP_ATTACKS[square][bishop_blockers as usize] };
+
+    unsafe {
+        rook_blockers &= BISHOP_RAYS[square];
+        rook_blockers *= BISHOP_MAGICS[square];
+        rook_blockers >>= 64 - BISHOP_RELEVANT_BITS[square];
+    };
+
+    unsafe { res |= ROOK_ATTACKS[square][rook_blockers as usize] };
+    res
+}
