@@ -1,3 +1,4 @@
+use crate::board::*;
 use crate::helper::*;
 use crate::rng::*;
 // max number of relevant blocker bits
@@ -33,12 +34,12 @@ pub const ROOK_RELEVANT_BITS: [usize; 64] = [
 ];
 
 //functions with attack maps for non-sliders
-pub const fn mask_pawn_attacks(square: usize, side: SideToMove) -> u64 {
+pub const fn mask_pawn_attacks(square: usize, side: Colour) -> u64 {
     //generate capturing attacks
     let p: u64 = set_bit(square, 0);
     match side {
-        SideToMove::White => ((p >> 9) & !A_FILE) | ((p >> 7) & !H_FILE),
-        SideToMove::Black => ((p << 7) & !A_FILE) | ((p << 9) & !H_FILE),
+        Colour::White => ((p >> 9) & !A_FILE) | ((p >> 7) & !H_FILE),
+        Colour::Black => ((p << 7) & !A_FILE) | ((p << 9) & !H_FILE),
     }
 }
 
@@ -456,7 +457,7 @@ pub const WP_ATTACKS: [u64; 64] = {
     let mut i: usize = 0;
     let mut table: [u64; 64] = [0; 64];
     while i < 64 {
-        table[i] = mask_pawn_attacks(i, SideToMove::White);
+        table[i] = mask_pawn_attacks(i, Colour::White);
         i += 1;
     }
     table
@@ -466,7 +467,7 @@ pub const BP_ATTACKS: [u64; 64] = {
     let mut i: usize = 0;
     let mut table: [u64; 64] = [0; 64];
     while i < 64 {
-        table[i] = mask_pawn_attacks(i, SideToMove::Black);
+        table[i] = mask_pawn_attacks(i, Colour::Black);
         i += 1;
     }
     table
