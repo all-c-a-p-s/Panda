@@ -57,7 +57,10 @@ pub fn gen_moves(board: Board) {
                     //not blocked
                     println!("{}{}", coordinate(lsb), coordinate(lsb + 8));
                 }
-                if rank(lsb) == 1 && (set_bit(lsb + 16, 0) & !board.occupancies[2]) > 0 {
+                if rank(lsb) == 1
+                    && (set_bit(lsb + 16, 0) & !board.occupancies[2]) > 0
+                    && (set_bit(lsb + 8, 0) & !board.occupancies[2]) > 0
+                {
                     //not blocked
                     println!("{}{}", coordinate(lsb), coordinate(lsb + 16));
                 }
@@ -72,7 +75,10 @@ pub fn gen_moves(board: Board) {
                     //not blocked
                     println!("{}{}", coordinate(lsb), coordinate(lsb - 8));
                 }
-                if rank(lsb) == 6 && (set_bit(lsb - 16, 0) & !board.occupancies[2]) > 0 {
+                if rank(lsb) == 6
+                    && (set_bit(lsb - 16, 0) & !board.occupancies[2]) > 0
+                    && (set_bit(lsb + 8, 0) & !board.occupancies[2]) > 0
+                {
                     //not blocked
                     println!("{}{}", coordinate(lsb), coordinate(lsb - 16));
                 }
