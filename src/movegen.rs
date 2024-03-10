@@ -1,6 +1,7 @@
 use crate::board::*;
 use crate::helper::*;
 use crate::magic::*;
+use crate::r#move::*;
 
 pub fn is_attacked(square: usize, colour: Colour, board: &Board) -> bool {
     //attacked BY colour
@@ -38,16 +39,39 @@ pub fn is_attacked(square: usize, colour: Colour, board: &Board) -> bool {
     false
 }
 
-pub fn pawn_push_moves(board: &Board) {
+pub fn pawn_push_moves(board: &Board, moves: MoveList) -> MoveList {
+    let mut first_unused: usize = 0;
+    for i in 0..MAX_MOVES {
+        if moves.moves[i] == NULL_MOVE {
+            first_unused = i;
+            break;
+        }
+    }
+    let mut res = moves;
     match board.side_to_move {
         Colour::White => {
             let mut bitboard = board.bitboards[0];
             while bitboard > 0 {
                 let lsb = lsfb(bitboard).unwrap();
                 if get_bit(lsb + 8, board.occupancies[2]) == 0 {
-                    println!("{}{}", coordinate(lsb), coordinate(lsb + 8));
+                    if rank(lsb) == 6 {
+                        //promotion
+                        res.moves[first_unused] = encode_move(lsb, lsb + 8, 4, board, false);
+                        first_unused += 1;
+                        res.moves[first_unused] = encode_move(lsb, lsb + 8, 3, board, false);
+                        first_unused += 1;
+                        res.moves[first_unused] = encode_move(lsb, lsb + 8, 2, board, false);
+                        first_unused += 1;
+                        res.moves[first_unused] = encode_move(lsb, lsb + 8, 1, board, false);
+                        first_unused += 1;
+                    } else {
+                        res.moves[first_unused] = encode_move(lsb, lsb + 8, 15, board, false);
+                        first_unused += 1;
+                    }
                     if rank(lsb) == 1 && get_bit(lsb + 16, board.occupancies[2]) == 0 {
-                        println!("{}{}", coordinate(lsb), coordinate(lsb + 16));
+                        //double push
+                        res.moves[first_unused] = encode_move(lsb, lsb + 16, 15, board, false);
+                        first_unused += 1;
                     }
                     bitboard = pop_bit(lsb, bitboard);
                 }
@@ -58,18 +82,43 @@ pub fn pawn_push_moves(board: &Board) {
             while bitboard > 0 {
                 let lsb = lsfb(bitboard).unwrap();
                 if get_bit(lsb - 8, board.occupancies[2]) == 0 {
-                    println!("{}{}", coordinate(lsb), coordinate(lsb - 8));
+                    if rank(lsb - 8) == 0 {
+                        //promotion
+                        res.moves[first_unused] = encode_move(lsb, lsb - 8, 10, board, false);
+                        first_unused += 1;
+                        res.moves[first_unused] = encode_move(lsb, lsb - 8, 9, board, false);
+                        first_unused += 1;
+                        res.moves[first_unused] = encode_move(lsb, lsb - 8, 8, board, false);
+                        first_unused += 1;
+                        res.moves[first_unused] = encode_move(lsb, lsb - 8, 7, board, false);
+                        first_unused += 1;
+                    } else {
+                        res.moves[first_unused] = encode_move(lsb, lsb - 8, 15, board, false);
+                        first_unused += 1;
+                    }
                     if rank(lsb) == 6 && get_bit(lsb - 16, board.occupancies[2]) == 0 {
-                        println!("{}{}", coordinate(lsb), coordinate(lsb - 16));
+                        //double push
+                        res.moves[first_unused] = encode_move(lsb, lsb - 16, 15, board, false);
+                        first_unused += 1;
                     }
                     bitboard = pop_bit(lsb, bitboard);
                 }
             }
         }
-    }
+    };
+    res
 }
 
-pub fn castling_moves(board: &Board) {
+pub fn castling_moves(board: &Board, moves: MoveList) -> MoveList {
+    let mut first_unused: usize = 0;
+    for i in 0..MAX_MOVES {
+        if moves.moves[i] == NULL_MOVE {
+            first_unused = i;
+            break;
+        }
+    }
+    let mut res = moves;
+
     match board.side_to_move {
         Colour::White => {
             if (board.castling & 0b0000_0001) > 0 {
@@ -79,7 +128,8 @@ pub fn castling_moves(board: &Board) {
                     && !is_attacked(4, Colour::Black, board)
                     && !is_attacked(5, Colour::Black, board)
                 {
-                    println!("e1g1");
+                    res.moves[first_unused] = encode_move(4, 6, 15, board, true);
+                    first_unused += 1;
                 }
             }
 
@@ -90,7 +140,7 @@ pub fn castling_moves(board: &Board) {
                     && !is_attacked(4, Colour::Black, board)
                     && !is_attacked(3, Colour::Black, board)
                 {
-                    println!("e1c1");
+                    res.moves[first_unused] = encode_move(4, 2, 15, board, true);
                 }
             }
         }
@@ -102,7 +152,8 @@ pub fn castling_moves(board: &Board) {
                     && !is_attacked(60, Colour::White, board)
                     && !is_attacked(61, Colour::White, board)
                 {
-                    println!("e8g8");
+                    res.moves[first_unused] = encode_move(60, 62, 15, board, true);
+                    first_unused += 1;
                 }
             }
 
@@ -113,22 +164,35 @@ pub fn castling_moves(board: &Board) {
                     && !is_attacked(60, Colour::White, board)
                     && !is_attacked(59, Colour::White, board)
                 {
-                    println!("e8c8");
+                    res.moves[first_unused] = encode_move(60, 58, 15, board, true);
                 }
             }
         }
-    }
+    };
+    res
 }
 
-pub fn gen_moves(board: &Board) {
+pub fn gen_moves(board: &Board) -> MoveList {
     let (mut min, mut max) = (0usize, 6usize);
     if board.side_to_move == Colour::Black {
         min = 6;
         max = 12;
     }
 
-    pawn_push_moves(board);
-    castling_moves(board);
+    let mut moves = MoveList {
+        moves: [NULL_MOVE; 218],
+    };
+
+    moves = pawn_push_moves(board, moves);
+    moves = castling_moves(board, moves);
+
+    let mut first_unused: usize = 0;
+    for i in 0..MAX_MOVES {
+        if moves.moves[i] == NULL_MOVE {
+            first_unused = i;
+            break;
+        }
+    }
 
     for i in min..max {
         //pieces of colour to move
@@ -168,11 +232,34 @@ pub fn gen_moves(board: &Board) {
             }
             while attacks > 0 {
                 let lsb_attack = lsfb(attacks).unwrap();
-                println!("{}{}", coordinate(lsb), coordinate(lsb_attack)); //later add move to some
-                                                                           //list to return here
+                if (get_bit(lsb, board.bitboards[0]) > 0) && rank(lsb) == 6 {
+                    // white promotion
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 4, board, false);
+                    first_unused += 1;
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 3, board, false);
+                    first_unused += 1;
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 2, board, false);
+                    first_unused += 1;
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 1, board, false);
+                    first_unused += 1;
+                } else if (get_bit(lsb, board.bitboards[6]) > 0) && rank(lsb) == 1 {
+                    //black promotion
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 10, board, false);
+                    first_unused += 1;
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 9, board, false);
+                    first_unused += 1;
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 8, board, false);
+                    first_unused += 1;
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 7, board, false);
+                    first_unused += 1;
+                } else {
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 15, board, false);
+                    first_unused += 1;
+                } //list to return here
                 attacks = pop_bit(lsb_attack, attacks);
             }
             bitboard = pop_bit(lsb, bitboard);
         }
     }
+    moves
 }
