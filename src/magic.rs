@@ -201,7 +201,7 @@ pub const fn mask_rook_attacks(square: usize, blockers: u64) -> u64 {
     while rank < 6 {
         rank += 1;
         attacks = set_bit(rank * 8 + square_file, attacks);
-        if (set_bit(rank * 8 + file, 0) & blockers) > 0 {
+        if get_bit(rank * 8 + square_file, blockers) > 0 {
             break;
         }
     }
@@ -209,14 +209,14 @@ pub const fn mask_rook_attacks(square: usize, blockers: u64) -> u64 {
     while rank > 1 {
         rank -= 1;
         attacks = set_bit(rank * 8 + square_file, attacks);
-        if (set_bit(rank * 8 + file, 0) & blockers) > 0 {
+        if get_bit(rank * 8 + square_file, blockers) > 0 {
             break;
         }
     }
     while file < 6 {
         file += 1;
         attacks = set_bit(square_rank * 8 + file, attacks);
-        if (set_bit(rank * 8 + file, 0) & blockers) > 0 {
+        if get_bit(square_rank * 8 + file, blockers) > 0 {
             break;
         }
     }
@@ -224,7 +224,7 @@ pub const fn mask_rook_attacks(square: usize, blockers: u64) -> u64 {
     while file > 1 {
         file -= 1;
         attacks = set_bit(square_rank * 8 + file, attacks);
-        if (set_bit(rank * 8 + file, 0) & blockers) > 0 {
+        if get_bit(square_rank * 8 + file, blockers) > 0 {
             break;
         }
     }
@@ -276,15 +276,14 @@ pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> u64
         let mut used_attacks = [0u64; 4096]; //reset used_attacks
         let magic = magic_candidate();
         if count((magic * attack_mask) & 0xFF_00_00_00_00_00_00_00) < 6 {
-            //test swapping this to heuristic 6
-            //impossible for magic to work
+            //heuristic suggesting to skip this candidate
             continue;
         }
         let mut ok: bool = true;
         for i in 0..blocker_combinations {
             let magic_index: usize = ((blockers[i] * magic) >> (64 - relevant_bits))
                 .try_into()
-                .unwrap();
+                .unwrap(); //shift ensures it is between 0 and 4095
             //test magic number multiplication
             if used_attacks[magic_index] == 0 {
                 used_attacks[magic_index] = attacks[i]
@@ -306,7 +305,7 @@ pub fn init_magics() {
     println!("BISHOP MAGICS:");
     println!("==============\n");
     for (i, bits) in BISHOP_RELEVANT_BITS.iter().enumerate() {
-        println!("{},", gen_magic(i, *bits, SliderType::Bishop))
+        println!("0x{:X}u64,", gen_magic(i, *bits, SliderType::Bishop))
     }
 
     print!("\n\n\n");
@@ -314,143 +313,143 @@ pub fn init_magics() {
     println!("==============\n");
 
     for (i, bits) in ROOK_RELEVANT_BITS.iter().enumerate() {
-        println!("{},", gen_magic(i, *bits, SliderType::Rook))
+        println!("0x{:X}u64,", gen_magic(i, *bits, SliderType::Rook))
     }
 }
 
 // magic constants copy-pasted from output of init_magics()
 pub const BISHOP_MAGICS: [u64; 64] = [
-    865289279978471456,
-    5188859263535153152,
-    1267745530323008,
-    298367875691839488,
-    13839711328349978628,
-    36593465093720320,
-    2344207186181309512,
-    2326577478631940,
-    76726190541440000,
-    10206225476356225,
-    20275028792714240,
-    572040302055424,
-    108088598943369728,
-    5188147875075325957,
-    424413904507394,
-    18021004177835012,
-    4644923648262272,
-    9243638381475344896,
-    312155921075732996,
-    4614008204232230992,
-    1691066633882369,
-    70927095308292,
-    148055842066792960,
-    4786244991590784,
-    2603987668959754,
-    2310351082997941384,
-    4612813125254119680,
-    577028101915021344,
-    1225260646652723200,
-    144191054948893192,
-    36332270902837504,
-    18300409005245440,
-    290519593860145152,
-    299105864651082,
-    40166535200808,
-    72101608862910977,
-    2254016019435776,
-    146725465192138752,
-    147501830337742080,
-    9367647762237128832,
-    73201094854971396,
-    9223451279287207936,
-    2495016192402524160,
-    86234957826,
-    4647723680528695552,
-    9296581953573093440,
-    10282652271771904,
-    288218633273856,
-    2306424656771418121,
-    9367529040771557377,
-    81065001666740866,
-    288230411618877440,
-    5188182230117253121,
-    36882155615326208,
-    1158023522304524288,
-    2269512434987040,
-    10412434497291894809,
-    550963941376,
-    36180582270554128,
-    4775856298611206144,
-    1134700431212800,
-    2377903635639107840,
-    4899926084042228736,
-    578836831324357120,
+    0x4485204022A00u64,
+    0x4012244010002u64,
+    0x208880450800004u64,
+    0x20A0A02900084u64,
+    0x8004504000008010u64,
+    0x101042004A00000u64,
+    0x1008210420020u64,
+    0x8020A0901011000u64,
+    0x50407104008880u64,
+    0x200440408004104u64,
+    0x4122802002000u64,
+    0x82040400040u64,
+    0x900020210000809u64,
+    0x100208220200001u64,
+    0x140020090090800u64,
+    0x9040950401040200u64,
+    0x1C0001012B20C40u64,
+    0x830408711022004Au64,
+    0x10000482208102u64,
+    0x408201044004003u64,
+    0x8D020090400740u64,
+    0x8086001501010100u64,
+    0x412000121102241u64,
+    0x2010002008084A0u64,
+    0x8048200088021010u64,
+    0x601080020A21400u64,
+    0x440410010040080u64,
+    0x2002028008008062u64,
+    0xA0840120802000u64,
+    0x80460431008202u64,
+    0x108008148420844u64,
+    0x1216002020820Au64,
+    0xA010880440200401u64,
+    0x424C43002441000u64,
+    0x100280804040024u64,
+    0x1021200800130811u64,
+    0xE160008480040021u64,
+    0x110100081004040u64,
+    0x41880500220500u64,
+    0xA004012048802400u64,
+    0x1040360004002u64,
+    0x101081A03001004u64,
+    0x980420041101001u64,
+    0x2C184010402209u64,
+    0xC040400101011214u64,
+    0x781100900400A00u64,
+    0xC528022C000240u64,
+    0x4080060424100u64,
+    0xE0404A0814404081u64,
+    0x200840402020025u64,
+    0x1809820106C81213u64,
+    0x110020008404200Cu64,
+    0xB800400D04400Au64,
+    0x400612012008100u64,
+    0x8110302118048802u64,
+    0x4848411800A10000u64,
+    0x4440442208024082u64,
+    0x20820221211800u64,
+    0x40400824220800u64,
+    0x244400400208800u64,
+    0x9042000890020210u64,
+    0x824308A100300u64,
+    0x8082088209D00u64,
+    0x2C0210202004308u64,
 ];
 
 pub const ROOK_MAGICS: [u64; 64] = [
-    900720200370152064,
-    4629700554376872002,
-    2738197927901012240,
-    1297041159585136704,
-    36037595259731970,
-    5908872588355961344,
-    36029346808332544,
-    72069140017393920,
-    1153484596298514562,
-    1189020945516339200,
-    4785212059829264,
-    1153203048319819784,
-    2306124518600475664,
-    1729945241291588096,
-    28148064624576514,
-    9404078973010575489,
-    72568321212545,
-    63050669929545766,
-    9011872447612928,
-    360853119304732708,
-    433754038690381840,
-    4613094492956918784,
-    4398063821360,
-    90355666555782177,
-    36099167910658082,
-    9552425634775449600,
-    9042387922862336,
-    9369739585238597896,
-    2323866205963944065,
-    864693329634264064,
-    577032515529871361,
-    1733903732192084993,
-    581105364573880353,
-    283676181012544,
-    39127495949164550,
-    722829389603016708,
-    9248995062279308288,
-    5189273220468965888,
-    9511620559310424066,
-    576601491410784512,
-    5800636595467993088,
-    657526113606074400,
-    6931041480622768144,
-    2594647331510026272,
-    10531672161028997136,
-    2341874005323055232,
-    13916685805042139176,
-    576479445083881476,
-    1153062243168952448,
-    18155518283489792,
-    360323156445168384,
-    9288742951461120,
-    4796755849983033984,
-    72620612845306368,
-    45045350980977664,
-    36100282458867200,
-    9223408321011154953,
-    16456293951998005762,
-    1155041432281612353,
-    13510868341948569,
-    11790986792126681218,
-    594756642969618433,
-    180152852324091396,
-    10570091814458818882,
+    0x480022016804004u64,
+    0x8040001000200040u64,
+    0x100100900402000u64,
+    0x100042008100100u64,
+    0x180080080F40022u64,
+    0x1A00301102000448u64,
+    0x2100010000820004u64,
+    0x100020220458100u64,
+    0x8011802080004000u64,
+    0x400402010004000u64,
+    0x8400801000200080u64,
+    0x1000808010000800u64,
+    0x2000800800800400u64,
+    0x282800400800201u64,
+    0x1209000100040200u64,
+    0x122000120840042u64,
+    0x100208000401080u64,
+    0x5160010100400080u64,
+    0x888020001000u64,
+    0x20828008001000u64,
+    0x4008008008004u64,
+    0x2400808004000200u64,
+    0x40040001080210u64,
+    0x4C000E0020804405u64,
+    0x12400280228000u64,
+    0x4000910100204002u64,
+    0x4000100080200080u64,
+    0x68001010010200u64,
+    0x9048008180080400u64,
+    0x20E2000200100408u64,
+    0x120810C00504228u64,
+    0x901C0200009541u64,
+    0x440002C800480u64,
+    0x20002040401008u64,
+    0x100820046002010u64,
+    0x100080800800u64,
+    0xC40A080080800400u64,
+    0x2382001004040020u64,
+    0x5A02000802000401u64,
+    0x2800404402000081u64,
+    0x844000CB28828000u64,
+    0x8002010080220044u64,
+    0x1840420084120020u64,
+    0x1000A0010420020u64,
+    0x4000040008008080u64,
+    0x4048040002008080u64,
+    0x40224108040090u64,
+    0x4809000088410022u64,
+    0x200410024800300u64,
+    0x20102040088080u64,
+    0x2A8200480100880u64,
+    0x2410020800128080u64,
+    0x3080040080080080u64,
+    0xE801042010400801u64,
+    0x5002004801248200u64,
+    0x40802F0008C080u64,
+    0x1010401080042103u64,
+    0x904608210240D082u64,
+    0xC000084100102001u64,
+    0x84200410000901u64,
+    0x202000410200846u64,
+    0x8083003608040029u64,
+    0x92810108204u64,
+    0x50003100440082u64,
 ];
 
 pub const WP_ATTACKS: [u64; 64] = {
@@ -501,8 +500,7 @@ pub static mut ROOK_ATTACKS: [[u64; 4096]; 64] = [[0u64; 4096]; 64];
 
 // init() functions calculate BISHOP_RAYS, BISHOP_ATTACKS, ROOK_RAYS, ROOK_ATTACKS
 pub fn init_bishop_attacks() {
-    let mut square: usize = 0;
-    while square < 64 {
+    for square in 0..64 {
         let relevant_bits: usize = unsafe {
             BISHOP_RAYS[square] = bishop_rays(square);
             count(BISHOP_RAYS[square])
@@ -513,16 +511,14 @@ pub fn init_bishop_attacks() {
             let magic_index =
                 (blockers * BISHOP_MAGICS[square]) >> (64 - BISHOP_RELEVANT_BITS[square]);
             unsafe {
-                BISHOP_ATTACKS[square][magic_index as usize] = mask_bishop_attacks(square, blockers)
+                BISHOP_ATTACKS[square][magic_index as usize] = mask_bishop_attacks(square, blockers);
             };
         }
-        square += 1;
     }
 }
 
 pub fn init_rook_attacks() {
-    let mut square: usize = 0;
-    while square < 64 {
+    for square in 0..64 {
         let relevant_bits: usize = unsafe {
             ROOK_RAYS[square] = rook_rays(square);
             count(ROOK_RAYS[square])
@@ -532,10 +528,9 @@ pub fn init_rook_attacks() {
             let blockers = unsafe { set_blockers(i, relevant_bits, ROOK_RAYS[square]) };
             let magic_index = (blockers * ROOK_MAGICS[square]) >> (64 - ROOK_RELEVANT_BITS[square]);
             unsafe {
-                ROOK_ATTACKS[square][magic_index as usize] = mask_rook_attacks(square, blockers)
+                ROOK_ATTACKS[square][magic_index as usize] = mask_rook_attacks(square, blockers);
             };
         }
-        square += 1;
     }
 }
 

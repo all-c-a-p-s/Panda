@@ -126,19 +126,26 @@ pub fn fen_to_board(fen: &str) -> Board {
         }
     }
 
-    for i in 0..12 {
-        if i < 6 {
-            new_board.occupancies[0] |= new_board.bitboards[i]
-        } else {
-            new_board.occupancies[1] |= new_board.bitboards[i]
-        }
-        new_board.occupancies[2] |= new_board.bitboards[i]
-    }
+    new_board.occupancies[0] = new_board.bitboards[0]
+        | new_board.bitboards[1]
+        | new_board.bitboards[2]
+        | new_board.bitboards[3]
+        | new_board.bitboards[4]
+        | new_board.bitboards[5];
+
+    new_board.occupancies[1] = new_board.bitboards[6]
+        | new_board.bitboards[7]
+        | new_board.bitboards[8]
+        | new_board.bitboards[9]
+        | new_board.bitboards[10]
+        | new_board.bitboards[11];
+
+    new_board.occupancies[2] = new_board.occupancies[0] | new_board.occupancies[1];
 
     new_board
 }
 
-pub fn print_board(b: Board) {
+pub fn print_board(b: &Board) {
     let mut squares = String::new();
     for rank in 0..8 {
         for file in 0..8 {
