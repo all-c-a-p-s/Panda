@@ -18,7 +18,7 @@ fn init_all() {
 }
 
 fn main() {
-    init_all();
+    init_all();    
     let pos = fen_to_board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    println!("{}", perft(6, pos));
+    println!("{}", perft(4, pos));
 }

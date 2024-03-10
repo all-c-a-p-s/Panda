@@ -118,7 +118,7 @@ pub const fn mask_bishop_attacks(square: usize, blockers: u64) -> u64 {
     let square_file: usize = square % 8;
     let mut rank: usize = square_rank;
     let mut file: usize = square_file;
-    while rank > 1 && file > 1 {
+    while rank > 0 && file > 0 {
         rank -= 1;
         file -= 1; //file and rank decreasing
         attacks = set_bit(rank * 8 + file, attacks);
@@ -129,7 +129,7 @@ pub const fn mask_bishop_attacks(square: usize, blockers: u64) -> u64 {
 
     rank = square_rank;
     file = square_file;
-    while rank < 6 && file > 1 {
+    while rank < 7 && file > 0 {
         rank += 1;
         file -= 1; // rank increasing, file decreasing
         attacks = set_bit(rank * 8 + file, attacks);
@@ -140,7 +140,7 @@ pub const fn mask_bishop_attacks(square: usize, blockers: u64) -> u64 {
 
     rank = square_rank;
     file = square_file;
-    while rank > 1 && file < 6 {
+    while rank > 0 && file < 7 {
         rank -= 1;
         file += 1; //rank increasing, file decreasing
         attacks = set_bit(rank * 8 + file, attacks);
@@ -151,7 +151,7 @@ pub const fn mask_bishop_attacks(square: usize, blockers: u64) -> u64 {
 
     rank = square_rank;
     file = square_file;
-    while rank < 6 && file < 6 {
+    while rank < 7 && file < 7 {
         rank += 1;
         file += 1; //both increasing
         attacks = set_bit(rank * 8 + file, attacks);
@@ -198,7 +198,7 @@ pub const fn mask_rook_attacks(square: usize, blockers: u64) -> u64 {
     let square_file: usize = square % 8;
     let mut rank = square_rank;
     let mut file = square_file;
-    while rank < 6 {
+    while rank < 7 {
         rank += 1;
         attacks = set_bit(rank * 8 + square_file, attacks);
         if get_bit(rank * 8 + square_file, blockers) > 0 {
@@ -206,14 +206,14 @@ pub const fn mask_rook_attacks(square: usize, blockers: u64) -> u64 {
         }
     }
     rank = square_rank;
-    while rank > 1 {
+    while rank > 0 {
         rank -= 1;
         attacks = set_bit(rank * 8 + square_file, attacks);
         if get_bit(rank * 8 + square_file, blockers) > 0 {
             break;
         }
     }
-    while file < 6 {
+    while file < 7 {
         file += 1;
         attacks = set_bit(square_rank * 8 + file, attacks);
         if get_bit(square_rank * 8 + file, blockers) > 0 {
@@ -221,7 +221,7 @@ pub const fn mask_rook_attacks(square: usize, blockers: u64) -> u64 {
         }
     }
     file = square_file;
-    while file > 1 {
+    while file > 0 {
         file -= 1;
         attacks = set_bit(square_rank * 8 + file, attacks);
         if get_bit(square_rank * 8 + file, blockers) > 0 {
