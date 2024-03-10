@@ -1,6 +1,6 @@
 use crate::helper::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Board {
     pub bitboards: [u64; 12],
     pub occupancies: [u64; 3], //white, black, both
@@ -8,10 +8,10 @@ pub struct Board {
     pub en_passant: usize, //ep square index
     pub side_to_move: Colour,
     pub fifty_move: u8,
-    pub ply: usize,
+    pub ply: usize, //remember that this might fuck up repetition detection in the future
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum Colour {
     White,
     Black,

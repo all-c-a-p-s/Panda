@@ -73,8 +73,8 @@ pub fn pawn_push_moves(board: &Board, moves: MoveList) -> MoveList {
                         res.moves[first_unused] = encode_move(lsb, lsb + 16, 15, board, false);
                         first_unused += 1;
                     }
-                    bitboard = pop_bit(lsb, bitboard);
                 }
+                bitboard = pop_bit(lsb, bitboard);
             }
         }
         Colour::Black => {
@@ -101,8 +101,8 @@ pub fn pawn_push_moves(board: &Board, moves: MoveList) -> MoveList {
                         res.moves[first_unused] = encode_move(lsb, lsb - 16, 15, board, false);
                         first_unused += 1;
                     }
-                    bitboard = pop_bit(lsb, bitboard);
                 }
+                bitboard = pop_bit(lsb, bitboard);
             }
         }
     };
@@ -262,4 +262,22 @@ pub fn gen_moves(board: &Board) -> MoveList {
         }
     }
     moves
+}
+
+pub fn gen_legal(b: Board) -> MoveList {
+    let pseudo_legal = gen_moves(&b);
+    let mut legal = MoveList {
+        moves: [NULL_MOVE; MAX_MOVES],
+    };
+    let mut last = 0;
+    for i in 0..MAX_MOVES {
+        if pseudo_legal.moves[i] == NULL_MOVE {
+            break;
+        }
+        if is_legal(pseudo_legal.moves[i], &b) {
+            legal.moves[last] = pseudo_legal.moves[i];
+            last += 1;
+        }
+    }
+    legal
 }
