@@ -162,9 +162,9 @@ pub fn encode_move(
 
     let capture = get_bit(sq_to, board.occupancies[2]) == 1;
     let double_push: bool =
-        piece == 0 && (sq_from - 16 == sq_to) || piece == 6 && (sq_from + 16 == sq_to);
+        piece == 0 && (sq_from + 16 == sq_to) || piece == 6 && (sq_from - 16 == sq_to);
 
-    let ep = sq_to == board.en_passant;
+    let ep = (sq_to == board.en_passant) && (piece % 6 == 0);
     Move::from(
         sq_from,
         sq_to,
@@ -186,7 +186,7 @@ pub fn make_move(m: Move, b: Board) -> Board {
         //remove captured piece from bitboard
         for i in 0..12 {
             if get_bit(sq_to, b.bitboards[i]) > 0 {
-                pop_bit(sq_to, b.bitboards[i]);
+                updated_board.bitboards[i] = pop_bit(sq_to, b.bitboards[i]);
                 break;
             }
         }
@@ -217,22 +217,23 @@ pub fn make_move(m: Move, b: Board) -> Board {
                 updated_board.bitboards[3] = set_bit(5, updated_board.bitboards[3])
             }
             58 => {
-                updated_board.bitboards[5] = set_bit(58, 0);
-                updated_board.bitboards[3] = pop_bit(56, updated_board.bitboards[3]);
-                updated_board.bitboards[3] = set_bit(59, updated_board.bitboards[3])
+                updated_board.bitboards[11] = set_bit(58, 0);
+                updated_board.bitboards[9] = pop_bit(56, updated_board.bitboards[9]);
+                updated_board.bitboards[9] = set_bit(59, updated_board.bitboards[9])
             }
             62 => {
-                updated_board.bitboards[5] = set_bit(62, 0);
-                updated_board.bitboards[3] = pop_bit(63, updated_board.bitboards[3]);
-                updated_board.bitboards[3] = set_bit(61, updated_board.bitboards[3])
+                updated_board.bitboards[11] = set_bit(62, 0);
+                updated_board.bitboards[9] = pop_bit(63, updated_board.bitboards[9]);
+                updated_board.bitboards[9] = set_bit(61, updated_board.bitboards[9])
             }
             _ => panic!("castling to a square that is not c1 g1 c8 or g8 🤔"),
         }
     } else {
         updated_board.bitboards[piece] = pop_bit(sq_from, updated_board.bitboards[piece]); //pop bit from bitboard
         updated_board.bitboards[piece] = set_bit(sq_to, updated_board.bitboards[piece]); //set new bit on bitboard
+    }
 
-        updated_board.occupancies[0] = updated_board.bitboards[0]
+    updated_board.occupancies[0] = updated_board.bitboards[0]
             | updated_board.bitboards[1]
             | updated_board.bitboards[2]
             | updated_board.bitboards[3]
@@ -248,7 +249,6 @@ pub fn make_move(m: Move, b: Board) -> Board {
 
         updated_board.occupancies[2] = updated_board.occupancies[0] | updated_board.occupancies[1];
         //update occupancies
-    }
 
     if m.is_double_push() {
         updated_board.en_passant = match piece {
@@ -296,7 +296,7 @@ pub fn is_legal(m: Move, b: &Board) -> bool {
     let updated_board = make_move(m, *b);
     match updated_board.side_to_move {
         // AFTER move has been made
-        Colour::White => !is_attacked(lsfb(updated_board.bitboards[11]).unwrap(), Colour::White, b),
-        Colour::Black => !is_attacked(lsfb(updated_board.bitboards[5]).unwrap(), Colour::Black, b),
+        Colour::White => !is_attacked(lsfb(updated_board.bitboards[11]).unwrap(), Colour::White, &updated_board),
+        Colour::Black => !is_attacked(lsfb(updated_board.bitboards[5]).unwrap(), Colour::Black, &updated_board),
     }
 }

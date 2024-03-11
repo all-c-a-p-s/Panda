@@ -18,7 +18,20 @@ fn init_all() {
 }
 
 fn main() {
+
     init_all();    
-    let pos = fen_to_board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    println!("{}", perft(4, pos));
+    let pos = fen_to_board("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1");
+
+/*
+    let moves = gen_legal(pos);
+    7
+    
+    for i in 0..MAX_MOVES {
+        if moves.moves[i] == NULL_MOVE {
+            break;
+        }
+        moves.moves[i].print_move();
+    }
+*/
+    println!("{}", perft(START_DEPTH, pos));
 }

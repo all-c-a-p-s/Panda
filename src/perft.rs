@@ -1,4 +1,6 @@
-use crate::*;
+use crate::{helper::coordinate, *};
+
+pub const START_DEPTH: usize = 3;
 
 pub fn perft(depth: usize, b: Board) -> usize {
     if depth == 0 {
@@ -11,7 +13,12 @@ pub fn perft(depth: usize, b: Board) -> usize {
             break;
         }
         let updated_board = make_move(moves.moves[i], b);
-        total += perft(depth - 1, updated_board);
+        let added = perft(depth - 1, updated_board);
+        if depth == START_DEPTH {
+            println!("{}{}: {}", coordinate(moves.moves[i].square_from()), coordinate(moves.moves[i].square_to()), added);
+        }
+        total += added;
     }
+
     total
 }

@@ -135,7 +135,8 @@ pub fn castling_moves(board: &Board, moves: MoveList) -> MoveList {
 
             if (board.castling & 0b0000_0010) > 0 {
                 //white queenside
-                if get_bit(2, board.occupancies[2]) == 0
+                if get_bit(1, board.occupancies[2]) == 0
+                    && get_bit(2, board.occupancies[2]) == 0
                     && get_bit(3, board.occupancies[2]) == 0
                     && !is_attacked(4, Colour::Black, board)
                     && !is_attacked(3, Colour::Black, board)
@@ -159,7 +160,8 @@ pub fn castling_moves(board: &Board, moves: MoveList) -> MoveList {
 
             if (board.castling & 0b0000_1000) > 0 {
                 //black queenside
-                if get_bit(58, board.occupancies[2]) == 0
+                if get_bit(57, board.occupancies[2]) == 0
+                    && get_bit(58, board.occupancies[2]) == 0
                     && get_bit(59, board.occupancies[2]) == 0
                     && !is_attacked(60, Colour::White, board)
                     && !is_attacked(59, Colour::White, board)
@@ -202,21 +204,15 @@ pub fn gen_moves(board: &Board) -> MoveList {
             let lsb = lsfb(bitboard).unwrap(); // never panics as loop will have already exited
             let mut attacks = match i {
                 0 => {
-                    WP_ATTACKS[lsb] & {
-                        if board.en_passant != 64 {
-                            board.occupancies[1] | set_bit(board.en_passant, 0)
-                        } else {
-                            board.occupancies[1]
-                        }
+                    WP_ATTACKS[lsb] & match board.en_passant {
+                        64 => board.occupancies[1],
+                        _ => set_bit(board.en_passant, board.occupancies[1]),
                     }
                 } //en passant capture
                 6 => {
-                    BP_ATTACKS[lsb] & {
-                        if board.en_passant != 64 {
-                            board.occupancies[1] | set_bit(board.en_passant, 0)
-                        } else {
-                            board.occupancies[1]
-                        }
+                    BP_ATTACKS[lsb] & match board.en_passant {
+                        64 => board.occupancies[0],
+                        _ => set_bit(board.en_passant, board.occupancies[0]),
                     }
                 } //or with set en passant square if it is not 64 i.e. none
                 1 | 7 => N_ATTACKS[lsb],
