@@ -190,6 +190,13 @@ pub fn make_move(m: Move, b: Board) -> Board {
                 break;
             }
         }
+        match m.square_to() { //remove castling rights is a1/h1/a8/h8 is captured on
+            0 => updated_board.castling &= 0b0000_1101,
+            7 => updated_board.castling &= 0b0000_1110,
+            56 => updated_board.castling &= 0b0000_0111,
+            63 => updated_board.castling &= 0b0000_1011,
+            _ => {},
+        }
     } else if m.is_en_passant() {
         match piece {
             0 => updated_board.bitboards[6] = pop_bit(sq_to - 8, updated_board.bitboards[6]),
