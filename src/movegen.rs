@@ -204,16 +204,18 @@ pub fn gen_moves(board: &Board) -> MoveList {
             let lsb = lsfb(bitboard).unwrap(); // never panics as loop will have already exited
             let mut attacks = match i {
                 0 => {
-                    WP_ATTACKS[lsb] & match board.en_passant {
-                        64 => board.occupancies[1],
-                        _ => set_bit(board.en_passant, board.occupancies[1]),
-                    }
+                    WP_ATTACKS[lsb]
+                        & match board.en_passant {
+                            64 => board.occupancies[1],
+                            _ => set_bit(board.en_passant, board.occupancies[1]),
+                        }
                 } //en passant capture
                 6 => {
-                    BP_ATTACKS[lsb] & match board.en_passant {
-                        64 => board.occupancies[0],
-                        _ => set_bit(board.en_passant, board.occupancies[0]),
-                    }
+                    BP_ATTACKS[lsb]
+                        & match board.en_passant {
+                            64 => board.occupancies[0],
+                            _ => set_bit(board.en_passant, board.occupancies[0]),
+                        }
                 } //or with set en passant square if it is not 64 i.e. none
                 1 | 7 => N_ATTACKS[lsb],
                 2 | 8 => get_bishop_attacks(lsb, board.occupancies[2]),
@@ -258,6 +260,97 @@ pub fn gen_moves(board: &Board) -> MoveList {
         }
     }
     moves
+}
+
+pub fn gen_captures(board: Board) -> MoveList {
+    //special capture-only move generation for quiescence search
+    let (mut min, mut max) = (0usize, 6usize);
+    if board.side_to_move == Colour::Black {
+        min = 6;
+        max = 12;
+    }
+
+    let mut moves = MoveList {
+        moves: [NULL_MOVE; 218],
+    };
+    let mut first_unused = 0;
+    for i in min..max {
+        //pieces of colour to move
+        let mut bitboard = board.bitboards[i];
+
+        while bitboard > 0 {
+            let lsb = lsfb(bitboard).unwrap(); // never panics as loop will have already exited
+            let mut attacks = match i {
+                0 => {
+                    WP_ATTACKS[lsb]
+                        & match board.en_passant {
+                            64 => board.occupancies[1],
+                            _ => set_bit(board.en_passant, board.occupancies[1]),
+                        }
+                } //en passant capture
+                6 => {
+                    BP_ATTACKS[lsb]
+                        & match board.en_passant {
+                            64 => board.occupancies[0],
+                            _ => set_bit(board.en_passant, board.occupancies[0]),
+                        }
+                } //or with set en passant square if it is not 64 i.e. none
+                1 | 7 => N_ATTACKS[lsb],
+                2 | 8 => get_bishop_attacks(lsb, board.occupancies[2]),
+                3 | 9 => get_rook_attacks(lsb, board.occupancies[2]),
+                4 | 10 => get_queen_attacks(lsb, board.occupancies[2]),
+                5 | 11 => K_ATTACKS[lsb],
+                _ => panic!("this is impossible"),
+            };
+            match board.side_to_move {
+                Colour::White => attacks &= board.occupancies[1], //only captures
+                Colour::Black => attacks &= board.occupancies[0],
+            }
+            while attacks > 0 {
+                let lsb_attack = lsfb(attacks).unwrap();
+                if (get_bit(lsb, board.bitboards[0]) > 0) && rank(lsb) == 6 {
+                    // white promotion
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 4, &board, false);
+                    first_unused += 1;
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 3, &board, false);
+                    first_unused += 1;
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 2, &board, false);
+                    first_unused += 1;
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 1, &board, false);
+                    first_unused += 1;
+                } else if (get_bit(lsb, board.bitboards[6]) > 0) && rank(lsb) == 1 {
+                    //black promotion
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 10, &board, false);
+                    first_unused += 1;
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 9, &board, false);
+                    first_unused += 1;
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 8, &board, false);
+                    first_unused += 1;
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 7, &board, false);
+                    first_unused += 1;
+                } else {
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 15, &board, false);
+                    first_unused += 1;
+                } //list to return here
+                attacks = pop_bit(lsb_attack, attacks);
+            }
+            bitboard = pop_bit(lsb, bitboard);
+        }
+    }
+    let mut legal = MoveList {
+        moves: [NULL_MOVE; MAX_MOVES],
+    };
+    let mut last = 0;
+    for i in 0..MAX_MOVES {
+        if moves.moves[i] == NULL_MOVE {
+            break;
+        }
+        if is_legal(moves.moves[i], &board) {
+            legal.moves[last] = moves.moves[i];
+            last += 1;
+        }
+    }
+    legal
 }
 
 pub fn gen_legal(b: Board) -> MoveList {

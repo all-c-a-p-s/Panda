@@ -284,7 +284,7 @@ pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> u64
             let magic_index: usize = ((blockers[i] * magic) >> (64 - relevant_bits))
                 .try_into()
                 .unwrap(); //shift ensures it is between 0 and 4095
-            //test magic number multiplication
+                           //test magic number multiplication
             if used_attacks[magic_index] == 0 {
                 used_attacks[magic_index] = attacks[i]
             } else {
@@ -511,7 +511,8 @@ pub fn init_bishop_attacks() {
             let magic_index =
                 (blockers * BISHOP_MAGICS[square]) >> (64 - BISHOP_RELEVANT_BITS[square]);
             unsafe {
-                BISHOP_ATTACKS[square][magic_index as usize] = mask_bishop_attacks(square, blockers);
+                BISHOP_ATTACKS[square][magic_index as usize] =
+                    mask_bishop_attacks(square, blockers);
             };
         }
     }

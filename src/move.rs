@@ -190,12 +190,13 @@ pub fn make_move(m: Move, b: Board) -> Board {
                 break;
             }
         }
-        match m.square_to() { //remove castling rights is a1/h1/a8/h8 is captured on
+        match m.square_to() {
+            //remove castling rights is a1/h1/a8/h8 is captured on
             0 => updated_board.castling &= 0b0000_1101,
             7 => updated_board.castling &= 0b0000_1110,
             56 => updated_board.castling &= 0b0000_0111,
             63 => updated_board.castling &= 0b0000_1011,
-            _ => {},
+            _ => {}
         }
     } else if m.is_en_passant() {
         match piece {
@@ -237,25 +238,26 @@ pub fn make_move(m: Move, b: Board) -> Board {
         }
     } else {
         updated_board.bitboards[piece] = pop_bit(sq_from, updated_board.bitboards[piece]); //pop bit from bitboard
-        updated_board.bitboards[piece] = set_bit(sq_to, updated_board.bitboards[piece]); //set new bit on bitboard
+        updated_board.bitboards[piece] = set_bit(sq_to, updated_board.bitboards[piece]);
+        //set new bit on bitboard
     }
 
     updated_board.occupancies[0] = updated_board.bitboards[0]
-            | updated_board.bitboards[1]
-            | updated_board.bitboards[2]
-            | updated_board.bitboards[3]
-            | updated_board.bitboards[4]
-            | updated_board.bitboards[5];
+        | updated_board.bitboards[1]
+        | updated_board.bitboards[2]
+        | updated_board.bitboards[3]
+        | updated_board.bitboards[4]
+        | updated_board.bitboards[5];
 
-        updated_board.occupancies[1] = updated_board.bitboards[6]
-            | updated_board.bitboards[7]
-            | updated_board.bitboards[8]
-            | updated_board.bitboards[9]
-            | updated_board.bitboards[10]
-            | updated_board.bitboards[11];
+    updated_board.occupancies[1] = updated_board.bitboards[6]
+        | updated_board.bitboards[7]
+        | updated_board.bitboards[8]
+        | updated_board.bitboards[9]
+        | updated_board.bitboards[10]
+        | updated_board.bitboards[11];
 
-        updated_board.occupancies[2] = updated_board.occupancies[0] | updated_board.occupancies[1];
-        //update occupancies
+    updated_board.occupancies[2] = updated_board.occupancies[0] | updated_board.occupancies[1];
+    //update occupancies
 
     if m.is_double_push() {
         updated_board.en_passant = match piece {
@@ -303,7 +305,15 @@ pub fn is_legal(m: Move, b: &Board) -> bool {
     let updated_board = make_move(m, *b);
     match updated_board.side_to_move {
         // AFTER move has been made
-        Colour::White => !is_attacked(lsfb(updated_board.bitboards[11]).unwrap(), Colour::White, &updated_board),
-        Colour::Black => !is_attacked(lsfb(updated_board.bitboards[5]).unwrap(), Colour::Black, &updated_board),
+        Colour::White => !is_attacked(
+            lsfb(updated_board.bitboards[11]).unwrap(),
+            Colour::White,
+            &updated_board,
+        ),
+        Colour::Black => !is_attacked(
+            lsfb(updated_board.bitboards[5]).unwrap(),
+            Colour::Black,
+            &updated_board,
+        ),
     }
 }

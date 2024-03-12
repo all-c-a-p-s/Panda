@@ -29,19 +29,31 @@ pub fn perft(depth: usize, b: Board) -> usize {
 
 pub fn full_perft() {
     let start = Instant::now();
-    let res1 = perft(5, fen_to_board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"));
+    let res1 = perft(
+        5,
+        fen_to_board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"),
+    );
     assert_eq!(res1, 4_865_609);
     println!("Test 1 - Passed");
-    let res2 = perft(5, fen_to_board("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"));
+    let res2 = perft(
+        5,
+        fen_to_board("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"),
+    );
     assert_eq!(res2, 193_690_690);
     println!("Test 2 - Passed");
     let res3 = perft(5, fen_to_board("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1"));
     assert_eq!(res3, 674_624);
     println!("Test 3 - Passed");
-    let res4 = perft(5, fen_to_board("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1"));
+    let res4 = perft(
+        5,
+        fen_to_board("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1"),
+    );
     assert_eq!(res4, 15_833_292);
     println!("Test 4 - Passed");
-    let res5 = perft(5, fen_to_board("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8"));
+    let res5 = perft(
+        5,
+        fen_to_board("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8"),
+    );
     assert_eq!(res5, 89_941_194);
     println!("Test 5 - Passed");
     let duration: Duration = start.elapsed();
