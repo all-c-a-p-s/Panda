@@ -1,4 +1,5 @@
 use crate::board::*;
+use crate::magic::*;
 use crate::helper::*;
 use crate::is_attacked;
 use crate::search::INFINITY;
@@ -82,6 +83,18 @@ const WK_TABLE: [i32; 64] = [
 ];
 
 #[rustfmt::skip]
+const WK_ENDGAME: [i32; 64] = [
+    -40, -35, -30, -25, -25, -30, -35, -40,
+    -12,  17,  14,  17,  17,  38,  23,  11,
+     10,  17,  23,  15,  20,  45,  44,  13,
+     -8,  22,  24,  27,  26,  33,  26,   3,
+    -18,  -4,  21,  24,  27,  23,   9, -11,
+    -19,  -3,  11,  21,  23,  16,   7,  -9,
+    -27, -11,   4,  13,  14,   4,  -5, -17,
+    -50, -34, -21, -11, -28, -14, -24, -50
+];
+
+#[rustfmt::skip]
 const BP_TABLE: [i32; 64] = [
     0,  0,  0,  0,  0,  0,  0,  0,
    60, 60, 60, 70, 70, 60, 60, 60,
@@ -153,20 +166,57 @@ const BK_TABLE: [i32; 64] = [
      20, 30,   20, -10,  -5, -10,  30,  10
 ];
 
+//edit this later
+#[rustfmt::skip]
+const BK_ENDGAME: [i32; 64] = [
+    -40, -35, -30, -25, -25, -30, -35, -40,
+    -12,  17,  14,  17,  17,  38,  23,  11,
+     10,  17,  23,  15,  20,  45,  44,  13,
+     -8,  22,  24,  27,  26,  33,  26,   3,
+    -18,  -4,  21,  24,  27,  23,   9, -11,
+    -19,  -3,  11,  21,  23,  16,   7,  -9,
+    -27, -11,   4,  13,  14,   4,  -5, -17,
+    -50, -34, -21, -11, -28, -14, -24, -50
+];
+
+const BISHOP_BASE_MOBILITY: i32 = 4;
+const ROOK_BASE_MOBILITY: i32 = 2;
+const QUEEN_BASE_MOBILITY: i32 = 9;
+
+const BISHOP_MOBILITY_UNIT: i32 = 4;
+const ROOK_MOBILITY_UNIT: i32 = 3;
+const QUEEN_MOBILITY_UNIT: i32 = 1;
+
+const START_MATERIAL: i32 = PAWN_VALUE * 16 + KNIGHT_VALUE * 4 + BISHOP_VALUE * 4 + ROOK_VALUE * 4 + QUEEN_VALUE * 2;
+//possible for promotions to in theory result in more material than this
+
+pub fn game_phase_score(material_count: i32) -> f32 {
+    material_count as f32 / START_MATERIAL as f32
+}
+
 pub fn evaluate(b: &Board) -> i32 {
+    //TODO: pawn structure evaluation
     let mut eval: i32 = 0;
 
-    eval += count(b.bitboards[0]) as i32 * PAWN_VALUE;
-    eval += count(b.bitboards[1]) as i32 * KNIGHT_VALUE;
-    eval += count(b.bitboards[2]) as i32 * BISHOP_VALUE;
-    eval += count(b.bitboards[3]) as i32 * ROOK_VALUE;
-    eval += count(b.bitboards[4]) as i32 * QUEEN_VALUE;
+    let mut white_material: i32 = 0;
+    let mut black_material: i32 = 0;
 
-    eval -= count(b.bitboards[6]) as i32 * PAWN_VALUE;
-    eval -= count(b.bitboards[7]) as i32 * KNIGHT_VALUE;
-    eval -= count(b.bitboards[8]) as i32 * BISHOP_VALUE;
-    eval -= count(b.bitboards[9]) as i32 * ROOK_VALUE;
-    eval -= count(b.bitboards[10]) as i32 * QUEEN_VALUE;
+    white_material += count(b.bitboards[0]) as i32 * PAWN_VALUE;
+    white_material += count(b.bitboards[1]) as i32 * KNIGHT_VALUE;
+    white_material += count(b.bitboards[2]) as i32 * BISHOP_VALUE;
+    white_material += count(b.bitboards[3]) as i32 * ROOK_VALUE;
+    white_material += count(b.bitboards[4]) as i32 * QUEEN_VALUE;
+
+    black_material += count(b.bitboards[6]) as i32 * PAWN_VALUE;
+    black_material += count(b.bitboards[7]) as i32 * KNIGHT_VALUE;
+    black_material += count(b.bitboards[8]) as i32 * BISHOP_VALUE;
+    black_material += count(b.bitboards[9]) as i32 * ROOK_VALUE;
+    black_material += count(b.bitboards[10]) as i32 * QUEEN_VALUE;
+
+    let phase_score = game_phase_score(white_material + black_material);
+
+    eval += white_material;
+    eval -= black_material;
 
     for i in 0..12 {
         let mut bitboard = b.bitboards[i];
@@ -175,17 +225,39 @@ pub fn evaluate(b: &Board) -> i32 {
             match i {
                 0 => eval += WP_TABLE[square],
                 1 => eval += WN_TABLE[square],
-                2 => eval += WB_TABLE[square],
-                3 => eval += WR_TABLE[square],
-                4 => eval += WQ_TABLE[square],
-                5 => eval += WK_TABLE[square],
+                2 => {
+                    eval += WB_TABLE[square];
+                    eval += (count(get_bishop_attacks(square, b.occupancies[2])) as i32 - BISHOP_BASE_MOBILITY) as i32 * BISHOP_MOBILITY_UNIT;
+                }
+                3 => {
+                    eval += WR_TABLE[square];
+                    eval += (count(get_rook_attacks(square, b.occupancies[2])) as i32 - ROOK_BASE_MOBILITY) as i32 * ROOK_MOBILITY_UNIT;
+                }
+                4 => {
+                    eval += WQ_TABLE[square];
+                    eval += std::cmp::max((count(get_queen_attacks(square, b.occupancies[2])) as i32 - QUEEN_BASE_MOBILITY) as i32, 0) * QUEEN_MOBILITY_UNIT;
+                }
+                5 => eval += {
+                    ((WK_TABLE[square] as f32 * phase_score + WK_ENDGAME[square] as f32 * (1f32 - phase_score)) / 2f32) as i32
+                },
 
                 6 => eval -= BP_TABLE[square],
                 7 => eval -= BN_TABLE[square],
-                8 => eval -= BB_TABLE[square],
-                9 => eval -= BR_TABLE[square],
-                10 => eval -= BQ_TABLE[square],
-                11 => eval -= BK_TABLE[square],
+                8 => {
+                    eval -= BB_TABLE[square];
+                    eval -= (count(get_bishop_attacks(square, b.occupancies[2])) as i32 - BISHOP_BASE_MOBILITY) as i32 * BISHOP_MOBILITY_UNIT;
+                }
+                9 => {
+                    eval -= BR_TABLE[square];
+                    eval -= (count(get_rook_attacks(square, b.occupancies[2])) as i32 - ROOK_BASE_MOBILITY) as i32 * ROOK_MOBILITY_UNIT;
+                }
+                10 => {
+                    eval -= BQ_TABLE[square];
+                    eval -= std::cmp::max((count(get_queen_attacks(square, b.occupancies[2])) as i32 - QUEEN_BASE_MOBILITY) as i32, 0) * QUEEN_MOBILITY_UNIT;
+                }
+                11 => eval -= {
+                    ((BK_TABLE[square] as f32 * phase_score + BK_ENDGAME[square] as f32 * (1f32 - phase_score)) / 2f32) as i32
+                },
                 _ => panic!("impossible"),
             }
             bitboard = pop_bit(square, bitboard);

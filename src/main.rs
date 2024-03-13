@@ -91,6 +91,7 @@ fn main() {
                 pos = make_move(best, pos);
                 println!("{}{}", coordinate(best.square_from()), coordinate(best.square_to()));
                 print_board(&pos);
+                unsafe { println!("nodes: {}", NODES) };
             }
         }
         Colour::Black => {
@@ -102,6 +103,7 @@ fn main() {
                 pos = make_move(best, pos);                 
                 println!("{}{}", coordinate(best.square_from()), coordinate(best.square_to()));
                 print_board(&pos);
+                unsafe { println!("nodes: {}", NODES) };
                 let mut input = String::new();
                 input.retain(|c| !c.is_whitespace());
                 std::io::stdin().read_line(&mut input).unwrap();

@@ -7,6 +7,8 @@ use std::cmp;
 
 pub const INFINITY: i32 = 999_999_999;
 
+pub static mut NODES: usize = 0;
+
 fn negamax(position: Board, depth: usize, alpha: i32, beta: i32) -> i32 {
     if depth == 0 {
         return quiescence_search(position, alpha, beta);
@@ -50,11 +52,17 @@ fn quiescence_search(position: Board, alpha: i32, beta: i32) -> i32 {
         return beta;
     }
 
+    let delta = 1000; //delta pruning - try to avoid wasting time on hopeless positions
+    if eval < alpha - delta {
+        return alpha;
+    }
+
     let mut alpha = cmp::max(alpha, eval);
 
     let moves = gen_captures(position);
     for i in 0..MAX_MOVES {
         if moves.moves[i] == NULL_MOVE {
+            unsafe { NODES += i + 1}; //where i is zero-indexed number of leaf nodes
             break;
         }
         let eval = -quiescence_search(make_move(moves.moves[i], position), -beta, -alpha);
