@@ -90,6 +90,7 @@ fn main() {
                 }
                 pos = make_move(best, pos);
                 println!("{}{}", coordinate(best.square_from()), coordinate(best.square_to()));
+                print_board(&pos);
             }
         }
         Colour::Black => {
@@ -98,13 +99,14 @@ fn main() {
                 if best == NULL_MOVE {
                     break;
                 }
-                pos = make_move(best, pos);
+                pos = make_move(best, pos);                 
                 println!("{}{}", coordinate(best.square_from()), coordinate(best.square_to()));
+                print_board(&pos);
                 let mut input = String::new();
                 input.retain(|c| !c.is_whitespace());
                 std::io::stdin().read_line(&mut input).unwrap();
                 let user_move = parse_move(input.as_str(), pos);
-                pos = make_move(user_move, pos);                
+                pos = make_move(user_move, pos);                             
             }
         }
     }

@@ -36,8 +36,8 @@ fn negamax(position: Board, depth: usize, alpha: i32, beta: i32) -> i32 {
             -beta,
             -alpha,
         );
-        if beta <= eval {
-            break;
+        if eval >= beta {
+            return beta;
         }
         alpha = cmp::max(alpha, eval);
     }
@@ -80,5 +80,6 @@ pub fn best_move(position: Board) -> Move {
             best_move = moves.moves[i];
         }
     }
+    println!("eval: {}", best_eval);
     best_move
 }
