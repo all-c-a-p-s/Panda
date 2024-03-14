@@ -8,6 +8,7 @@ pub mod perft;
 pub mod rng;
 pub mod search;
 
+//use crate::perft::full_perft;
 use crate::board::*;
 use crate::helper::*;
 use crate::magic::*;

@@ -15,8 +15,9 @@
 use crate::board::*;
 use crate::helper::*;
 use crate::movegen::is_attacked;
+use crate::INFINITY;
 
-pub const NULL_MOVE: Move = Move { data: 0u32 };
+pub const NULL_MOVE: Move = Move { data: 0u32, move_order_score: -INFINITY };
 pub const MAX_MOVES: usize = 218;
 
 #[derive(Debug)]
@@ -27,6 +28,7 @@ pub struct MoveList {
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct Move {
     pub data: u32,
+    pub move_order_score: i32,
 }
 
 pub struct Commit {
@@ -70,6 +72,7 @@ impl Move {
                     false => 0,
                     true => 1 << 23,
                 }) as u32,
+            move_order_score: 0, //update later
         }
     }
 
