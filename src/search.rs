@@ -9,7 +9,7 @@ pub const INFINITY: i32 = 999_999_999;
 
 pub static mut NODES: usize = 0;
 
-fn negamax(position: Board, depth: usize, alpha: i32, beta: i32) -> i32 {
+fn negamax(position: &mut Board, depth: usize, alpha: i32, beta: i32) -> i32 {
     if depth == 0 {
         return quiescence_search(position, alpha, beta);
     }
@@ -23,7 +23,7 @@ fn negamax(position: Board, depth: usize, alpha: i32, beta: i32) -> i32 {
     let child_nodes = gen_legal(position);
 
     if child_nodes.moves[0] == NULL_MOVE {
-        return is_checkmate(position);
+        return is_checkmate(*position);
     }
 
     let mut alpha = alpha;
@@ -32,12 +32,14 @@ fn negamax(position: Board, depth: usize, alpha: i32, beta: i32) -> i32 {
         if child_nodes.moves[i] == NULL_MOVE {
             break;
         }
+        let commit = position.make_move(child_nodes.moves[i]);
         let eval = -negamax(
-            make_move(child_nodes.moves[i], position),
+            position,
             depth - 1,
             -beta,
             -alpha,
         );
+        position.undo_move(child_nodes.moves[i], commit);
         if eval >= beta {
             return beta;
         }
@@ -46,8 +48,8 @@ fn negamax(position: Board, depth: usize, alpha: i32, beta: i32) -> i32 {
     alpha
 }
 
-fn quiescence_search(position: Board, alpha: i32, beta: i32) -> i32 {
-    let eval = evaluate(&position);
+fn quiescence_search(position: &mut Board, alpha: i32, beta: i32) -> i32 {
+    let eval = evaluate(position);
     if eval >= beta {
         return beta;
     }
@@ -62,10 +64,12 @@ fn quiescence_search(position: Board, alpha: i32, beta: i32) -> i32 {
     let moves = gen_captures(position);
     for i in 0..MAX_MOVES {
         if moves.moves[i] == NULL_MOVE {
-            unsafe { NODES += i + 1}; //where i is zero-indexed number of leaf nodes
+            unsafe { NODES += i + 1 }; //where i is zero-indexed number of leaf nodes
             break;
         }
-        let eval = -quiescence_search(make_move(moves.moves[i], position), -beta, -alpha);
+        let commit = position.make_move(moves.moves[i]);
+        let eval = -quiescence_search(position, -beta, -alpha);
+        position.undo_move(moves.moves[i], commit);
         if eval >= beta {
             return beta;
         }
@@ -74,7 +78,7 @@ fn quiescence_search(position: Board, alpha: i32, beta: i32) -> i32 {
     alpha
 }
 
-pub fn best_move(position: Board) -> Move {
+pub fn best_move(position: &mut Board) -> Move {
     let moves = gen_legal(position);
     let mut best_eval = -INFINITY;
     let mut best_move = NULL_MOVE;
@@ -82,7 +86,9 @@ pub fn best_move(position: Board) -> Move {
         if moves.moves[i] == NULL_MOVE {
             break;
         }
-        let eval = -negamax(make_move(moves.moves[i], position), 4, -INFINITY, INFINITY);
+        let commit = position.make_move(moves.moves[i]);
+        let eval = -negamax(position, 4, -INFINITY, INFINITY);
+        position.undo_move(moves.moves[i], commit);
         if eval > best_eval {
             best_eval = eval;
             best_move = moves.moves[i];

@@ -29,6 +29,14 @@ pub struct Move {
     pub data: u32,
 }
 
+pub struct Commit {
+    //resets for irreversible fields of Board struct
+    pub castling_reset: u8,
+    pub ep_reset: usize,
+    pub fifty_move_reset: u8,
+    pub piece_captured: Option<u8>,
+}
+
 #[allow(clippy::too_many_arguments)]
 impl Move {
     pub fn from(
@@ -177,143 +185,241 @@ pub fn encode_move(
     )
 }
 
-pub fn make_move(m: Move, b: Board) -> Board {
-    let mut updated_board = b;
-    let sq_from = m.square_from();
-    let sq_to = m.square_to();
-    let piece = m.piece_moved();
-    if m.is_capture() {
-        //remove captured piece from bitboard
-        for i in 0..12 {
-            if get_bit(sq_to, b.bitboards[i]) > 0 {
-                updated_board.bitboards[i] = pop_bit(sq_to, b.bitboards[i]);
-                break;
+impl Board {
+    pub fn make_move(&mut self, m: Move) -> Commit {
+        let mut commit = Commit {
+            castling_reset: self.castling,
+            ep_reset: self.en_passant,
+            fifty_move_reset: self.fifty_move,
+            piece_captured: None,
+        };
+        let sq_from = m.square_from();
+        let sq_to = m.square_to();
+        let piece = m.piece_moved();
+        if m.is_capture() {
+            //remove captured piece from bitboard
+            for i in 0..12 {
+                if get_bit(sq_to, self.bitboards[i]) > 0 {
+                    self.bitboards[i] = pop_bit(sq_to, self.bitboards[i]);
+                    commit.piece_captured = Some(i as u8);
+                    break;
+                }
+            }
+            match m.square_to() {
+                //remove castling rights is a1/h1/a8/h8 is captured on
+                0 => self.castling &= 0b0000_1101,
+                7 => self.castling &= 0b0000_1110,
+                56 => self.castling &= 0b0000_0111,
+                63 => self.castling &= 0b0000_1011,
+                _ => {}
+            }
+        } else if m.is_en_passant() {
+            match piece {
+                0 => self.bitboards[6] = pop_bit(sq_to - 8, self.bitboards[6]),
+                6 => self.bitboards[0] = pop_bit(sq_to + 8, self.bitboards[0]),
+                _ => panic!("non-pawn is capturing en passant 🤔"),
             }
         }
-        match m.square_to() {
-            //remove castling rights is a1/h1/a8/h8 is captured on
-            0 => updated_board.castling &= 0b0000_1101,
-            7 => updated_board.castling &= 0b0000_1110,
-            56 => updated_board.castling &= 0b0000_0111,
-            63 => updated_board.castling &= 0b0000_1011,
-            _ => {}
-        }
-    } else if m.is_en_passant() {
-        match piece {
-            0 => updated_board.bitboards[6] = pop_bit(sq_to - 8, updated_board.bitboards[6]),
-            6 => updated_board.bitboards[0] = pop_bit(sq_to + 8, updated_board.bitboards[0]),
-            _ => panic!("non-pawn is capturing en passant 🤔"),
-        }
-    }
 
-    if m.promoted_piece() != 15 {
-        updated_board.bitboards[piece] = pop_bit(sq_from, updated_board.bitboards[piece]);
-        updated_board.bitboards[m.promoted_piece()] =
-            set_bit(sq_to, updated_board.bitboards[m.promoted_piece()]);
-        //remove pawn and add promoted piece
-    } else if m.is_castling() {
-        //update king and rook for castling
-        match sq_to {
-            2 => {
-                updated_board.bitboards[5] = set_bit(2, 0); //works bc only 1 wk
-                updated_board.bitboards[3] = pop_bit(0, updated_board.bitboards[3]);
-                updated_board.bitboards[3] = set_bit(3, updated_board.bitboards[3])
+        if m.promoted_piece() != 15 {
+            self.bitboards[piece] = pop_bit(sq_from, self.bitboards[piece]);
+            self.bitboards[m.promoted_piece()] = set_bit(sq_to, self.bitboards[m.promoted_piece()]);
+            //remove pawn and add promoted piece
+        } else if m.is_castling() {
+            //update king and rook for castling
+            match sq_to {
+                2 => {
+                    self.bitboards[5] = set_bit(2, 0); //works bc only 1 wk
+                    self.bitboards[3] = pop_bit(0, self.bitboards[3]);
+                    self.bitboards[3] = set_bit(3, self.bitboards[3])
+                }
+                6 => {
+                    self.bitboards[5] = set_bit(6, 0);
+                    self.bitboards[3] = pop_bit(7, self.bitboards[3]);
+                    self.bitboards[3] = set_bit(5, self.bitboards[3])
+                }
+                58 => {
+                    self.bitboards[11] = set_bit(58, 0);
+                    self.bitboards[9] = pop_bit(56, self.bitboards[9]);
+                    self.bitboards[9] = set_bit(59, self.bitboards[9])
+                }
+                62 => {
+                    self.bitboards[11] = set_bit(62, 0);
+                    self.bitboards[9] = pop_bit(63, self.bitboards[9]);
+                    self.bitboards[9] = set_bit(61, self.bitboards[9])
+                }
+                _ => panic!("castling to a square that is not c1 g1 c8 or g8 🤔"),
             }
-            6 => {
-                updated_board.bitboards[5] = set_bit(6, 0);
-                updated_board.bitboards[3] = pop_bit(7, updated_board.bitboards[3]);
-                updated_board.bitboards[3] = set_bit(5, updated_board.bitboards[3])
-            }
-            58 => {
-                updated_board.bitboards[11] = set_bit(58, 0);
-                updated_board.bitboards[9] = pop_bit(56, updated_board.bitboards[9]);
-                updated_board.bitboards[9] = set_bit(59, updated_board.bitboards[9])
-            }
-            62 => {
-                updated_board.bitboards[11] = set_bit(62, 0);
-                updated_board.bitboards[9] = pop_bit(63, updated_board.bitboards[9]);
-                updated_board.bitboards[9] = set_bit(61, updated_board.bitboards[9])
-            }
-            _ => panic!("castling to a square that is not c1 g1 c8 or g8 🤔"),
+        } else {
+            self.bitboards[piece] = pop_bit(sq_from, self.bitboards[piece]); //pop bit from bitboard
+            self.bitboards[piece] = set_bit(sq_to, self.bitboards[piece]);
+            //set new bit on bitboard
         }
-    } else {
-        updated_board.bitboards[piece] = pop_bit(sq_from, updated_board.bitboards[piece]); //pop bit from bitboard
-        updated_board.bitboards[piece] = set_bit(sq_to, updated_board.bitboards[piece]);
-        //set new bit on bitboard
-    }
 
-    updated_board.occupancies[0] = updated_board.bitboards[0]
-        | updated_board.bitboards[1]
-        | updated_board.bitboards[2]
-        | updated_board.bitboards[3]
-        | updated_board.bitboards[4]
-        | updated_board.bitboards[5];
+        self.occupancies[0] = self.bitboards[0]
+            | self.bitboards[1]
+            | self.bitboards[2]
+            | self.bitboards[3]
+            | self.bitboards[4]
+            | self.bitboards[5];
 
-    updated_board.occupancies[1] = updated_board.bitboards[6]
-        | updated_board.bitboards[7]
-        | updated_board.bitboards[8]
-        | updated_board.bitboards[9]
-        | updated_board.bitboards[10]
-        | updated_board.bitboards[11];
+        self.occupancies[1] = self.bitboards[6]
+            | self.bitboards[7]
+            | self.bitboards[8]
+            | self.bitboards[9]
+            | self.bitboards[10]
+            | self.bitboards[11];
 
-    updated_board.occupancies[2] = updated_board.occupancies[0] | updated_board.occupancies[1];
-    //update occupancies
+        self.occupancies[2] = self.occupancies[0] | self.occupancies[1];
+        //update occupancies
 
-    if m.is_double_push() {
-        updated_board.en_passant = match piece {
-            0 => sq_from + 8,
-            6 => sq_from - 8,
-            _ => panic!("non-pawn is making a double push 🤔"),
+        if m.is_double_push() {
+            self.en_passant = match piece {
+                0 => sq_from + 8,
+                6 => sq_from - 8,
+                _ => panic!("non-pawn is making a double push 🤔"),
+            }
+        } else {
+            self.en_passant = 64;
         }
-    } else {
-        updated_board.en_passant = 64;
+
+        if (piece % 6 == 0) || m.is_capture() {
+            self.fifty_move = 0;
+        } else {
+            self.fifty_move += 1;
+        }
+
+        if piece == 5 {
+            self.castling &= 0b0000_1100;
+        } else if piece == 11 {
+            self.castling &= 0b0000_0011;
+        }
+
+        if piece == 3 && sq_from == 0 {
+            self.castling &= 0b0000_1101;
+        } else if piece == 3 && sq_from == 7 {
+            self.castling &= 0b0000_1110;
+        } else if piece == 9 && sq_from == 56 {
+            self.castling &= 0b0000_0111;
+        } else if piece == 9 && sq_from == 63 {
+            self.castling &= 0b0000_1011;
+        } //update castling rights
+
+        self.ply += 1;
+
+        self.side_to_move = match self.side_to_move {
+            Colour::White => Colour::Black,
+            Colour::Black => Colour::White,
+        };
+        commit
     }
 
-    if (piece % 6 == 0) || m.is_capture() {
-        updated_board.fifty_move = 0;
-    } else {
-        updated_board.fifty_move += 1;
+    pub fn undo_move(&mut self, m: Move, c: Commit) {
+        //incremental update should be faster than copying the whole board
+        self.side_to_move = match self.side_to_move {
+            //note updated at the beginning of the function
+            Colour::White => Colour::Black,
+            Colour::Black => Colour::White,
+        };
+        if m.promoted_piece() != 15 {
+            self.bitboards[m.promoted_piece()] =
+                pop_bit(m.square_to(), self.bitboards[m.promoted_piece()]);
+            match m.piece_moved() {
+                0 => self.bitboards[0] = set_bit(m.square_from(), self.bitboards[0]),
+                6 => self.bitboards[6] = set_bit(m.square_from(), self.bitboards[6]),
+                _ => panic!("non pawn is promoting lol"),
+            }
+            //remove promoted piece from bitboard
+        } else {
+            for i in 0..12 {
+                if get_bit(m.square_to(), self.bitboards[i]) == 1 {
+                    //piece that was moved to square
+                    self.bitboards[i] = pop_bit(m.square_to(), self.bitboards[i]);
+                    self.bitboards[i] = set_bit(m.square_from(), self.bitboards[i]);
+                    break;
+                }
+            }
+        }
+
+        if c.piece_captured.is_some() {
+            //put captured piece back onto bitboard
+            self.bitboards[c.piece_captured.unwrap() as usize] = set_bit(
+                m.square_to(),
+                self.bitboards[c.piece_captured.unwrap() as usize],
+            );
+        }
+
+        if m.is_castling() {
+            //reset rooks after castling
+            match m.square_to() {
+                2 => {
+                    self.bitboards[3] = pop_bit(3, self.bitboards[3]);
+                    self.bitboards[3] = set_bit(0, self.bitboards[3]);
+                }
+                6 => {
+                    self.bitboards[3] = pop_bit(5, self.bitboards[3]);
+                    self.bitboards[3] = set_bit(7, self.bitboards[3]);
+                }
+                58 => {
+                    self.bitboards[9] = pop_bit(59, self.bitboards[9]);
+                    self.bitboards[9] = set_bit(56, self.bitboards[9]);
+                }
+                62 => {
+                    self.bitboards[9] = pop_bit(61, self.bitboards[9]);
+                    self.bitboards[9] = set_bit(63, self.bitboards[9]);
+                }
+
+                _ => panic!("castling to invalid square in undo_move()"),
+            }
+        }
+
+        if m.is_en_passant() {
+            match self.side_to_move {
+                Colour::White => {
+                    //white to move before move was made
+                    self.bitboards[6] = set_bit(m.square_to() - 8, self.bitboards[6])
+                }
+                Colour::Black => self.bitboards[0] = set_bit(m.square_to() + 8, self.bitboards[0]),
+            };
+        }
+
+        self.occupancies[0] = self.bitboards[0]
+            | self.bitboards[1]
+            | self.bitboards[2]
+            | self.bitboards[3]
+            | self.bitboards[4]
+            | self.bitboards[5];
+
+        self.occupancies[1] = self.bitboards[6]
+            | self.bitboards[7]
+            | self.bitboards[8]
+            | self.bitboards[9]
+            | self.bitboards[10]
+            | self.bitboards[11];
+
+        self.en_passant = c.ep_reset;
+        self.castling = c.castling_reset;
+        self.fifty_move = c.fifty_move_reset;
+        self.ply -= 1;
     }
-
-    if piece == 5 {
-        updated_board.castling &= 0b0000_1100;
-    } else if piece == 11 {
-        updated_board.castling &= 0b0000_0011;
-    }
-
-    if piece == 3 && sq_from == 0 {
-        updated_board.castling &= 0b0000_1101;
-    } else if piece == 3 && sq_from == 7 {
-        updated_board.castling &= 0b0000_1110;
-    } else if piece == 9 && sq_from == 56 {
-        updated_board.castling &= 0b0000_0111;
-    } else if piece == 9 && sq_from == 63 {
-        updated_board.castling &= 0b0000_1011;
-    } //update castling rights
-
-    updated_board.ply += 1;
-
-    updated_board.side_to_move = match b.side_to_move {
-        Colour::White => Colour::Black,
-        Colour::Black => Colour::White,
-    };
-
-    updated_board
 }
 
-pub fn is_legal(m: Move, b: &Board) -> bool {
-    let updated_board = make_move(m, *b);
-    match updated_board.side_to_move {
+pub fn is_legal(m: Move, b: &mut Board) -> bool {
+    let commit = b.make_move(m);
+    
+    let legal = match b.side_to_move {
         // AFTER move has been made
         Colour::White => !is_attacked(
-            lsfb(updated_board.bitboards[11]).unwrap(),
+            lsfb(b.bitboards[11]).unwrap(),
             Colour::White,
-            &updated_board,
+            b,
         ),
         Colour::Black => !is_attacked(
-            lsfb(updated_board.bitboards[5]).unwrap(),
+            lsfb(b.bitboards[5]).unwrap(),
             Colour::Black,
-            &updated_board,
+            b,
         ),
-    }
+    };
+    b.undo_move(m, commit);
+    legal
 }

@@ -1,7 +1,7 @@
 use crate::board::*;
-use crate::magic::*;
 use crate::helper::*;
 use crate::is_attacked;
+use crate::magic::*;
 use crate::search::INFINITY;
 
 const PAWN_VALUE: i32 = 95;
@@ -187,7 +187,8 @@ const BISHOP_MOBILITY_UNIT: i32 = 4;
 const ROOK_MOBILITY_UNIT: i32 = 3;
 const QUEEN_MOBILITY_UNIT: i32 = 1;
 
-const START_MATERIAL: i32 = PAWN_VALUE * 16 + KNIGHT_VALUE * 4 + BISHOP_VALUE * 4 + ROOK_VALUE * 4 + QUEEN_VALUE * 2;
+const START_MATERIAL: i32 =
+    PAWN_VALUE * 16 + KNIGHT_VALUE * 4 + BISHOP_VALUE * 4 + ROOK_VALUE * 4 + QUEEN_VALUE * 2;
 //possible for promotions to in theory result in more material than this
 
 pub fn game_phase_score(material_count: i32) -> f32 {
@@ -227,37 +228,61 @@ pub fn evaluate(b: &Board) -> i32 {
                 1 => eval += WN_TABLE[square],
                 2 => {
                     eval += WB_TABLE[square];
-                    eval += (count(get_bishop_attacks(square, b.occupancies[2])) as i32 - BISHOP_BASE_MOBILITY) as i32 * BISHOP_MOBILITY_UNIT;
+                    eval += (count(get_bishop_attacks(square, b.occupancies[2])) as i32
+                        - BISHOP_BASE_MOBILITY) as i32
+                        * BISHOP_MOBILITY_UNIT;
                 }
                 3 => {
                     eval += WR_TABLE[square];
-                    eval += (count(get_rook_attacks(square, b.occupancies[2])) as i32 - ROOK_BASE_MOBILITY) as i32 * ROOK_MOBILITY_UNIT;
+                    eval += (count(get_rook_attacks(square, b.occupancies[2])) as i32
+                        - ROOK_BASE_MOBILITY) as i32
+                        * ROOK_MOBILITY_UNIT;
                 }
                 4 => {
                     eval += WQ_TABLE[square];
-                    eval += std::cmp::max((count(get_queen_attacks(square, b.occupancies[2])) as i32 - QUEEN_BASE_MOBILITY) as i32, 0) * QUEEN_MOBILITY_UNIT;
+                    eval += std::cmp::max(
+                        (count(get_queen_attacks(square, b.occupancies[2])) as i32
+                            - QUEEN_BASE_MOBILITY) as i32,
+                        0,
+                    ) * QUEEN_MOBILITY_UNIT;
                 }
-                5 => eval += {
-                    ((WK_TABLE[square] as f32 * phase_score + WK_ENDGAME[square] as f32 * (1f32 - phase_score)) / 2f32) as i32
-                },
+                5 => {
+                    eval += {
+                        ((WK_TABLE[square] as f32 * phase_score
+                            + WK_ENDGAME[square] as f32 * (1f32 - phase_score))
+                            / 2f32) as i32
+                    }
+                }
 
                 6 => eval -= BP_TABLE[square],
                 7 => eval -= BN_TABLE[square],
                 8 => {
                     eval -= BB_TABLE[square];
-                    eval -= (count(get_bishop_attacks(square, b.occupancies[2])) as i32 - BISHOP_BASE_MOBILITY) as i32 * BISHOP_MOBILITY_UNIT;
+                    eval -= (count(get_bishop_attacks(square, b.occupancies[2])) as i32
+                        - BISHOP_BASE_MOBILITY) as i32
+                        * BISHOP_MOBILITY_UNIT;
                 }
                 9 => {
                     eval -= BR_TABLE[square];
-                    eval -= (count(get_rook_attacks(square, b.occupancies[2])) as i32 - ROOK_BASE_MOBILITY) as i32 * ROOK_MOBILITY_UNIT;
+                    eval -= (count(get_rook_attacks(square, b.occupancies[2])) as i32
+                        - ROOK_BASE_MOBILITY) as i32
+                        * ROOK_MOBILITY_UNIT;
                 }
                 10 => {
                     eval -= BQ_TABLE[square];
-                    eval -= std::cmp::max((count(get_queen_attacks(square, b.occupancies[2])) as i32 - QUEEN_BASE_MOBILITY) as i32, 0) * QUEEN_MOBILITY_UNIT;
+                    eval -= std::cmp::max(
+                        (count(get_queen_attacks(square, b.occupancies[2])) as i32
+                            - QUEEN_BASE_MOBILITY) as i32,
+                        0,
+                    ) * QUEEN_MOBILITY_UNIT;
                 }
-                11 => eval -= {
-                    ((BK_TABLE[square] as f32 * phase_score + BK_ENDGAME[square] as f32 * (1f32 - phase_score)) / 2f32) as i32
-                },
+                11 => {
+                    eval -= {
+                        ((BK_TABLE[square] as f32 * phase_score
+                            + BK_ENDGAME[square] as f32 * (1f32 - phase_score))
+                            / 2f32) as i32
+                    }
+                }
                 _ => panic!("impossible"),
             }
             bitboard = pop_bit(square, bitboard);

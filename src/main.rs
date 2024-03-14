@@ -65,51 +65,56 @@ pub fn parse_move(input: &str, board: Board) -> Move {
 
 fn main() {
     init_all();
-    let mut pos = fen_to_board(STARTPOS);
+    let mut pos = Board::from(STARTPOS);
+    
+        let mut colour_input = String::new();
+        std::io::stdin().read_line(&mut colour_input).unwrap();
+        colour_input.retain(|c| !c.is_whitespace());
 
-    let mut colour_input = String::new();
-    std::io::stdin().read_line(&mut colour_input).unwrap();
-    colour_input.retain(|c| !c.is_whitespace());
-
-    let user_colour = match colour_input.as_str() {
-        "w" => Colour::White,
-        "b" => Colour::Black,
-        _ => panic!("invalid colour input {}", colour_input.as_str()),
-    };
-    match user_colour {
-        Colour::White => {
-            loop {
+        let user_colour = match colour_input.as_str() {
+            "w" => Colour::White,
+            "b" => Colour::Black,
+            _ => panic!("invalid colour input {}", colour_input.as_str()),
+        };
+        match user_colour {
+            Colour::White => loop {
                 let mut input = String::new();
                 std::io::stdin().read_line(&mut input).unwrap();
                 input.retain(|c| !c.is_whitespace());
                 let user_move = parse_move(input.as_str(), pos);
-                pos = make_move(user_move, pos);
-                let best = best_move(pos);
+                pos.make_move(user_move);
+                let best = best_move(&mut pos);
                 if best == NULL_MOVE {
                     break;
                 }
-                pos = make_move(best, pos);
-                println!("{}{}", coordinate(best.square_from()), coordinate(best.square_to()));
-                print_board(&pos);
+                pos.make_move(best);
+                println!(
+                    "{}{}",
+                    coordinate(best.square_from()),
+                    coordinate(best.square_to())
+                );
+                pos.print_board();
                 unsafe { println!("nodes: {}", NODES) };
-            }
-        }
-        Colour::Black => {
-            loop {
-                let best = best_move(pos);
+            },
+            Colour::Black => loop {
+                let best = best_move(&mut pos);
                 if best == NULL_MOVE {
                     break;
                 }
-                pos = make_move(best, pos);                 
-                println!("{}{}", coordinate(best.square_from()), coordinate(best.square_to()));
-                print_board(&pos);
+                pos.make_move(best);
+                println!(
+                    "{}{}",
+                    coordinate(best.square_from()),
+                    coordinate(best.square_to())
+                );
+                pos.print_board();
                 unsafe { println!("nodes: {}", NODES) };
                 let mut input = String::new();
                 input.retain(|c| !c.is_whitespace());
                 std::io::stdin().read_line(&mut input).unwrap();
                 let user_move = parse_move(input.as_str(), pos);
-                pos = make_move(user_move, pos);                             
-            }
+                pos.make_move(user_move);
+            },
         }
-    }
+    
 }

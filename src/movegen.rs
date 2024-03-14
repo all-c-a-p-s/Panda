@@ -262,7 +262,7 @@ pub fn gen_moves(board: &Board) -> MoveList {
     moves
 }
 
-pub fn gen_captures(board: Board) -> MoveList {
+pub fn gen_captures(board: &mut Board) -> MoveList {
     //special capture-only move generation for quiescence search
     let (mut min, mut max) = (0usize, 6usize);
     if board.side_to_move == Colour::Black {
@@ -310,26 +310,26 @@ pub fn gen_captures(board: Board) -> MoveList {
                 let lsb_attack = lsfb(attacks).unwrap();
                 if (get_bit(lsb, board.bitboards[0]) > 0) && rank(lsb) == 6 {
                     // white promotion
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 4, &board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 4, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 3, &board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 3, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 2, &board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 2, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 1, &board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 1, board, false);
                     first_unused += 1;
                 } else if (get_bit(lsb, board.bitboards[6]) > 0) && rank(lsb) == 1 {
                     //black promotion
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 10, &board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 10, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 9, &board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 9, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 8, &board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 8, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 7, &board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 7, board, false);
                     first_unused += 1;
                 } else {
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 15, &board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 15, board, false);
                     first_unused += 1;
                 } //list to return here
                 attacks = pop_bit(lsb_attack, attacks);
@@ -345,7 +345,7 @@ pub fn gen_captures(board: Board) -> MoveList {
         if moves.moves[i] == NULL_MOVE {
             break;
         }
-        if is_legal(moves.moves[i], &board) {
+        if is_legal(moves.moves[i], board) {
             legal.moves[last] = moves.moves[i];
             last += 1;
         }
@@ -353,8 +353,8 @@ pub fn gen_captures(board: Board) -> MoveList {
     legal
 }
 
-pub fn gen_legal(b: Board) -> MoveList {
-    let pseudo_legal = gen_moves(&b);
+pub fn gen_legal(b: &mut Board) -> MoveList {
+    let pseudo_legal = gen_moves(b);
     let mut legal = MoveList {
         moves: [NULL_MOVE; MAX_MOVES],
     };
@@ -363,7 +363,7 @@ pub fn gen_legal(b: Board) -> MoveList {
         if pseudo_legal.moves[i] == NULL_MOVE {
             break;
         }
-        if is_legal(pseudo_legal.moves[i], &b) {
+        if is_legal(pseudo_legal.moves[i], b) {
             legal.moves[last] = pseudo_legal.moves[i];
             last += 1;
         }
