@@ -4,11 +4,11 @@ use crate::is_attacked;
 use crate::magic::*;
 use crate::search::INFINITY;
 
-const PAWN_VALUE: i32 = 95;
-const KNIGHT_VALUE: i32 = 310;
-const BISHOP_VALUE: i32 = 325;
-const ROOK_VALUE: i32 = 500;
-const QUEEN_VALUE: i32 = 900;
+const PAWN_VALUE: i32 = 100;
+const KNIGHT_VALUE: i32 = 305;
+const BISHOP_VALUE: i32 = 333;
+const ROOK_VALUE: i32 = 513;
+const QUEEN_VALUE: i32 = 920;
 
 #[rustfmt::skip]
 const WP_TABLE: [i32; 64] = [
@@ -26,7 +26,7 @@ const WP_TABLE: [i32; 64] = [
 const WN_TABLE: [i32; 64] = [
     -25, -20, -15, -15, -15, -15, -20, -25,
     -15, -20,   0  , 0,   0,   0, -20, -15,
-    -10,   0,  10,   5,   5,  10,   0, -10,
+    -10,   0,  15,   5,   5,  15,   0, -10,
     -10,   5,  15,  20,  20,  15,   5, -10,
      -5,   0,  15,  20,  20,  15,   0,  -5,
     -15,   5,  20,  25,  25,  20,   5, -15,
@@ -60,7 +60,7 @@ const WR_TABLE: [i32; 64] = [
 
 #[rustfmt::skip]
 const WQ_TABLE: [i32; 64] = [
-    -20, -10, -10, -5, -5, -10, -10, -20,
+    -20, -10, -10,  0, -5, -10, -10, -20,
     -10,   0,   0,  0,  0,   0,   0, -10,
     -10,   0,   5,  5,  5,   5,   0, -10,
      -5,   0,   5,  5,  5,   5,   0,  -5,
@@ -113,7 +113,7 @@ const BN_TABLE: [i32; 64] = [
     -15,   5,  20,  25,  25,  20,   5, -15,
      -5,   0,  15,  20,  20,  15,   0,  -5,
     -10,   5,  15,  20,  20,  15,   5, -10,
-    -10,   0,  10,   5,   5,  10,   0, -10,
+    -10,   0,  15,   5,   5,  15,   0, -10,
     -15, -20,   0  , 0,   0,   0, -20, -15,
     -25, -20, -15, -15, -15, -15, -20, -25
 ];
@@ -151,7 +151,7 @@ const BQ_TABLE: [i32; 64] = [
      -5,   0,   5,  5,  5,   5,   0,  -5,
     -10,   0,   5,  5,  5,   5,   0, -10,
     -10,   0,   0,  0,  0,   0,   0, -10,
-    -20, -10, -10, -5, -5, -10, -10, -20
+    -20, -10, -10,  0, -5, -10, -10, -20
 ];
 
 #[rustfmt::skip]
@@ -179,6 +179,110 @@ const BK_ENDGAME: [i32; 64] = [
     -50, -34, -21, -11, -28, -14, -24, -50
 ];
 
+pub const fn passed_pawn_mask_white(square: usize) -> u64 {
+    let mut res = match square % 8 {
+        0 => A_FILE | B_FILE,
+        1 => A_FILE | B_FILE | C_FILE,
+        2 => B_FILE | C_FILE | D_FILE,
+        3 => C_FILE | D_FILE | E_FILE,
+        4 => D_FILE | E_FILE | F_FILE,
+        5 => E_FILE | F_FILE | G_FILE,
+        6 => F_FILE | G_FILE | H_FILE,
+        7 => G_FILE | H_FILE,
+        _ => panic!("impossible"),
+    };
+    let mut sq = 0;
+    while sq < 64 {
+        if rank(sq) > rank(square) {
+            res &= set_bit(sq, 0);
+        }
+        sq += 1;
+    }
+    res
+}
+
+pub const fn passed_pawn_mask_black(square: usize) -> u64 {
+    let mut res = match square % 8 {
+        0 => A_FILE | B_FILE,
+        1 => A_FILE | B_FILE | C_FILE,
+        2 => B_FILE | C_FILE | D_FILE,
+        3 => C_FILE | D_FILE | E_FILE,
+        4 => D_FILE | E_FILE | F_FILE,
+        5 => E_FILE | F_FILE | G_FILE,
+        6 => F_FILE | G_FILE | H_FILE,
+        7 => G_FILE | H_FILE,
+        _ => panic!("impossible"),
+    };
+    let mut sq = 0;
+    while sq < 64 {
+        if rank(sq) < rank(square) {
+            res &= set_bit(sq, 0);
+        }
+        sq += 1;
+    }
+    res
+}
+
+pub const ISOLATED_MASKS: [u64; 64] = {
+    let mut res = [0u64; 64];
+    let mut square = 0;
+    while square < 64 {
+        res[square] = match square % 8 {
+            0 => A_FILE | B_FILE,
+            1 => A_FILE | B_FILE | C_FILE,
+            2 => B_FILE | C_FILE | D_FILE,
+            3 => C_FILE | D_FILE | E_FILE,
+            4 => D_FILE | E_FILE | F_FILE,
+            5 => E_FILE | F_FILE | G_FILE,
+            6 => F_FILE | G_FILE | H_FILE,
+            7 => G_FILE | H_FILE,
+            _ => panic!("impossible"),
+        };
+        square += 1;
+    }
+    res
+};
+
+pub const DOUBLED_MASKS: [u64; 64] = {
+    let mut res = [0u64; 64];
+    let mut square = 0;
+    while square < 64 {
+        res[square] = match square % 8 {
+            0 => pop_bit(square, A_FILE),
+            1 => pop_bit(square, B_FILE),
+            2 => pop_bit(square, C_FILE),
+            3 => pop_bit(square, D_FILE),
+            4 => pop_bit(square, E_FILE),
+            5 => pop_bit(square, F_FILE),
+            6 => pop_bit(square, G_FILE),
+            7 => pop_bit(square, H_FILE),
+            _ => panic!("impossible"),
+        };
+        square += 1;
+    }
+    res
+};
+
+pub const WHITE_PASSED_MASKS: [u64; 64] = {
+    let mut table = [0u64; 64];
+    let mut square = 0;
+    while square < 64 {
+        table[square] = passed_pawn_mask_white(square);
+        square += 1;
+    }
+    table
+};
+
+pub const BLACK_PASSED_MASKS: [u64; 64] = {
+    let mut table = [0u64; 64];
+    let mut square = 0;
+    while square < 64 {
+        table[square] = passed_pawn_mask_white(square);
+        square += 1;
+    }
+    table
+};
+
 const BISHOP_BASE_MOBILITY: i32 = 4;
 const ROOK_BASE_MOBILITY: i32 = 2;
 const QUEEN_BASE_MOBILITY: i32 = 9;
@@ -191,12 +295,17 @@ const START_MATERIAL: i32 =
     PAWN_VALUE * 16 + KNIGHT_VALUE * 4 + BISHOP_VALUE * 4 + ROOK_VALUE * 4 + QUEEN_VALUE * 2;
 //possible for promotions to in theory result in more material than this
 
+const PASSED_PAWN_BONUS: [i32; 8] = [0, 5, 5, 20, 40, 65, 105, 0];
+
+const ISOLATED_PAWN_PENALTY: i32 = -12;
+const DOUBLED_PAWN_PENALTY: i32 = -14;
+
 pub fn game_phase_score(material_count: i32) -> f32 {
     material_count as f32 / START_MATERIAL as f32
 }
 
 pub fn evaluate(b: &Board) -> i32 {
-    //TODO: pawn structure evaluation
+    //TODO: king safety
     let mut eval: i32 = 0;
 
     let mut white_material: i32 = 0;
@@ -224,7 +333,23 @@ pub fn evaluate(b: &Board) -> i32 {
         while bitboard > 0 {
             let square = lsfb(bitboard).unwrap();
             match i {
-                0 => eval += WP_TABLE[square],
+                0 => {
+                    eval += WP_TABLE[square];
+                    if WHITE_PASSED_MASKS[square] & b.bitboards[6] == 0 {
+                        //no blocking black pawns
+                        eval += PASSED_PAWN_BONUS[rank(square)];
+                    }
+
+                    if ISOLATED_MASKS[square] & b.bitboards[0] == 0 {
+                        //penalty for isolated pawns
+                        eval += ISOLATED_PAWN_PENALTY;
+                    }
+
+                    if DOUBLED_MASKS[square] & b.bitboards[0] != 0 {
+                        //doubled pawn penalty
+                        eval += DOUBLED_PAWN_PENALTY;
+                    }
+                }
                 1 => eval += WN_TABLE[square],
                 2 => {
                     eval += WB_TABLE[square];
@@ -254,7 +379,22 @@ pub fn evaluate(b: &Board) -> i32 {
                     }
                 }
 
-                6 => eval -= BP_TABLE[square],
+                6 => {
+                    eval -= BP_TABLE[square];
+                    if BLACK_PASSED_MASKS[square] & b.bitboards[0] == 0 {
+                        //no blocking black pawns
+                        eval -= PASSED_PAWN_BONUS[7 - rank(square)];
+                    }
+
+                    if ISOLATED_MASKS[square] & b.bitboards[6] == 0 {
+                        //penalty for isolated pawns
+                        eval -= ISOLATED_PAWN_PENALTY;
+                    }
+
+                    if DOUBLED_MASKS[square] & b.bitboards[6] != 0 {
+                        eval -= DOUBLED_PAWN_PENALTY;
+                    }
+                }
                 7 => eval -= BN_TABLE[square],
                 8 => {
                     eval -= BB_TABLE[square];

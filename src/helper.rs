@@ -101,11 +101,11 @@ pub fn coordinate(sq: usize) -> String {
     format!("{}{}", f, r)
 }
 
-pub fn rank(sq: usize) -> usize {
+pub const fn rank(sq: usize) -> usize {
     sq / 8
 }
 
-pub fn file(sq: usize) -> usize {
+pub const fn file(sq: usize) -> usize {
     sq % 8
 }
 
