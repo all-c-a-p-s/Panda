@@ -11,12 +11,13 @@ Current elo ~1800
 - mvv-lva move ordering
 - piece square tables
 - mobility evaluation
+- pawn structure evaluation
 - basic tapered eval
 
 ## Todo:
-- pawn struture evaluation
+- iterative deepening
 - king safety evaluation
-- search improvements
+- search improvements (killer moves, null move pruning)
 - opening book
 - hashing
 
