@@ -3,23 +3,23 @@ use std::collections::HashMap;
 #[allow(dead_code)]
 pub const MAX: u64 = u64::MAX;
 
-pub const A_FILE: u64 = 0x8080808080808080;
-pub const B_FILE: u64 = 0x4040404040404040;
-pub const C_FILE: u64 = 0x2020202020202020;
-pub const D_FILE: u64 = 0x1010101010101010;
-pub const E_FILE: u64 = 0x0808080808080808;
-pub const F_FILE: u64 = 0x0404040404040404;
-pub const G_FILE: u64 = 0x0202020202020202;
-pub const H_FILE: u64 = 0x0101010101010101;
+pub const A_FILE: u64 = 0x0101010101010101;
+pub const B_FILE: u64 = 0x0202020202020202;
+pub const C_FILE: u64 = 0x0404040404040404;
+pub const D_FILE: u64 = 0x0808080808080808;
+pub const E_FILE: u64 = 0x1010101010101010;
+pub const F_FILE: u64 = 0x2020202020202020;
+pub const G_FILE: u64 = 0x4040404040404040;
+pub const H_FILE: u64 = 0x8080808080808080;
 
-pub const RANK_1: u64 = 0xFF00000000000000;
-pub const RANK_2: u64 = 0x00FF000000000000;
-pub const RANK_3: u64 = 0x0000FF0000000000;
-pub const RANK_4: u64 = 0x000000FF00000000;
-pub const RANK_5: u64 = 0x00000000FF000000;
-pub const RANK_6: u64 = 0x0000000000FF0000;
-pub const RANK_7: u64 = 0x000000000000FF00;
-pub const RANK_8: u64 = 0x00000000000000FF;
+pub const RANK_1: u64 = 0x00000000000000FF;
+pub const RANK_2: u64 = 0x000000000000FF00;
+pub const RANK_3: u64 = 0x0000000000FF0000;
+pub const RANK_4: u64 = 0x00000000FF000000;
+pub const RANK_5: u64 = 0x000000FF00000000;
+pub const RANK_6: u64 = 0x0000FF0000000000;
+pub const RANK_7: u64 = 0x00FF000000000000;
+pub const RANK_8: u64 = 0xFF00000000000000;
 
 pub fn file_indices() -> HashMap<char, usize> {
     let mut files = HashMap::new();

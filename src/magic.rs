@@ -38,31 +38,31 @@ pub const fn mask_pawn_attacks(square: usize, side: Colour) -> u64 {
     //generate capturing attacks
     let p: u64 = set_bit(square, 0);
     match side {
-        Colour::Black => ((p >> 9) & !A_FILE) | ((p >> 7) & !H_FILE),
-        Colour::White => ((p << 7) & !A_FILE) | ((p << 9) & !H_FILE),
+        Colour::Black => ((p >> 9) & !H_FILE) | ((p >> 7) & !A_FILE),
+        Colour::White => ((p << 7) & !H_FILE) | ((p << 9) & !A_FILE),
     }
 }
 
 pub const fn mask_knight_attacks(square: usize) -> u64 {
     let n: u64 = set_bit(square, 0);
-    ((n >> 17) & !A_FILE)
-        | ((n >> 15) & !H_FILE)
-        | ((n >> 10) & !(A_FILE | B_FILE))
-        | ((n >> 6) & !(G_FILE | H_FILE))
-        | ((n << 6) & !(A_FILE | B_FILE))
-        | ((n << 10) & !(G_FILE | H_FILE))
-        | ((n << 15) & !A_FILE)
-        | ((n << 17) & !H_FILE)
+    ((n >> 17) & !H_FILE)
+        | ((n >> 15) & !A_FILE)
+        | ((n >> 10) & !(H_FILE | G_FILE))
+        | ((n >> 6) & !(A_FILE | B_FILE))
+        | ((n << 6) & !(G_FILE | H_FILE))
+        | ((n << 10) & !(B_FILE | A_FILE))
+        | ((n << 15) & !H_FILE)
+        | ((n << 17) & !A_FILE)
 }
 
 pub const fn mask_king_attacks(square: usize) -> u64 {
     let k: u64 = set_bit(square, 0);
-    ((k >> 9) & !A_FILE)
-        | ((k >> 7) & !H_FILE)
-        | ((k << 7) & !A_FILE)
-        | ((k << 9) & !H_FILE)
-        | ((k >> 1) & !A_FILE)
-        | ((k << 1) & !H_FILE)
+    ((k >> 9) & !H_FILE)
+        | ((k >> 7) & !A_FILE)
+        | ((k << 7) & !H_FILE)
+        | ((k << 9) & !A_FILE)
+        | ((k >> 1) & !H_FILE)
+        | ((k << 1) & !A_FILE)
         | (k << 8)
         | (k >> 8)
 }

@@ -17,7 +17,10 @@ use crate::helper::*;
 use crate::movegen::is_attacked;
 use crate::INFINITY;
 
-pub const NULL_MOVE: Move = Move { data: 0u32, move_order_score: -INFINITY };
+pub const NULL_MOVE: Move = Move {
+    data: 0u32,
+    move_order_score: -INFINITY,
+};
 pub const MAX_MOVES: usize = 218;
 
 #[derive(Debug)]
@@ -409,19 +412,11 @@ impl Board {
 
 pub fn is_legal(m: Move, b: &mut Board) -> bool {
     let commit = b.make_move(m);
-    
+
     let legal = match b.side_to_move {
         // AFTER move has been made
-        Colour::White => !is_attacked(
-            lsfb(b.bitboards[11]).unwrap(),
-            Colour::White,
-            b,
-        ),
-        Colour::Black => !is_attacked(
-            lsfb(b.bitboards[5]).unwrap(),
-            Colour::Black,
-            b,
-        ),
+        Colour::White => !is_attacked(lsfb(b.bitboards[11]).unwrap(), Colour::White, b),
+        Colour::Black => !is_attacked(lsfb(b.bitboards[5]).unwrap(), Colour::Black, b),
     };
     b.undo_move(m, commit);
     legal

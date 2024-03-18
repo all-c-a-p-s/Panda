@@ -180,7 +180,15 @@ const BK_ENDGAME: [i32; 64] = [
 ];
 
 pub const fn passed_pawn_mask_white(square: usize) -> u64 {
-    let mut res = match square % 8 {
+    let mut res = 0u64;
+    let mut sq = 0;
+    while sq < 64 {
+        if rank(sq) > rank(square) {
+            res |= set_bit(sq, 0);
+        }
+        sq += 1;
+    }
+    res &= match square % 8 {
         0 => A_FILE | B_FILE,
         1 => A_FILE | B_FILE | C_FILE,
         2 => B_FILE | C_FILE | D_FILE,
@@ -191,18 +199,20 @@ pub const fn passed_pawn_mask_white(square: usize) -> u64 {
         7 => G_FILE | H_FILE,
         _ => panic!("impossible"),
     };
-    let mut sq = 0;
-    while sq < 64 {
-        if rank(sq) > rank(square) {
-            res &= set_bit(sq, 0);
-        }
-        sq += 1;
-    }
+    
     res
 }
 
 pub const fn passed_pawn_mask_black(square: usize) -> u64 {
-    let mut res = match square % 8 {
+    let mut res = 0u64;
+    let mut sq = 0;
+    while sq < 64 {
+        if rank(sq) < rank(square) {
+            res |= set_bit(sq, 0);
+        }
+        sq += 1;
+    }
+    res &= match square % 8 {
         0 => A_FILE | B_FILE,
         1 => A_FILE | B_FILE | C_FILE,
         2 => B_FILE | C_FILE | D_FILE,
@@ -213,13 +223,6 @@ pub const fn passed_pawn_mask_black(square: usize) -> u64 {
         7 => G_FILE | H_FILE,
         _ => panic!("impossible"),
     };
-    let mut sq = 0;
-    while sq < 64 {
-        if rank(sq) < rank(square) {
-            res &= set_bit(sq, 0);
-        }
-        sq += 1;
-    }
     res
 }
 
@@ -228,14 +231,14 @@ pub const ISOLATED_MASKS: [u64; 64] = {
     let mut square = 0;
     while square < 64 {
         res[square] = match square % 8 {
-            0 => A_FILE | B_FILE,
-            1 => A_FILE | B_FILE | C_FILE,
-            2 => B_FILE | C_FILE | D_FILE,
-            3 => C_FILE | D_FILE | E_FILE,
-            4 => D_FILE | E_FILE | F_FILE,
-            5 => E_FILE | F_FILE | G_FILE,
-            6 => F_FILE | G_FILE | H_FILE,
-            7 => G_FILE | H_FILE,
+            0 => B_FILE,
+            1 => A_FILE |  C_FILE,
+            2 => B_FILE |  D_FILE,
+            3 => C_FILE |  E_FILE,
+            4 => D_FILE |  F_FILE,
+            5 => E_FILE |  G_FILE,
+            6 => F_FILE |  H_FILE,
+            7 => G_FILE ,
             _ => panic!("impossible"),
         };
         square += 1;
@@ -277,7 +280,7 @@ pub const BLACK_PASSED_MASKS: [u64; 64] = {
     let mut table = [0u64; 64];
     let mut square = 0;
     while square < 64 {
-        table[square] = passed_pawn_mask_white(square);
+        table[square] = passed_pawn_mask_black(square);
         square += 1;
     }
     table

@@ -35,12 +35,7 @@ fn negamax(position: &mut Board, depth: usize, alpha: i32, beta: i32) -> i32 {
             break;
         }
         let commit = position.make_move(child_nodes.moves[i]);
-        let eval = -negamax(
-            position,
-            depth - 1,
-            -beta,
-            -alpha,
-        );
+        let eval = -negamax(position, depth - 1, -beta, -alpha);
         position.undo_move(child_nodes.moves[i], commit);
         if eval >= beta {
             return beta;
@@ -65,9 +60,11 @@ fn quiescence_search(position: &mut Board, alpha: i32, beta: i32) -> i32 {
 
     let mut moves = gen_captures(position);
     moves.order_moves(*position);
+    if moves.moves[0] == NULL_MOVE {
+        unsafe { NODES += 1 };
+    }
     for i in 0..MAX_MOVES {
         if moves.moves[i] == NULL_MOVE {
-            unsafe { NODES += i + 1 }; //where i is zero-indexed number of leaf nodes
             break;
         }
         let commit = position.make_move(moves.moves[i]);
@@ -81,13 +78,14 @@ fn quiescence_search(position: &mut Board, alpha: i32, beta: i32) -> i32 {
     alpha
 }
 
-const MVV_LVA: [[i32; 6]; 6] = [ //most valuable victim least valuable attacker
+const MVV_LVA: [[i32; 6]; 6] = [
+    //most valuable victim least valuable attacker
     [601, 501, 401, 301, 201, 101], //victim pawn
     [602, 502, 402, 302, 202, 102], //victim knight
     [603, 503, 403, 303, 203, 103], //victim bishop
     [604, 504, 404, 304, 204, 104], //victim rook
     [605, 505, 405, 305, 205, 105], //victim queen
-    [  0,   0,   0,   0,   0,   0], //victim king
+    [0, 0, 0, 0, 0, 0],             //victim king
 ];
 
 impl Move {
@@ -108,7 +106,6 @@ impl Move {
         }
         0
     }
-
 }
 
 impl MoveList {
@@ -119,7 +116,8 @@ impl MoveList {
             }
             self.moves[i].score_move(board);
         }
-        self.moves.sort_by(|a, b| b.move_order_score.cmp(&a.move_order_score));
+        self.moves
+            .sort_by(|a, b| b.move_order_score.cmp(&a.move_order_score));
     }
 }
 
