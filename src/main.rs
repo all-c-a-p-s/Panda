@@ -95,7 +95,6 @@ fn main() {
                 coordinate(best.square_to())
             );
             pos.print_board();
-            unsafe { println!("nodes: {}", NODES) };
         },
         Colour::Black => loop {
             let best = best_move(&mut pos);
@@ -109,7 +108,6 @@ fn main() {
                 coordinate(best.square_to())
             );
             pos.print_board();
-            unsafe { println!("nodes: {}", NODES) };
             let mut input = String::new();
             input.retain(|c| !c.is_whitespace());
             std::io::stdin().read_line(&mut input).unwrap();

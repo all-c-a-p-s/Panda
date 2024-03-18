@@ -215,7 +215,7 @@ impl Board {
 
             _ => panic!("invalid castling rights"),
         };
-        println!("Castling: {}", castling_rights);
+        print!("Castling: {} ", castling_rights);
         if self.en_passant != 64 {
             println!("En passant: {}", coordinate(self.en_passant));
         } else {
