@@ -1,5 +1,5 @@
 # Panda
-Chess engine written in rust (WIP).
+Chess engine written in Rust (WIP).
 
 Current elo ~1800
 
