@@ -8,8 +8,6 @@ pub mod perft;
 pub mod rng;
 pub mod search;
 
-use eval::WHITE_PASSED_MASKS;
-
 //use crate::perft::full_perft;
 use crate::board::*;
 use crate::helper::*;

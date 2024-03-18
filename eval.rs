@@ -280,7 +280,7 @@ pub const BLACK_PASSED_MASKS: [u64; 64] = {
     let mut table = [0u64; 64];
     let mut square = 0;
     while square < 64 {
-        table[square] = passed_pawn_mask_white(square);
+        table[square] = passed_pawn_mask_black(square);
         square += 1;
     }
     table
