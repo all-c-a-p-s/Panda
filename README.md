@@ -1,7 +1,7 @@
 # Panda
 Chess engine written in Rust (WIP).
 
-Current elo ~1800
+Current elo ~1900
 
 ## Features:
 - magic bitboards
