@@ -403,6 +403,8 @@ impl Board {
             | self.bitboards[10]
             | self.bitboards[11];
 
+        self.occupancies[2] = self.occupancies[0] | self.occupancies[1];
+
         self.en_passant = c.ep_reset;
         self.castling = c.castling_reset;
         self.fifty_move = c.fifty_move_reset;

@@ -100,7 +100,9 @@ fn main() {
             pos.print_board();
             println!(
                 "eval: {} nodes: {} pv: {}",
-                best_move.eval as f32 / -100.0, best_move.nodes, best_move.pv
+                best_move.eval as f32 / -100.0,
+                best_move.nodes,
+                best_move.pv
             ); //output scores from white's pov
             println!();
         },
@@ -119,7 +121,9 @@ fn main() {
             pos.print_board();
             println!(
                 "eval: {} nodes: {} pv: {}",
-                best_move.eval as f32 / 100.0, best_move.nodes, best_move.pv
+                best_move.eval as f32 / 100.0,
+                best_move.nodes,
+                best_move.pv
             );
             println!();
             let mut input = String::new();

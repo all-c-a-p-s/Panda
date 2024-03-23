@@ -9,6 +9,7 @@ use std::cmp;
 
 pub const INFINITY: i32 = 999_999_999;
 pub const MAX_PLY: usize = 64;
+pub const SEARCH_DEPTH: usize = 6;
 
 pub struct Searcher {
     pub killer_moves: [[Move; MAX_PLY]; 2],
@@ -135,6 +136,10 @@ impl Move {
     pub fn score_move(&mut self, b: Board, s: &Searcher) {
         if (*self) == NULL_MOVE {
             self.move_order_score = -INFINITY;
+            return;
+        }
+        if s.pv[0][s.ply] == *self {
+            self.move_order_score = INFINITY; //pv move searched first
         }
         if self.is_capture() {
             let mut victim_type: usize = 7; //initialise as impossible value
@@ -143,6 +148,9 @@ impl Move {
                     victim_type = i % 6;
                     break;
                 }
+            }
+            if victim_type == 7 {
+                self.print_move();
             }
             let attacker_type = self.piece_moved() % 6;
             self.move_order_score = MVV_LVA[victim_type][attacker_type];
@@ -177,9 +185,13 @@ pub struct MoveData {
 }
 
 pub fn best_move(position: &mut Board) -> MoveData {
-    let mut s = Searcher::new();
-    let eval = s.negamax(position, 6, -INFINITY, INFINITY);
+    let mut eval: i32 = 0;
     let mut pv = String::new();
+    let mut s = Searcher::new();
+    for depth in 1..SEARCH_DEPTH + 1 {
+        eval = s.negamax(position, depth, -INFINITY, INFINITY);
+    }
+
     for i in 0..MAX_PLY {
         if s.pv[0][i] == NULL_MOVE {
             break;
@@ -188,7 +200,7 @@ pub fn best_move(position: &mut Board) -> MoveData {
         pv += coordinate(s.pv[0][i].square_to()).as_str();
         pv += " ";
     }
-    //println!("{:?}", s.pv_length);
+
     MoveData {
         m: s.pv[0][0],
         nodes: s.nodes,
