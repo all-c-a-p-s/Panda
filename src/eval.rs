@@ -199,7 +199,7 @@ pub const fn passed_pawn_mask_white(square: usize) -> u64 {
         7 => G_FILE | H_FILE,
         _ => panic!("impossible"),
     };
-    
+
     res
 }
 
@@ -232,13 +232,13 @@ pub const ISOLATED_MASKS: [u64; 64] = {
     while square < 64 {
         res[square] = match square % 8 {
             0 => B_FILE,
-            1 => A_FILE |  C_FILE,
-            2 => B_FILE |  D_FILE,
-            3 => C_FILE |  E_FILE,
-            4 => D_FILE |  F_FILE,
-            5 => E_FILE |  G_FILE,
-            6 => F_FILE |  H_FILE,
-            7 => G_FILE ,
+            1 => A_FILE | C_FILE,
+            2 => B_FILE | D_FILE,
+            3 => C_FILE | E_FILE,
+            4 => D_FILE | F_FILE,
+            5 => E_FILE | G_FILE,
+            6 => F_FILE | H_FILE,
+            7 => G_FILE,
             _ => panic!("impossible"),
         };
         square += 1;

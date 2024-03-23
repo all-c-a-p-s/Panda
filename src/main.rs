@@ -83,31 +83,45 @@ fn main() {
             std::io::stdin().read_line(&mut input).unwrap();
             input.retain(|c| !c.is_whitespace());
             let user_move = parse_move(input.as_str(), pos);
+
             pos.make_move(user_move);
-            let best = best_move(&mut pos);
-            if best == NULL_MOVE {
+
+            let best_move = best_move(&mut pos);
+            let m = best_move.m;
+            if m == NULL_MOVE {
                 break;
             }
-            pos.make_move(best);
+            pos.make_move(m);
             println!(
                 "{}{}",
-                coordinate(best.square_from()),
-                coordinate(best.square_to())
+                coordinate(m.square_from()),
+                coordinate(m.square_to())
             );
             pos.print_board();
+            println!(
+                "eval: {} nodes: {} pv: {}",
+                best_move.eval as f32 / -100.0, best_move.nodes, best_move.pv
+            ); //output scores from white's pov
+            println!();
         },
         Colour::Black => loop {
-            let best = best_move(&mut pos);
-            if best == NULL_MOVE {
+            let best_move = best_move(&mut pos);
+            let m = best_move.m;
+            if m == NULL_MOVE {
                 break;
             }
-            pos.make_move(best);
+            pos.make_move(m);
             println!(
                 "{}{}",
-                coordinate(best.square_from()),
-                coordinate(best.square_to())
+                coordinate(m.square_from()),
+                coordinate(m.square_to())
             );
             pos.print_board();
+            println!(
+                "eval: {} nodes: {} pv: {}",
+                best_move.eval as f32 / 100.0, best_move.nodes, best_move.pv
+            );
+            println!();
             let mut input = String::new();
             input.retain(|c| !c.is_whitespace());
             std::io::stdin().read_line(&mut input).unwrap();

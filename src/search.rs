@@ -1,6 +1,7 @@
 use crate::board::*;
 use crate::eval::*;
 use crate::get_bit;
+use crate::helper::*;
 use crate::movegen::*;
 use crate::r#move::*;
 
@@ -12,6 +13,9 @@ pub const MAX_PLY: usize = 64;
 pub struct Searcher {
     pub killer_moves: [[Move; MAX_PLY]; 2],
     pub history_scores: [[i32; 64]; 12],
+    pub pv_length: [usize; 64],
+    pub pv: [[Move; MAX_PLY]; MAX_PLY],
+    pub ply: usize,
     pub nodes: usize,
 }
 
@@ -20,6 +24,9 @@ impl Searcher {
         Searcher {
             killer_moves: [[NULL_MOVE; MAX_PLY]; 2],
             history_scores: [[0; 64]; 12],
+            pv_length: [0usize; 64],
+            pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
+            ply: 0,
             nodes: 0,
         }
     }
@@ -28,6 +35,7 @@ impl Searcher {
         if depth == 0 {
             return self.quiescence_search(position, alpha, beta);
         }
+        self.pv_length[self.ply] = self.ply + depth;
 
         if position.fifty_move == 100 {
             //this is here instead of eval to save some nodes in cases
@@ -49,19 +57,29 @@ impl Searcher {
                 break;
             }
             let commit = position.make_move(child_nodes.moves[i]);
+            self.ply += 1;
             let eval = -self.negamax(position, depth - 1, -beta, -alpha);
             position.undo_move(child_nodes.moves[i], commit);
+            self.ply -= 1;
             if eval >= beta {
-                self.killer_moves[1][position.ply] = self.killer_moves[0][position.ply];
-                self.killer_moves[0][position.ply] = child_nodes.moves[i];
+                if !child_nodes.moves[i].is_capture() {
+                    self.killer_moves[1][self.ply] = self.killer_moves[0][self.ply];
+                    self.killer_moves[0][self.ply] = child_nodes.moves[i];
+                }
 
                 return beta;
             }
             if eval > alpha {
-                self.history_scores[child_nodes.moves[i].piece_moved()]
-                    [child_nodes.moves[i].square_to()] += depth as i32 * depth as i32;
-                //idea that mvoes closer to root node are more significant
-
+                if !child_nodes.moves[i].is_capture() {
+                    self.history_scores[child_nodes.moves[i].piece_moved()]
+                        [child_nodes.moves[i].square_to()] += depth as i32 * depth as i32;
+                    //idea that moves closer to root node are more significant
+                }
+                self.pv[self.ply][self.ply] = child_nodes.moves[i];
+                for i in self.ply + 1..self.pv_length[self.ply + 1] {
+                    self.pv[self.ply][i] = self.pv[self.ply + 1][i];
+                    //copy from next row in pv table
+                }
                 alpha = eval;
             }
         }
@@ -91,8 +109,10 @@ impl Searcher {
                 break;
             }
             let commit = position.make_move(moves.moves[i]);
+            self.ply += 1;
             let eval = -self.quiescence_search(position, -beta, -alpha);
             position.undo_move(moves.moves[i], commit);
+            self.ply -= 1;
             if eval >= beta {
                 return beta;
             }
@@ -149,25 +169,30 @@ impl MoveList {
     }
 }
 
-pub fn best_move(position: &mut Board) -> Move {
-    let moves = gen_legal(position);
-    let mut best_eval = -INFINITY;
-    let mut best_move = NULL_MOVE;
-    let mut total_nodes = 0;
-    for i in 0..MAX_MOVES {
-        if moves.moves[i] == NULL_MOVE {
+pub struct MoveData {
+    pub m: Move,
+    pub nodes: usize,
+    pub eval: i32,
+    pub pv: String,
+}
+
+pub fn best_move(position: &mut Board) -> MoveData {
+    let mut s = Searcher::new();
+    let eval = s.negamax(position, 6, -INFINITY, INFINITY);
+    let mut pv = String::new();
+    for i in 0..MAX_PLY {
+        if s.pv[0][i] == NULL_MOVE {
             break;
         }
-        let commit = position.make_move(moves.moves[i]);
-        let mut s = Searcher::new();
-        let eval = -s.negamax(position, 4, -INFINITY, INFINITY);
-        position.undo_move(moves.moves[i], commit);
-        if eval > best_eval {
-            best_eval = eval;
-            best_move = moves.moves[i];
-        }
-        total_nodes += s.nodes;
+        pv += coordinate(s.pv[0][i].square_from()).as_str();
+        pv += coordinate(s.pv[0][i].square_to()).as_str();
+        pv += " ";
     }
-    println!("eval: {} nodes: {}", best_eval, total_nodes);
-    best_move
+    //println!("{:?}", s.pv_length);
+    MoveData {
+        m: s.pv[0][0],
+        nodes: s.nodes,
+        eval,
+        pv,
+    }
 }
