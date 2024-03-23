@@ -9,15 +9,16 @@ Current elo ~1900
 - alpha/beta pruning
 - quiescence search
 - mvv-lva move ordering
+- iterative deepening
+- principal variation search
 - piece square tables
 - mobility evaluation
 - pawn structure evaluation
 - basic tapered eval
 
 ## Todo:
-- iterative deepening
 - king safety evaluation
-- search improvements (killer moves, null move pruning)
+- late move reductions, null move pruning etc.
 - opening book
 - hashing
 
