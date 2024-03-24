@@ -445,13 +445,13 @@ pub fn is_checkmate(b: Board) -> i32 {
         Colour::White => {
             let king_square = lsfb(b.bitboards[5]).unwrap(); //there must be a king on the board
             if is_attacked(king_square, Colour::Black, &b) {
-                return INFINITY;
+                return -INFINITY;
             }
         }
         Colour::Black => {
             let king_square = lsfb(b.bitboards[11]).unwrap(); //there must be a king on the board
             if is_attacked(king_square, Colour::White, &b) {
-                return INFINITY;
+                return -INFINITY;
             }
         }
     }
