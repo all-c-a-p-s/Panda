@@ -8,6 +8,11 @@ pub fn random_u32() -> u32 {
     ChaChaRng::next_u32(&mut r)
 }
 
+pub fn random_hash_u64() -> u64 {
+    let mut r = ChaChaRng::from_entropy();
+    ChaChaRng::next_u64(&mut r)
+}
+
 // method suggested by Tord Romstad (SF developer)
 pub fn random_u64() -> u64 {
     // reducde non-zero bits in slices of 6

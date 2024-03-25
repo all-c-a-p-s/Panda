@@ -206,15 +206,15 @@ pub fn gen_moves(board: &Board) -> MoveList {
                 0 => {
                     WP_ATTACKS[lsb]
                         & match board.en_passant {
-                            64 => board.occupancies[1],
-                            _ => set_bit(board.en_passant, board.occupancies[1]),
+                            None => board.occupancies[1],
+                            Some(k) => set_bit(k, board.occupancies[1]),
                         }
                 } //en passant capture
                 6 => {
                     BP_ATTACKS[lsb]
                         & match board.en_passant {
-                            64 => board.occupancies[0],
-                            _ => set_bit(board.en_passant, board.occupancies[0]),
+                            None => board.occupancies[0],
+                            Some(k) => set_bit(k, board.occupancies[0]),
                         }
                 } //or with set en passant square if it is not 64 i.e. none
                 1 | 7 => N_ATTACKS[lsb],
@@ -284,15 +284,15 @@ pub fn gen_captures(board: &mut Board) -> MoveList {
                 0 => {
                     WP_ATTACKS[lsb]
                         & match board.en_passant {
-                            64 => board.occupancies[1],
-                            _ => set_bit(board.en_passant, board.occupancies[1]),
+                            None => board.occupancies[1],
+                            Some(k) => set_bit(k, board.occupancies[1]),
                         }
                 } //en passant capture
                 6 => {
                     BP_ATTACKS[lsb]
                         & match board.en_passant {
-                            64 => board.occupancies[0],
-                            _ => set_bit(board.en_passant, board.occupancies[0]),
+                            None => board.occupancies[0],
+                            Some(k) => set_bit(k, board.occupancies[0]),
                         }
                 } //or with set en passant square if it is not 64 i.e. none
                 1 | 7 => N_ATTACKS[lsb],

@@ -7,12 +7,13 @@ pub mod movegen;
 pub mod perft;
 pub mod rng;
 pub mod search;
+pub mod zobrist;
 
-//use crate::perft::full_perft;
 use crate::board::*;
 use crate::helper::*;
 use crate::magic::*;
 use crate::movegen::*;
+use crate::perft::full_perft;
 use crate::r#move::*;
 use crate::search::*;
 
@@ -66,6 +67,13 @@ pub fn parse_move(input: &str, board: Board) -> Move {
 
 fn main() {
     init_all();
+
+    let debug = false;
+    if debug {
+        full_perft();
+        return;
+    }
+
     let mut pos = Board::from(STARTPOS);
 
     let mut colour_input = String::new();
@@ -98,9 +106,14 @@ fn main() {
                 coordinate(m.square_to())
             );
             pos.print_board();
+            let decimal_eval = best_move.eval as f32 / -100.0;
+            let eval_str = match decimal_eval >= 0.0 {
+                true => String::from("+") + format!("{}", decimal_eval).as_str(),
+                false => format!("{}", decimal_eval),
+            };
             println!(
                 "eval: {} nodes: {} pv: {}",
-                best_move.eval as f32 / -100.0,
+                eval_str,
                 best_move.nodes,
                 best_move.pv
             ); //output scores from white's pov
@@ -119,12 +132,17 @@ fn main() {
                 coordinate(m.square_to())
             );
             pos.print_board();
+            let decimal_eval = best_move.eval as f32 / 100.0;
+            let eval_str = match decimal_eval >= 0.0 {
+                true => String::from("+") + format!("{}", decimal_eval).as_str(),
+                false => format!("{}", decimal_eval),
+            };
             println!(
                 "eval: {} nodes: {} pv: {}",
-                best_move.eval as f32 / 100.0,
+                eval_str,
                 best_move.nodes,
                 best_move.pv
-            );
+            ); //output scores from white's pov
             println!();
             let mut input = String::new();
             input.retain(|c| !c.is_whitespace());

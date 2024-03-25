@@ -37,7 +37,7 @@ pub struct Move {
 pub struct Commit {
     //resets for irreversible fields of Board struct
     pub castling_reset: u8,
-    pub ep_reset: usize,
+    pub ep_reset: Option<usize>,
     pub fifty_move_reset: u8,
     pub piece_captured: Option<u8>,
 }
@@ -178,7 +178,8 @@ pub fn encode_move(
     let double_push: bool =
         piece == 0 && (sq_from + 16 == sq_to) || piece == 6 && (sq_from - 16 == sq_to);
 
-    let ep = (sq_to == board.en_passant) && (piece % 6 == 0);
+    let ep = (sq_to == board.en_passant.unwrap_or(64)) && (piece % 6 == 0);
+    //unwrap or to a square that cannot be matched
     Move::from(
         sq_from,
         sq_to,
@@ -281,12 +282,12 @@ impl Board {
 
         if m.is_double_push() {
             self.en_passant = match piece {
-                0 => sq_from + 8,
-                6 => sq_from - 8,
+                0 => Some(sq_from + 8),
+                6 => Some(sq_from - 8),
                 _ => panic!("non-pawn is making a double push 🤔"),
             }
         } else {
-            self.en_passant = 64;
+            self.en_passant = None;
         }
 
         if (piece % 6 == 0) || m.is_capture() {

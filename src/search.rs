@@ -4,8 +4,10 @@ use crate::get_bit;
 use crate::helper::*;
 use crate::movegen::*;
 use crate::r#move::*;
+use crate::zobrist::*;
 
 use std::cmp;
+use std::collections::HashMap;
 
 pub const INFINITY: i32 = 999_999_999;
 pub const MAX_PLY: usize = 64;
@@ -16,6 +18,8 @@ pub struct Searcher {
     pub history_scores: [[i32; 64]; 12],
     pub pv_length: [usize; 64],
     pub pv: [[Move; MAX_PLY]; MAX_PLY],
+    pub tt_white: HashMap<u64, TTEntry>,
+    pub tt_black: HashMap<u64, TTEntry>,
     pub ply: usize,
     pub nodes: usize,
 }
@@ -27,6 +31,8 @@ impl Searcher {
             history_scores: [[0; 64]; 12],
             pv_length: [0usize; 64],
             pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
+            tt_white: HashMap::new(),
+            tt_black: HashMap::new(),
             ply: 0,
             nodes: 0,
         }
@@ -44,14 +50,56 @@ impl Searcher {
             return 0;
         }
 
+        let mut alpha = alpha;
+        let mut hash_flag = EntryFlag::Alpha;
+
+        match position.side_to_move {
+            Colour::White => {
+                if let Some(entry) = self.tt_white.get(&hash(position)) {
+                    if entry.depth >= depth {
+                        match entry.flag {
+                            EntryFlag::Beta => {
+                                if entry.eval >= beta {
+                                    return beta;
+                                }
+                            }
+                            EntryFlag::Alpha => {
+                                if entry.eval <= alpha {
+                                    return alpha;
+                                }
+                            }
+                            EntryFlag::Exact => return entry.eval,
+                        }
+                    }
+                }
+            }
+            Colour::Black => {
+                if let Some(entry) = self.tt_black.get(&hash(position)) {
+                    if entry.depth >= depth {
+                        match entry.flag {
+                            EntryFlag::Beta => {
+                                if entry.eval >= beta {
+                                    return beta;
+                                }
+                            }
+                            EntryFlag::Alpha => {
+                                if entry.eval <= alpha {
+                                    return alpha;
+                                }
+                            }
+                            EntryFlag::Exact => return entry.eval,
+                        }
+                    }
+                };
+            }
+        }
+
         let mut child_nodes = gen_legal(position);
         child_nodes.order_moves(*position, self);
 
         if child_nodes.moves[0] == NULL_MOVE {
             return is_checkmate(*position);
         }
-
-        let mut alpha = alpha;
 
         for i in 0..MAX_MOVES {
             if child_nodes.moves[i] == NULL_MOVE {
@@ -68,6 +116,16 @@ impl Searcher {
                     self.killer_moves[0][self.ply] = child_nodes.moves[i];
                 }
 
+                let hash_entry = TTEntry {
+                    flag: EntryFlag::Beta,
+                    depth,
+                    eval: beta,
+                };
+                match position.side_to_move {
+                    Colour::White => self.tt_white.insert(hash(position), hash_entry),
+                    Colour::Black => self.tt_black.insert(hash(position), hash_entry),
+                };
+
                 return beta;
             }
             if eval > alpha {
@@ -82,29 +140,44 @@ impl Searcher {
                     //copy from next row in pv table
                 }
                 alpha = eval;
+                hash_flag = EntryFlag::Exact;
             }
         }
+        let hash_entry = TTEntry {
+            flag: hash_flag,
+            depth,
+            eval: alpha,
+        };
+        match position.side_to_move {
+            Colour::White => self.tt_white.insert(hash(position), hash_entry),
+            Colour::Black => self.tt_black.insert(hash(position), hash_entry),
+        };
         alpha
     }
 
     fn quiescence_search(&mut self, position: &mut Board, alpha: i32, beta: i32) -> i32 {
         let eval = evaluate(position);
         if eval >= beta {
+            self.nodes += 1;
             return beta;
         }
 
         let delta = 1000; //delta pruning - try to avoid wasting time on hopeless positions
         if eval < alpha - delta {
+            self.nodes += 1;
             return alpha;
         }
 
         let mut alpha = cmp::max(alpha, eval);
 
         let mut moves = gen_captures(position);
-        moves.order_moves(*position, self);
+
         if moves.moves[0] == NULL_MOVE {
-            self.nodes += 1;
+            self.nodes += 1; //quiet node
+            return alpha;
         }
+
+        moves.order_moves(*position, self);
         for i in 0..MAX_MOVES {
             if moves.moves[i] == NULL_MOVE {
                 break;
@@ -122,6 +195,7 @@ impl Searcher {
         alpha
     }
 }
+
 const MVV_LVA: [[i32; 6]; 6] = [
     //most valuable victim least valuable attacker
     [601, 501, 401, 301, 201, 101], //victim pawn
@@ -148,9 +222,6 @@ impl Move {
                     victim_type = i % 6;
                     break;
                 }
-            }
-            if victim_type == 7 {
-                self.print_move();
             }
             let attacker_type = self.piece_moved() % 6;
             self.move_order_score = MVV_LVA[victim_type][attacker_type];
