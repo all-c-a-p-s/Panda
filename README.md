@@ -15,12 +15,12 @@ Current elo ~1900
 - mobility evaluation
 - pawn structure evaluation
 - basic tapered eval
+- hashing (todo: incremental update hash key)
 
 ## Todo:
 - king safety evaluation
 - late move reductions, null move pruning etc.
 - opening book
-- hashing
 
 ## Usage:
 - download [rust](https://www.rust-lang.org/)
