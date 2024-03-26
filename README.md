@@ -25,5 +25,5 @@ Current elo ~1900
 ## Usage:
 - download [rust](https://www.rust-lang.org/)
 - build and run the project (NOTE: you must use ```--release``` mode or the magic bitboards will not work)
-- currently no uci protocol. input ```w``` to play white or ```b``` to play black. then input moves in the format e.g. e2e4, g1f3, h7h8Q
+- connect to a uci gui such as cutechess or arena
 
