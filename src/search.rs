@@ -8,10 +8,11 @@ use crate::zobrist::*;
 
 use std::cmp;
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 pub const INFINITY: i32 = 999_999_999;
 pub const MAX_PLY: usize = 64;
-pub const SEARCH_DEPTH: usize = 6;
+pub const MAX_SEARCH_DEPTH: usize = 64;
 
 pub struct Searcher {
     pub killer_moves: [[Move; MAX_PLY]; 2],
@@ -22,10 +23,11 @@ pub struct Searcher {
     pub tt_black: HashMap<u64, TTEntry>,
     pub ply: usize,
     pub nodes: usize,
+    pub end_time: Instant,
 }
 
 impl Searcher {
-    fn new() -> Self {
+    fn new(end_time: Instant) -> Self {
         Searcher {
             killer_moves: [[NULL_MOVE; MAX_PLY]; 2],
             history_scores: [[0; 64]; 12],
@@ -35,14 +37,17 @@ impl Searcher {
             tt_black: HashMap::new(),
             ply: 0,
             nodes: 0,
+            end_time,
         }
     }
 
     fn negamax(&mut self, position: &mut Board, depth: usize, alpha: i32, beta: i32) -> i32 {
+        self.pv_length[self.ply] = self.ply;
+        let mut hash_flag = EntryFlag::Alpha;
+
         if depth == 0 {
             return self.quiescence_search(position, alpha, beta);
         }
-        self.pv_length[self.ply] = self.ply + depth;
 
         if position.fifty_move == 100 {
             //this is here instead of eval to save some nodes in cases
@@ -51,7 +56,6 @@ impl Searcher {
         }
 
         let mut alpha = alpha;
-        let mut hash_flag = EntryFlag::Alpha;
 
         match position.side_to_move {
             Colour::White => {
@@ -110,6 +114,7 @@ impl Searcher {
             let eval = -self.negamax(position, depth - 1, -beta, -alpha);
             position.undo_move(child_nodes.moves[i], commit);
             self.ply -= 1;
+
             if eval >= beta {
                 if !child_nodes.moves[i].is_capture() {
                     self.killer_moves[1][self.ply] = self.killer_moves[0][self.ply];
@@ -134,13 +139,21 @@ impl Searcher {
                         [child_nodes.moves[i].square_to()] += depth as i32 * depth as i32;
                     //idea that moves closer to root node are more significant
                 }
+                let next_ply = self.ply + 1;
                 self.pv[self.ply][self.ply] = child_nodes.moves[i];
-                for i in self.ply + 1..self.pv_length[self.ply + 1] {
-                    self.pv[self.ply][i] = self.pv[self.ply + 1][i];
+                for j in next_ply..self.pv_length[next_ply] {
+                    self.pv[self.ply][j] = self.pv[next_ply][j];
                     //copy from next row in pv table
                 }
+                self.pv_length[self.ply] = self.pv_length[next_ply];
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
+            }
+
+            if Instant::now() > self.end_time && self.ply == 0 {
+                //check if time is up every time at root node
+                //this way pv shouldn't get messed up, although time usage might be imperfect
+                break;
             }
         }
         let hash_entry = TTEntry {
@@ -212,8 +225,12 @@ impl Move {
             self.move_order_score = -INFINITY;
             return;
         }
-        if s.pv[0][s.ply] == *self {
+
+        let pv_move = s.pv[0][s.ply];
+        if self.square_from() == pv_move.square_from() && self.square_to() == pv_move.square_to() {
+            //there has to be a cleaner way to do this but dereferencing pointer doesn't work
             self.move_order_score = INFINITY; //pv move searched first
+            return;
         }
         if self.is_capture() {
             let mut victim_type: usize = 7; //initialise as impossible value
@@ -225,9 +242,9 @@ impl Move {
             }
             let attacker_type = self.piece_moved() % 6;
             self.move_order_score = MVV_LVA[victim_type][attacker_type];
-        } else if s.killer_moves[0][b.ply] == *self {
+        } else if s.killer_moves[0][s.ply] == *self {
             self.move_order_score = 90; //after captures
-        } else if s.killer_moves[1][b.ply] == *self {
+        } else if s.killer_moves[1][s.ply] == *self {
             self.move_order_score = 80;
         } else {
             self.move_order_score = s.history_scores[self.piece_moved()][self.square_to()];
@@ -255,18 +272,44 @@ pub struct MoveData {
     pub pv: String,
 }
 
-pub fn best_move(position: &mut Board) -> MoveData {
+pub fn move_time(time: usize, increment: usize, moves_to_go: usize, ply: usize) -> usize {
+    let time_left = time + 20 * increment;
+    let n_moves = cmp::min(moves_to_go, 10);
+    let factor = 2.0 - n_moves as f32 / 10.0;
+    let target: f32 = match ply {
+        0..=10 => time_left as f32 / 50.0,
+        11..=16 => time_left as f32 / 30.0,
+        _ => time_left as f32 / 20.0,
+    };
+    (factor * target) as usize
+}
+
+pub fn best_move(position: &mut Board, time_left: usize, inc: usize, moves_to_go: usize) -> MoveData {
+    let start = Instant::now();
+    let move_duration = Duration::from_millis(move_time(time_left, inc, moves_to_go, position.ply).try_into().unwrap());
+    let end_time = start + move_duration;
     let mut eval: i32 = 0;
     let mut pv = String::new();
-    let mut s = Searcher::new();
-    for depth in 1..SEARCH_DEPTH + 1 {
+    let mut s = Searcher::new(end_time);
+    for depth in 1..MAX_SEARCH_DEPTH {
         eval = s.negamax(position, depth, -INFINITY, INFINITY);
-    }
-
-    for i in 0..MAX_PLY {
-        if s.pv[0][i] == NULL_MOVE {
+        println!("info depth {} score cp {} nodes {} pv {}", depth, eval, s.nodes, {
+            let mut pv = String::new();
+            for i in 0..s.pv_length[0] {
+                pv += coordinate(s.pv[0][i].square_from()).as_str();
+                pv += coordinate(s.pv[0][i].square_to()).as_str();
+                pv += " ";
+            }
+            pv
+            }            
+        );
+        if start.elapsed() > move_duration || start.elapsed() * 2 > move_duration {
+            //more than half of time used -> no point starting another search as it won't be completed
             break;
         }
+    }
+
+    for i in 0..s.pv_length[0] {
         pv += coordinate(s.pv[0][i].square_from()).as_str();
         pv += coordinate(s.pv[0][i].square_to()).as_str();
         pv += " ";
