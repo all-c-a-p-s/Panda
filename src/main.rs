@@ -24,7 +24,6 @@ fn init_all() {
     init_slider_attacks();
 }
 
-
 fn main() {
     init_all();
 
