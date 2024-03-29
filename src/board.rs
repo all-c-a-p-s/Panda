@@ -3,12 +3,13 @@ use crate::helper::*;
 #[derive(Debug, Clone, Copy)]
 pub struct Board {
     pub bitboards: [u64; 12],
-    pub occupancies: [u64; 3],     //white, black, both
+    pub occupancies: [u64; 3], //white, black, both
     pub castling: u8, //4 bits only should be used 0001 = wk, 0010 = wq, 0100 = bk, 1000 = bq
-    pub en_passant: Option<usize>, //ep square index
+    pub en_passant: usize, //ep square index
     pub side_to_move: Colour,
     pub fifty_move: u8,
-    pub ply: usize, //remember that this might fuck up repetition detection in the future
+    pub ply: usize,
+    pub last_move_null: bool,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -41,10 +42,11 @@ impl Board {
             bitboards: [0u64; 12],
             occupancies: [0u64; 3],
             castling: 0,
-            en_passant: None,
+            en_passant: NO_SQUARE,
             side_to_move: Colour::White,
             fifty_move: 0,
             ply: 0,
+            last_move_null: false,
         };
 
         let mut board_fen: String = String::new();
@@ -86,8 +88,8 @@ impl Board {
         }
 
         match flags[2] {
-            "-" => new_board.en_passant = None,
-            _ => new_board.en_passant = Some(square(flags[2])),
+            "-" => new_board.en_passant = NO_SQUARE,
+            _ => new_board.en_passant = square(flags[2]),
         }
 
         new_board.fifty_move = flags[3].to_string().parse::<u8>().unwrap();
@@ -215,11 +217,19 @@ impl Board {
 
             _ => panic!("invalid castling rights"),
         };
-        print!("Castling: {} ", castling_rights);
-        if self.en_passant.is_some() {
-            println!("En passant: {}", coordinate(self.en_passant.unwrap()));
+        println!("Castling: {}", castling_rights);
+        if self.en_passant != NO_SQUARE {
+            println!("En passant: {}", coordinate(self.en_passant));
         } else {
             println!("En passant: NONE");
         }
+    }
+
+    pub fn is_kp_endgame(self) -> bool {
+        //used to avoid null move pruning in king and pawn endgames
+        //where zugzwang is very common
+        self.occupancies[2]
+            ^ (self.bitboards[0] | self.bitboards[5] | self.bitboards[6] | self.bitboards[11])
+            == 0
     }
 }

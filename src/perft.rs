@@ -5,19 +5,22 @@ use crate::*;
 pub const PERFT_DEPTH: usize = 5;
 
 pub fn perft(depth: usize, b: &mut Board) -> usize {
-    if depth == 0 {
-        return 1;
-    }
     let mut total = 0;
     let moves = gen_legal(b);
+    let mut added = 0;
     //(*b).print_board();
     for i in 0..MAX_MOVES {
         if moves.moves[i] == NULL_MOVE {
+            if depth == 1 {
+                return i;
+            }
             break;
         }
-        let commit = b.make_move(moves.moves[i]);
-        let added = perft(depth - 1, b);
-        b.undo_move(moves.moves[i], commit);
+        if depth != 1 {
+            let commit = b.make_move(moves.moves[i]);
+            added = perft(depth - 1, b);
+            b.undo_move(moves.moves[i], commit);
+        }
         /* uncomment for perft debug info
         if depth == PERFT_DEPTH {
             println!(

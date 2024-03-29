@@ -1,4 +1,4 @@
-use crate::{board::Colour, helper::get_bit, r#move::Move, Board};
+use crate::{board::Colour, helper::get_bit, r#move::Move, Board, NO_SQUARE};
 use lazy_static::lazy_static;
 
 use crate::rng::random_hash_u64;
@@ -62,8 +62,8 @@ pub fn hash(b: &Board) -> u64 {
         }
     }
 
-    if let Some(k) = b.en_passant {
-        hash_key ^= EP_KEYS[k];
+    if b.en_passant != NO_SQUARE {
+        hash_key ^= EP_KEYS[b.en_passant];
     }
 
     hash_key ^= CASTLING_KEYS[b.castling as usize];

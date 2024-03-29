@@ -37,9 +37,9 @@ pub struct Move {
 pub struct Commit {
     //resets for irreversible fields of Board struct
     pub castling_reset: u8,
-    pub ep_reset: Option<usize>,
+    pub ep_reset: usize,
     pub fifty_move_reset: u8,
-    pub piece_captured: Option<u8>,
+    pub piece_captured: usize,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -139,14 +139,14 @@ impl Move {
         println!(
             "promoted to {}",
             match self.promoted_piece() {
-                0 => "white knight",
-                1 => "white bishop",
-                2 => "white rook",
-                3 => "white queen",
-                4 => "black knight",
-                5 => "black bishop",
-                6 => "black rook",
-                7 => "black queen",
+                1 => "white knight",
+                2 => "white bishop",
+                3 => "white rook",
+                4 => "white queen",
+                7 => "black knight",
+                8 => "black bishop",
+                9 => "black rook",
+                10 => "black queen",
                 15 => "NONE",
                 _ => "impossible",
             }
@@ -178,8 +178,7 @@ pub fn encode_move(
     let double_push: bool =
         piece == 0 && (sq_from + 16 == sq_to) || piece == 6 && (sq_from - 16 == sq_to);
 
-    let ep = (sq_to == board.en_passant.unwrap_or(64)) && (piece % 6 == 0);
-    //unwrap or to a square that cannot be matched
+    let ep = (sq_to == board.en_passant) && (piece % 6 == 0);
     Move::from(
         sq_from,
         sq_to,
@@ -198,7 +197,7 @@ impl Board {
             castling_reset: self.castling,
             ep_reset: self.en_passant,
             fifty_move_reset: self.fifty_move,
-            piece_captured: None,
+            piece_captured: NO_PIECE,
         };
         let sq_from = m.square_from();
         let sq_to = m.square_to();
@@ -208,7 +207,7 @@ impl Board {
             for i in 0..12 {
                 if get_bit(sq_to, self.bitboards[i]) > 0 {
                     self.bitboards[i] = pop_bit(sq_to, self.bitboards[i]);
-                    commit.piece_captured = Some(i as u8);
+                    commit.piece_captured = i;
                     break;
                 }
             }
@@ -228,7 +227,7 @@ impl Board {
             }
         }
 
-        if m.promoted_piece() != 15 {
+        if m.promoted_piece() != NO_PIECE {
             self.bitboards[piece] = pop_bit(sq_from, self.bitboards[piece]);
             self.bitboards[m.promoted_piece()] = set_bit(sq_to, self.bitboards[m.promoted_piece()]);
             //remove pawn and add promoted piece
@@ -282,12 +281,12 @@ impl Board {
 
         if m.is_double_push() {
             self.en_passant = match piece {
-                0 => Some(sq_from + 8),
-                6 => Some(sq_from - 8),
+                0 => sq_from + 8,
+                6 => sq_from - 8,
                 _ => panic!("non-pawn is making a double push 🤔"),
             }
         } else {
-            self.en_passant = None;
+            self.en_passant = NO_SQUARE;
         }
 
         if (piece % 6 == 0) || m.is_capture() {
@@ -297,12 +296,14 @@ impl Board {
         }
 
         if piece == 5 {
+            //wk moved
             self.castling &= 0b0000_1100;
         } else if piece == 11 {
             self.castling &= 0b0000_0011;
         }
 
         if piece == 3 && sq_from == 0 {
+            //rw leaves a1
             self.castling &= 0b0000_1101;
         } else if piece == 3 && sq_from == 7 {
             self.castling &= 0b0000_1110;
@@ -324,36 +325,29 @@ impl Board {
     pub fn undo_move(&mut self, m: Move, c: Commit) {
         //incremental update should be faster than copying the whole board
         self.side_to_move = match self.side_to_move {
-            //note updated at the beginning of the function
+            //NOTE: updated at the beginning of the function
             Colour::White => Colour::Black,
             Colour::Black => Colour::White,
         };
-        if m.promoted_piece() != 15 {
+        let piece = m.piece_moved();
+        if m.promoted_piece() != NO_PIECE {
             self.bitboards[m.promoted_piece()] =
                 pop_bit(m.square_to(), self.bitboards[m.promoted_piece()]);
             match m.piece_moved() {
                 0 => self.bitboards[0] = set_bit(m.square_from(), self.bitboards[0]),
                 6 => self.bitboards[6] = set_bit(m.square_from(), self.bitboards[6]),
-                _ => panic!("non pawn is promoting lol"),
+                _ => panic!("non-pawn is promoting lol"),
             }
             //remove promoted piece from bitboard
         } else {
-            for i in 0..12 {
-                if get_bit(m.square_to(), self.bitboards[i]) == 1 {
-                    //piece that was moved to square
-                    self.bitboards[i] = pop_bit(m.square_to(), self.bitboards[i]);
-                    self.bitboards[i] = set_bit(m.square_from(), self.bitboards[i]);
-                    break;
-                }
-            }
+            self.bitboards[piece] = pop_bit(m.square_to(), self.bitboards[piece]);
+            self.bitboards[piece] = set_bit(m.square_from(), self.bitboards[piece]);
         }
 
-        if c.piece_captured.is_some() {
+        if c.piece_captured != NO_PIECE {
             //put captured piece back onto bitboard
-            self.bitboards[c.piece_captured.unwrap() as usize] = set_bit(
-                m.square_to(),
-                self.bitboards[c.piece_captured.unwrap() as usize],
-            );
+            self.bitboards[c.piece_captured] =
+                set_bit(m.square_to(), self.bitboards[c.piece_captured]);
         }
 
         if m.is_castling() {
@@ -418,8 +412,8 @@ pub fn is_legal(m: Move, b: &mut Board) -> bool {
 
     let legal = match b.side_to_move {
         // AFTER move has been made
-        Colour::White => !is_attacked(lsfb(b.bitboards[11]).unwrap(), Colour::White, b),
-        Colour::Black => !is_attacked(lsfb(b.bitboards[5]).unwrap(), Colour::Black, b),
+        Colour::White => !is_attacked(lsfb(b.bitboards[11]), Colour::White, b),
+        Colour::Black => !is_attacked(lsfb(b.bitboards[5]), Colour::Black, b),
     };
     b.undo_move(m, commit);
     legal

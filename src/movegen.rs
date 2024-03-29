@@ -52,7 +52,7 @@ pub fn pawn_push_moves(board: &Board, moves: MoveList) -> MoveList {
         Colour::White => {
             let mut bitboard = board.bitboards[0];
             while bitboard > 0 {
-                let lsb = lsfb(bitboard).unwrap();
+                let lsb = lsfb(bitboard);
                 if get_bit(lsb + 8, board.occupancies[2]) == 0 {
                     if rank(lsb) == 6 {
                         //promotion
@@ -80,7 +80,7 @@ pub fn pawn_push_moves(board: &Board, moves: MoveList) -> MoveList {
         Colour::Black => {
             let mut bitboard = board.bitboards[6];
             while bitboard > 0 {
-                let lsb = lsfb(bitboard).unwrap();
+                let lsb = lsfb(bitboard);
                 if get_bit(lsb - 8, board.occupancies[2]) == 0 {
                     if rank(lsb - 8) == 0 {
                         //promotion
@@ -201,20 +201,20 @@ pub fn gen_moves(board: &Board) -> MoveList {
         let mut bitboard = board.bitboards[i];
 
         while bitboard > 0 {
-            let lsb = lsfb(bitboard).unwrap(); // never panics as loop will have already exited
+            let lsb = lsfb(bitboard); // never panics as loop will have already exited
             let mut attacks = match i {
                 0 => {
                     WP_ATTACKS[lsb]
                         & match board.en_passant {
-                            None => board.occupancies[1],
-                            Some(k) => set_bit(k, board.occupancies[1]),
+                            NO_SQUARE => board.occupancies[1],
+                            k => set_bit(k, board.occupancies[1]),
                         }
                 } //en passant capture
                 6 => {
                     BP_ATTACKS[lsb]
                         & match board.en_passant {
-                            None => board.occupancies[0],
-                            Some(k) => set_bit(k, board.occupancies[0]),
+                            NO_SQUARE => board.occupancies[0],
+                            k => set_bit(k, board.occupancies[0]),
                         }
                 } //or with set en passant square if it is not 64 i.e. none
                 1 | 7 => N_ATTACKS[lsb],
@@ -229,7 +229,7 @@ pub fn gen_moves(board: &Board) -> MoveList {
                 Colour::Black => attacks &= !board.occupancies[1],
             }
             while attacks > 0 {
-                let lsb_attack = lsfb(attacks).unwrap();
+                let lsb_attack = lsfb(attacks);
                 if (get_bit(lsb, board.bitboards[0]) > 0) && rank(lsb) == 6 {
                     // white promotion
                     moves.moves[first_unused] = encode_move(lsb, lsb_attack, 4, board, false);
@@ -279,20 +279,20 @@ pub fn gen_captures(board: &mut Board) -> MoveList {
         let mut bitboard = board.bitboards[i];
 
         while bitboard > 0 {
-            let lsb = lsfb(bitboard).unwrap(); // never panics as loop will have already exited
+            let lsb = lsfb(bitboard); // never panics as loop will have already exited
             let mut attacks = match i {
                 0 => {
                     WP_ATTACKS[lsb]
                         & match board.en_passant {
-                            None => board.occupancies[1],
-                            Some(k) => set_bit(k, board.occupancies[1]),
+                            NO_SQUARE => board.occupancies[1],
+                            k => set_bit(k, board.occupancies[1]),
                         }
                 } //en passant capture
                 6 => {
                     BP_ATTACKS[lsb]
                         & match board.en_passant {
-                            None => board.occupancies[0],
-                            Some(k) => set_bit(k, board.occupancies[0]),
+                            NO_SQUARE => board.occupancies[0],
+                            k => set_bit(k, board.occupancies[0]),
                         }
                 } //or with set en passant square if it is not 64 i.e. none
                 1 | 7 => N_ATTACKS[lsb],
@@ -307,7 +307,7 @@ pub fn gen_captures(board: &mut Board) -> MoveList {
                 Colour::Black => attacks &= board.occupancies[0],
             }
             while attacks > 0 {
-                let lsb_attack = lsfb(attacks).unwrap();
+                let lsb_attack = lsfb(attacks);
                 if (get_bit(lsb, board.bitboards[0]) > 0) && rank(lsb) == 6 {
                     // white promotion
                     moves.moves[first_unused] = encode_move(lsb, lsb_attack, 4, board, false);
@@ -352,6 +352,191 @@ pub fn gen_captures(board: &mut Board) -> MoveList {
     }
     legal
 }
+
+/* I don't think checking all edge cases separately is actually faster
+ but code to detect pins mught be useful in the future
+pub fn get_pin_rays(b: &Board) -> [u64; 8] {
+    let mut res = [0u64; 8];
+    match b.side_to_move {
+        Colour::White => {
+            let mut ray_count: usize = 0;
+            let king_square = lsfb(b.bitboards[5]);
+            let rook_rays = get_rook_attacks(king_square, b.occupancies[2]);
+            let bishop_rays = get_bishop_attacks(king_square, b.occupancies[2]);
+            //rays from king square
+
+            let mut enemy_bishop_rays = 0u64;
+            let mut enemy_rook_rays = 0u64;
+            let mut enemy_bishops = b.bitboards[8] | b.bitboards[10];
+            let mut enemy_rooks = b.bitboards[9] | b.bitboards[10];
+
+            while enemy_bishops > 0 {
+                let square = lsfb(enemy_bishops);
+                enemy_bishop_rays |= get_bishop_attacks(square, b.occupancies[2]);
+                enemy_bishops = pop_bit(square, enemy_bishops);
+            }
+
+            while enemy_rooks > 0 {
+                let square = lsfb(enemy_rooks);
+                enemy_rook_rays |= get_rook_attacks(square, b.occupancies[2]);
+                enemy_rooks = pop_bit(square, enemy_rooks);
+            }
+            //generate rays for enemy slider attacks
+
+            let mut pinned_by_bishop = bishop_rays & enemy_bishop_rays;
+            let mut pinned_by_rook = rook_rays & enemy_rook_rays;
+            //find pinned pieces
+
+            while pinned_by_bishop > 0 {
+                let pinned_square = lsfb(pinned_by_bishop);
+                let ray = get_bishop_attacks(king_square, pop_bit(pinned_square, b.occupancies[2]))
+                    & get_bishop_attacks(pinned_square, b.occupancies[2]);
+                //ray corresponding to each pinned piece
+                res[ray_count] = ray;
+                ray_count += 1;
+                pinned_by_bishop = pop_bit(pinned_square, pinned_by_bishop);
+            }
+
+            while pinned_by_rook > 0 {
+                let pinned_square = lsfb(pinned_by_rook);
+                let ray = get_rook_attacks(king_square, pop_bit(pinned_square, b.occupancies[2]))
+                    & get_rook_attacks(pinned_square, b.occupancies[2]);
+                res[ray_count] = ray;
+                ray_count += 1;
+                pinned_by_rook = pop_bit(pinned_square, pinned_by_rook);
+            }
+        }
+        Colour::Black => {
+            let mut ray_count: usize = 0;
+            let king_square = lsfb(b.bitboards[11]);
+            let rook_rays = get_rook_attacks(king_square, b.occupancies[2]);
+            let bishop_rays = get_bishop_attacks(king_square, b.occupancies[2]);
+
+            let mut enemy_bishop_rays = 0u64;
+            let mut enemy_rook_rays = 0u64;
+            let mut enemy_bishops = b.bitboards[2] | b.bitboards[4];
+            let mut enemy_rooks = b.bitboards[3] | b.bitboards[4];
+
+            while enemy_bishops > 0 {
+                let square = lsfb(enemy_bishops);
+                enemy_bishop_rays |= get_bishop_attacks(square, b.occupancies[2]);
+                enemy_bishops = pop_bit(square, enemy_bishops);
+            }
+
+            while enemy_rooks > 0 {
+                let square = lsfb(enemy_rooks);
+                enemy_rook_rays |= get_rook_attacks(square, b.occupancies[2]);
+                enemy_rooks = pop_bit(square, enemy_rooks);
+            }
+
+            let mut pinned_by_bishop = bishop_rays & enemy_bishop_rays;
+            let mut pinned_by_rook = rook_rays & enemy_rook_rays;
+
+            while pinned_by_bishop > 0 {
+                let pinned_square = lsfb(pinned_by_bishop);
+                let ray = get_bishop_attacks(king_square, pop_bit(pinned_square, b.occupancies[2]))
+                    & get_bishop_attacks(pinned_square, b.occupancies[2]);
+                res[ray_count] = ray;
+                ray_count += 1;
+                pinned_by_bishop = pop_bit(pinned_square, pinned_by_bishop);
+            }
+
+            while pinned_by_rook > 0 {
+                let pinned_square = lsfb(pinned_by_rook);
+                let ray = get_rook_attacks(king_square, pop_bit(pinned_square, b.occupancies[2]))
+                    & get_rook_attacks(pinned_square, b.occupancies[2]);
+                res[ray_count] = ray;
+                ray_count += 1;
+                pinned_by_rook = pop_bit(pinned_square, pinned_by_rook);
+            }
+        }
+    }
+    res
+}
+
+pub fn check_en_passant(m: Move, b: &Board) -> bool {
+    //checks en passant edge case where en passant reveals check on the king
+    match m.piece_moved() {
+        0 => {
+            let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[2]);
+            relevant_blockers = pop_bit(m.square_to() - 8, relevant_blockers);
+            get_rook_attacks(lsfb(b.bitboards[5]), relevant_blockers)
+                & (b.bitboards[9] | b.bitboards[10])
+                == 0
+        }
+        6 => {
+            let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[2]);
+            relevant_blockers = pop_bit(m.square_to() + 8, relevant_blockers);
+            get_rook_attacks(lsfb(b.bitboards[11]), relevant_blockers)
+                & (b.bitboards[3] | b.bitboards[4])
+                == 0
+        }
+        _ => panic!("impossible"),
+    }
+}
+
+pub fn legal_non_check_evasion(m: Move, b: &Board) -> bool {
+    //separate function used to generate check evasions
+    let pin_rays = get_pin_rays(b);
+    for r in pin_rays {
+        //check that not moving pinned piece out of pin ray
+        if set_bit(m.square_from(), 0) & r > 0 && set_bit(m.square_to(), 0) & r == 0 {
+            return false;
+        }
+    }
+
+    if m.piece_moved() == 5 {
+        //check that king isn't moving into check
+        let mut black_attacks = 0u64;
+        for i in 6..12 {
+            let mut piece_bb = b.bitboards[i];
+            let relevant_blockers = b.occupancies[2] ^ b.bitboards[5];
+            //king blocking slider attacks doesn't count because it can move back
+            //into a new attack from the same slider
+            while piece_bb > 0 {
+                let sq = lsfb(b.bitboards[i]);
+                black_attacks |= match i {
+                    6 => BP_ATTACKS[sq],
+                    7 => N_ATTACKS[sq],
+                    8 => get_bishop_attacks(sq, relevant_blockers),
+                    9 => get_rook_attacks(sq, relevant_blockers),
+                    10 => get_queen_attacks(sq, relevant_blockers),
+                    11 => K_ATTACKS[sq],
+                    _ => panic!("impossible"),
+                };
+                piece_bb = pop_bit(sq, piece_bb);
+            }
+        }
+        return (m.square_to() as u64) & black_attacks == 0;
+    } else if m.piece_moved() == 11 {
+        let mut white_attacks = 0u64;
+        for i in 0..6 {
+            let mut piece_bb = b.bitboards[i];
+            let relevant_blockers = b.occupancies[2] ^ b.bitboards[11];
+            //king blocking slider attacks doesn't count because it can move back
+            //into a new attack from the same slider
+            while piece_bb > 0 {
+                let sq = lsfb(b.bitboards[i]);
+                white_attacks |= match i {
+                    0 => BP_ATTACKS[sq],
+                    1 => N_ATTACKS[sq],
+                    2 => get_bishop_attacks(sq, relevant_blockers),
+                    3 => get_rook_attacks(sq, relevant_blockers),
+                    4 => get_queen_attacks(sq, relevant_blockers),
+                    5 => K_ATTACKS[sq],
+                    _ => panic!("impossible"),
+                };
+                piece_bb = pop_bit(sq, piece_bb);
+            }
+        }
+        return (m.square_to() as u64) & white_attacks == 0;
+    } else if m.is_en_passant() {
+        //special case where en passant capture creates removes 2 pawns from 1 rank -> discovered check
+        return check_en_passant(m, b);
+    }
+    true
+}
+*/
 
 pub fn gen_legal(b: &mut Board) -> MoveList {
     let pseudo_legal = gen_moves(b);

@@ -21,6 +21,9 @@ pub const RANK_6: u64 = 0x0000FF0000000000;
 pub const RANK_7: u64 = 0x00FF000000000000;
 pub const RANK_8: u64 = 0xFF00000000000000;
 
+pub const NO_SQUARE: usize = 64; //these exist because from my testing using an
+pub const NO_PIECE: usize = 15; //Option<usize> slows down perft
+
 pub fn file_indices() -> HashMap<char, usize> {
     let mut files = HashMap::new();
     files.insert('a', 0);
@@ -63,12 +66,11 @@ pub const fn count(bitboard: u64) -> usize {
     count
 }
 
-pub const fn lsfb(bitboard: u64) -> Option<usize> {
-    // TODO: investigate if using Option<> slows this down
+pub const fn lsfb(bitboard: u64) -> usize {
     if bitboard != 0 {
-        return Some(count(((bitboard as i64) & -(bitboard as i64)) as u64 - 1));
+        return count(((bitboard as i64) & -(bitboard as i64)) as u64 - 1);
     }
-    None
+    NO_SQUARE
 }
 
 pub fn square(sq: &str) -> usize {

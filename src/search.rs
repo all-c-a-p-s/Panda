@@ -15,8 +15,16 @@ pub const MAX_PLY: usize = 64;
 pub const MAX_SEARCH_DEPTH: usize = 64;
 pub const REDUCTION_LIMIT: usize = 3;
 // can't reduce search to below 3 - 2 = 1 ply
-pub const FULL_DEPTH_MOVES: usize = 4;
-pub const NULLMOVE_R: usize = 2;
+const FULL_DEPTH_MOVES: usize = 4;
+const NULLMOVE_R: usize = 2;
+const ASPIRATION_WINDOW: i32 = 50;
+
+pub const MAX_GAME_PLY: usize = 1024;
+
+const TIME_TO_MOVE: usize = 1000;
+//leave a second to cancel search and output best move
+
+pub static mut REPETITION_TABLE: [u64; MAX_GAME_PLY] = [0u64; MAX_GAME_PLY];
 
 pub struct Searcher {
     pub killer_moves: [[Move; MAX_PLY]; 2],
@@ -38,19 +46,30 @@ fn reduction_ok(m: Move, is_check: bool) -> bool {
     !is_check //false if board is check
 }
 
-/*
-fn make_null_move(b: &mut Board) -> Option<usize> {
+fn make_null_move(b: &mut Board) -> usize {
+    //returns en passant reset
     b.side_to_move = match b.side_to_move {
         Colour::White => Colour::Black,
         Colour::Black => Colour::White,
     };
     b.ply += 1;
-    if b.en_passant.is_some() {
-        return Some(b.en_passant.unwrap());
+    b.last_move_null = true;
+    if b.en_passant != NO_SQUARE {
+        b.en_passant = NO_SQUARE;
+        return b.en_passant;
     }
-    None
+    NO_SQUARE
 }
-*/
+
+fn undo_null_move(b: &mut Board, ep_reset: usize) {
+    b.side_to_move = match b.side_to_move {
+        Colour::White => Colour::Black,
+        Colour::Black => Colour::White,
+    };
+    b.ply -= 1;
+    b.last_move_null = false;
+    b.en_passant = ep_reset;
+}
 
 impl Searcher {
     pub fn new(end_time: Instant) -> Self {
@@ -68,7 +87,13 @@ impl Searcher {
         }
     }
 
-    pub fn negamax(&mut self, position: &mut Board, depth: usize, alpha: i32, beta: i32) -> i32 {
+    pub fn negamax(
+        &mut self,
+        position: &mut Board,
+        mut depth: usize,
+        alpha: i32,
+        beta: i32,
+    ) -> i32 {
         if Instant::now() > self.end_time {
             return match self.ply % 2 {
                 0 => -INFINITY,
@@ -87,15 +112,29 @@ impl Searcher {
         if position.fifty_move == 100 {
             //this is here instead of eval to save some nodes in cases
             //where 50 move rule is reached on non-leaf node
+            //in theory if the fiftieth move is mate this doesn't work
+            return 0;
+        }
+
+        let hash_key = hash(position);
+        let mut repetition_count = 0;
+        unsafe {
+            for key in REPETITION_TABLE.iter().take(position.ply) {
+                if *key == hash_key {
+                    repetition_count += 1;
+                }
+            }
+        }
+
+        if repetition_count > 2 {
             return 0;
         }
 
         let mut alpha = alpha;
-        let mut found_pv = false;
 
         match position.side_to_move {
             Colour::White => {
-                if let Some(entry) = self.tt_white.get(&hash(position)) {
+                if let Some(entry) = self.tt_white.get(&hash_key) {
                     if entry.depth >= depth {
                         match entry.flag {
                             EntryFlag::Beta => {
@@ -114,7 +153,7 @@ impl Searcher {
                 }
             }
             Colour::Black => {
-                if let Some(entry) = self.tt_black.get(&hash(position)) {
+                if let Some(entry) = self.tt_black.get(&hash_key) {
                     if entry.depth >= depth {
                         match entry.flag {
                             EntryFlag::Beta => {
@@ -136,22 +175,37 @@ impl Searcher {
 
         let is_check = match position.side_to_move {
             //used in both search extensions and LMR
-            Colour::White => is_attacked(
-                lsfb(position.bitboards[5]).unwrap(),
-                Colour::Black,
-                position,
-            ),
-            Colour::Black => is_attacked(
-                lsfb(position.bitboards[11]).unwrap(),
-                Colour::Black,
-                position,
-            ),
+            Colour::White => is_attacked(lsfb(position.bitboards[5]), Colour::Black, position),
+            Colour::Black => is_attacked(lsfb(position.bitboards[11]), Colour::White, position),
         };
+
+        if is_check {
+            depth += 1;
+        }
+
+        if !position.is_kp_endgame()
+            && !position.last_move_null
+            && depth > 2
+            && !is_check
+            && self.ply != 0
+        {
+            //ok to null-move prune
+            let ep_reset = make_null_move(position);
+            //idea that if opponent cannot improve their position with 2 moves in a row
+            //the first of these moves must be bad
+            let null_move_eval = -self.negamax(position, depth - NULLMOVE_R, -beta, -beta + 1);
+            //minimal window used because all that matters is whether the search result is better than beta
+            undo_null_move(position, ep_reset);
+            if null_move_eval >= beta {
+                return beta;
+            }
+        }
 
         let mut child_nodes = gen_legal(position);
         child_nodes.order_moves(*position, self);
 
         if child_nodes.moves[0] == NULL_MOVE {
+            //no legal moves
             return match is_check {
                 true => -INFINITY + self.ply as i32,
                 false => 0,
@@ -164,21 +218,12 @@ impl Searcher {
             }
             let commit = position.make_move(child_nodes.moves[i]);
             self.ply += 1;
-            let eval = match found_pv {
-                true => {
-                    /*
-                    Once a pv node (alpha < eval < beta), you search the rest of the moves with the goal of proving that
-                    they are all bad. This relies on move ordering working well enough that the cost of re-searching nodes
-                    that turn out to be better than expected is less significant than the benefit of the reduced initial search.
-                     */
-                    let pv_search = -self.negamax(position, depth - 1, -alpha - 1, -alpha);
-                    if pv_search > alpha && pv_search < beta {
-                        //actually is a pv node
-                        -self.negamax(position, depth - 1, -beta, -alpha)
-                    } else {
-                        pv_search
-                    }
-                }
+
+            unsafe { REPETITION_TABLE[position.ply] = hash(position) };
+
+            let eval = match i == 0 {
+                true => -self.negamax(position, depth - 1, -beta, -alpha),
+                //normal search on pv move
                 false => {
                     let mut reduction_eval = match i >= FULL_DEPTH_MOVES
                         && depth >= REDUCTION_LIMIT
@@ -188,26 +233,20 @@ impl Searcher {
                         false => alpha + 1, //hack to make sure always > alpha so always searched properly
                     };
                     if reduction_eval > alpha {
-                        //here very similar to PVS
-                        if i >= FULL_DEPTH_MOVES {
-                            reduction_eval = -self.negamax(position, depth - 1, -alpha - 1, -alpha);
-                            //re-search with narrower window -> aim to prove it's bad
-                            if reduction_eval > alpha && reduction_eval < beta {
-                                -self.negamax(position, depth - 1, -beta, -alpha)
-                            } else {
-                                reduction_eval
-                            }
-                        } else {
-                            -self.negamax(position, depth - 1, -beta, -alpha)
-                            //full depth moves searched normally
-                        }
-                    } else {
-                        reduction_eval
+                        reduction_eval = -self.negamax(position, depth - 1, -alpha - 1, -alpha);
                     }
+
+                    if reduction_eval > alpha && reduction_eval < beta {
+                        reduction_eval = -self.negamax(position, depth - 1, -beta, -alpha);
+                    }
+                    reduction_eval
                 }
             };
+
             position.undo_move(child_nodes.moves[i], commit);
             self.ply -= 1;
+
+            unsafe { REPETITION_TABLE[position.ply] = 0u64 };
 
             if eval >= beta {
                 if !child_nodes.moves[i].is_capture() {
@@ -242,7 +281,6 @@ impl Searcher {
                 self.pv_length[self.ply] = self.pv_length[next_ply];
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
-                found_pv = true;
             }
 
             if Instant::now() > self.end_time && self.ply == 0 {
@@ -259,22 +297,23 @@ impl Searcher {
             eval: alpha,
         };
         match position.side_to_move {
-            Colour::White => self.tt_white.insert(hash(position), hash_entry),
-            Colour::Black => self.tt_black.insert(hash(position), hash_entry),
+            Colour::White => self.tt_white.insert(hash_key, hash_entry),
+            Colour::Black => self.tt_black.insert(hash_key, hash_entry),
         };
         alpha
     }
 
     pub fn quiescence_search(&mut self, position: &mut Board, alpha: i32, beta: i32) -> i32 {
         let eval = evaluate(position);
+        self.nodes += 1;
         if eval >= beta {
-            self.nodes += 1;
             return beta;
         }
 
+        //don't need repetition detection as it's impossible to have repetition with captures
+
         let delta = 1000; //delta pruning - try to avoid wasting time on hopeless positions
         if eval < alpha - delta {
-            self.nodes += 1;
             return alpha;
         }
 
@@ -283,7 +322,6 @@ impl Searcher {
         let mut moves = gen_captures(position);
 
         if moves.moves[0] == NULL_MOVE {
-            self.nodes += 1; //quiet node
             return alpha;
         }
 
@@ -369,16 +407,13 @@ pub struct MoveData {
     pub pv: String,
 }
 
+#[allow(unused_variables)]
 pub fn move_time(time: usize, increment: usize, moves_to_go: usize, ply: usize) -> usize {
-    let time_left = time + 20 * increment;
-    let n_moves = cmp::min(moves_to_go, 10);
-    let factor = 2.0 - n_moves as f32 / 10.0;
-    let target: f32 = match ply {
-        0..=10 => time_left as f32 / 50.0,
-        11..=16 => time_left as f32 / 30.0,
-        _ => time_left as f32 / 20.0,
-    };
-    (factor * target) as usize
+    (match ply {
+        0..=10 => (time - TIME_TO_MOVE) as f32 / 40.0,
+        11..=16 => (time - TIME_TO_MOVE) as f32 / (moves_to_go as f32),
+        _ => (time - TIME_TO_MOVE) as f32 / cmp::max((moves_to_go as f32 / 2.0) as usize, 1) as f32,
+    }) as usize
 }
 
 pub fn best_move(
@@ -394,14 +429,21 @@ pub fn best_move(
             .unwrap(),
     );
     let end_time = start + move_duration;
+    //calculate time to cancel search
+
     let mut eval: i32 = 0;
-    let mut previous_eval = eval; //used for wases shere search cancelled after searching zero moves fully
+    let mut previous_eval = eval; //used for cases shere search cancelled after searching zero moves fully
     let mut pv = String::new();
     let mut s = Searcher::new(end_time);
     let mut previous_pv = s.pv;
     let mut previous_pv_length = s.pv_length;
-    for depth in 1..MAX_SEARCH_DEPTH {
-        eval = s.negamax(position, depth, -INFINITY, INFINITY);
+
+    let mut alpha = -INFINITY;
+    let mut beta = INFINITY;
+    let mut depth = 1;
+
+    while depth < MAX_SEARCH_DEPTH {
+        eval = s.negamax(position, depth, alpha, beta);
         if s.moves_searched == 0 {
             //search cancelled before even pv was searched
             eval = previous_eval;
@@ -413,6 +455,7 @@ pub fn best_move(
             previous_pv = s.pv;
             previous_pv_length = s.pv_length;
         }
+
         println!(
             "info depth {} score cp {} nodes {} pv {}",
             depth,
@@ -432,7 +475,20 @@ pub fn best_move(
             //more than half of time used -> no point starting another search as it won't be completed
             break;
         }
+
         s.moves_searched = 0;
+
+        if eval <= alpha || eval >= beta {
+            //fell outside window -> re-search with same depth
+            alpha = -INFINITY;
+            beta = INFINITY;
+            continue; //continue without incrementing depth
+        }
+
+        //set up search for next iteration
+        alpha = eval - ASPIRATION_WINDOW;
+        beta = eval + ASPIRATION_WINDOW;
+        depth += 1;
     }
 
     for i in 0..s.pv_length[0] {

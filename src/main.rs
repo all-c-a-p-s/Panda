@@ -32,6 +32,5 @@ fn main() {
         full_perft();
         return;
     }
-
     uci_loop();
 }

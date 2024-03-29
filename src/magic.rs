@@ -243,8 +243,8 @@ pub const fn set_blockers(index: usize, bits_in_mask: usize, m: u64) -> u64 {
     let mut mask = m;
     while i < bits_in_mask {
         let b = match lsfb(mask) {
-            Some(k) => k,
-            None => break, //no more bits in mask
+            NO_SQUARE => break,
+            k => k,
         };
         mask = pop_bit(b, mask);
         if index & (1 << i) > 0 {

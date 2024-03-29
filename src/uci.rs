@@ -1,3 +1,4 @@
+use crate::zobrist::hash;
 use crate::*;
 
 pub enum CommandType {
@@ -75,7 +76,7 @@ pub fn parse_uci(command: &str) {
             println!("uciok");
             println!("id name Panda 1.0");
             println!("id author Sebastiano Rebonato-Scott");
-        },
+        }
         _ => panic!("invalid uci command"),
     }
 }
@@ -103,9 +104,11 @@ pub fn parse_position(command: &str, b: &mut Board) {
                 for w in words.iter().skip(3) {
                     let m = parse_move(w, *b);
                     b.make_move(m);
+                    let hash = hash(b);
+                    unsafe { REPETITION_TABLE[b.ply] = hash }; //hash to avoid repetitions
                 }
             }
-        },
+        }
         "fen" => {
             let mut fen_string = String::new();
             for i in 2..words.len() {
@@ -120,6 +123,8 @@ pub fn parse_position(command: &str, b: &mut Board) {
             for w in words.iter().skip(2) {
                 let m = parse_move(w, *b);
                 b.make_move(m);
+                let hash = hash(b);
+                unsafe { REPETITION_TABLE[b.ply] = hash }; //hash to avoid repetitions
             }
         }
         _ => panic!("invalid position command"),
@@ -137,7 +142,9 @@ pub fn parse_go(command: &str, position: &mut Board) -> MoveData {
     let mut moves_to_go: usize = 20;
 
     if words.len() > 9 {
-        moves_to_go = words[10].parse().expect("failed to convert movestogo to int");
+        moves_to_go = words[10]
+            .parse()
+            .expect("failed to convert movestogo to int");
     }
 
     let engine_time = match position.side_to_move {
@@ -155,7 +162,7 @@ pub fn parse_go(command: &str, position: &mut Board) -> MoveData {
 
 pub fn uci_loop() {
     let mut board = Board::from(STARTPOS);
-    loop {      
+    loop {
         let mut buffer = String::new();
         let ok = std::io::stdin().read_line(&mut buffer);
         match ok {
@@ -179,14 +186,21 @@ pub fn uci_loop() {
                     break;
                 }
                 print!("bestmove ");
-                println!(
-                "{}{}",
-                coordinate(move_data.m.square_from()),
-                coordinate(move_data.m.square_to())
-            );
-            },
+                println!("{}", {
+                    coordinate(move_data.m.square_from())
+                        + coordinate(move_data.m.square_to()).as_str()
+                        + match move_data.m.promoted_piece() {
+                            1 | 7 => "n",
+                            2 | 8 => "b",
+                            3 | 9 => "r",
+                            4 | 10 => "q",
+                            15 => "",
+                            _ => "impossible",
+                        }
+                });
+            }
             CommandType::UciNewGame => board = Board::from(STARTPOS),
-            _ => {},            
+            _ => {}
         }
     }
 }

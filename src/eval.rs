@@ -332,7 +332,7 @@ pub fn evaluate(b: &Board) -> i32 {
     for i in 0..12 {
         let mut bitboard = b.bitboards[i];
         while bitboard > 0 {
-            let square = lsfb(bitboard).unwrap();
+            let square = lsfb(bitboard);
             match i {
                 0 => {
                     eval += WP_TABLE[square];
