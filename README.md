@@ -1,7 +1,7 @@
 # Panda
 Chess engine written in Rust (WIP).
 
-Current elo ~1900
+Current elo ~2000
 
 ## Features:
 - magic bitboards
@@ -10,7 +10,10 @@ Current elo ~1900
 - quiescence search
 - mvv-lva move ordering
 - iterative deepening
+- aspiration windows
 - principal variation search
+- late move reductions
+- null move pruning
 - piece square tables
 - mobility evaluation
 - pawn structure evaluation
@@ -19,8 +22,8 @@ Current elo ~1900
 
 ## Todo:
 - king safety evaluation
-- late move reductions, null move pruning etc.
 - opening book
+- tablebases
 
 ## Usage:
 - download [rust](https://www.rust-lang.org/)
