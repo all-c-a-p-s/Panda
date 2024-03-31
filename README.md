@@ -5,7 +5,7 @@ Current elo ~2000
 
 ## Features:
 - magic bitboards
-- negamax
+- negamax search
 - alpha/beta pruning
 - quiescence search
 - mvv-lva move ordering
@@ -15,9 +15,9 @@ Current elo ~2000
 - late move reductions
 - null move pruning
 - piece square tables
-- mobility evaluation
-- pawn structure evaluation
-- basic tapered eval
+- mobility evaluation + open files
+- pawn structure evaluation + passed pawns
+- tapered eval
 - hashing (todo: incremental update hash key)
 
 ## Todo:
