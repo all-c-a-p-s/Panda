@@ -10,9 +10,9 @@ use std::cmp;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-pub const INFINITY: i32 = 999_999_999;
+pub const INFINITY: i32 = 1_000_000_000;
 pub const MAX_PLY: usize = 64;
-pub const MAX_SEARCH_DEPTH: usize = 64;
+pub const MAX_SEARCH_DEPTH: usize = 32;
 pub const REDUCTION_LIMIT: usize = 3;
 // can't reduce search to below 3 - 2 = 1 ply
 const FULL_DEPTH_MOVES: usize = 4;
@@ -55,8 +55,9 @@ fn make_null_move(b: &mut Board) -> usize {
     b.ply += 1;
     b.last_move_null = true;
     if b.en_passant != NO_SQUARE {
+        let reset = b.en_passant;
         b.en_passant = NO_SQUARE;
-        return b.en_passant;
+        return reset;
     }
     NO_SQUARE
 }
@@ -122,32 +123,37 @@ impl Searcher {
             for key in REPETITION_TABLE.iter().take(position.ply) {
                 if *key == hash_key {
                     repetition_count += 1;
+                    //return 0 even for single repetition
                 }
             }
         }
 
-        if repetition_count > 2 {
+        if repetition_count > 1 {
             return 0;
         }
 
         let mut alpha = alpha;
 
         match position.side_to_move {
+            //hash lookup
             Colour::White => {
                 if let Some(entry) = self.tt_white.get(&hash_key) {
                     if entry.depth >= depth {
                         match entry.flag {
                             EntryFlag::Beta => {
+                                //lower bound hash entry
                                 if entry.eval >= beta {
                                     return beta;
                                 }
                             }
                             EntryFlag::Alpha => {
+                                //upper bound entry
                                 if entry.eval <= alpha {
                                     return alpha;
                                 }
                             }
                             EntryFlag::Exact => return entry.eval,
+                            //pv entry
                         }
                     }
                 }
@@ -179,23 +185,27 @@ impl Searcher {
             Colour::Black => is_attacked(lsfb(position.bitboards[11]), Colour::White, position),
         };
 
-        if is_check {
+        if is_check && self.ply != 0 {
             depth += 1;
+            //if this occurs at ply zero then next search iteration will basically be skipped
+            //because of hash lookup
         }
 
         if !position.is_kp_endgame()
             && !position.last_move_null
-            && depth > 2
+            && depth > NULLMOVE_R
             && !is_check
-            && self.ply != 0
+            && self.ply > 0
         {
             //ok to null-move prune
             let ep_reset = make_null_move(position);
+            self.ply += 1;
             //idea that if opponent cannot improve their position with 2 moves in a row
             //the first of these moves must be bad
             let null_move_eval = -self.negamax(position, depth - NULLMOVE_R, -beta, -beta + 1);
             //minimal window used because all that matters is whether the search result is better than beta
             undo_null_move(position, ep_reset);
+            self.ply -= 1;
             if null_move_eval >= beta {
                 return beta;
             }
@@ -377,6 +387,8 @@ impl Move {
             }
             let attacker_type = self.piece_moved() % 6;
             self.move_order_score = MVV_LVA[victim_type][attacker_type];
+        } else if self.is_en_passant() {
+            self.move_order_score = MVV_LVA[0][0];
         } else if s.killer_moves[0][s.ply] == *self {
             self.move_order_score = 90; //after captures
         } else if s.killer_moves[1][s.ply] == *self {

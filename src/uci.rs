@@ -102,6 +102,7 @@ pub fn parse_position(command: &str, b: &mut Board) {
         "startpos" => {
             if words.len() != 2 {
                 for w in words.iter().skip(3) {
+                    //parse moves
                     let m = parse_move(w, *b);
                     b.make_move(m);
                     let hash = hash(b);
