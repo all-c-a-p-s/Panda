@@ -130,21 +130,21 @@ impl Board {
             }
         }
 
-        new_board.occupancies[0] = new_board.bitboards[0]
-            | new_board.bitboards[1]
-            | new_board.bitboards[2]
-            | new_board.bitboards[3]
-            | new_board.bitboards[4]
-            | new_board.bitboards[5];
+        new_board.occupancies[WHITE] = new_board.bitboards[WP]
+            | new_board.bitboards[WN]
+            | new_board.bitboards[WB]
+            | new_board.bitboards[WR]
+            | new_board.bitboards[WQ]
+            | new_board.bitboards[WK];
 
-        new_board.occupancies[1] = new_board.bitboards[6]
-            | new_board.bitboards[7]
-            | new_board.bitboards[8]
-            | new_board.bitboards[9]
-            | new_board.bitboards[10]
-            | new_board.bitboards[11];
+        new_board.occupancies[BLACK] = new_board.bitboards[BP]
+            | new_board.bitboards[BN]
+            | new_board.bitboards[BB]
+            | new_board.bitboards[BR]
+            | new_board.bitboards[BQ]
+            | new_board.bitboards[BK];
 
-        new_board.occupancies[2] = new_board.occupancies[0] | new_board.occupancies[1];
+        new_board.occupancies[BOTH] = new_board.occupancies[WHITE] | new_board.occupancies[BLACK];
 
         new_board
     }
@@ -228,8 +228,8 @@ impl Board {
     pub fn is_kp_endgame(self) -> bool {
         //used to avoid null move pruning in king and pawn endgames
         //where zugzwang is very common
-        self.occupancies[2]
-            ^ (self.bitboards[0] | self.bitboards[5] | self.bitboards[6] | self.bitboards[11])
+        self.occupancies[BOTH]
+            ^ (self.bitboards[WP] | self.bitboards[WK] | self.bitboards[BP] | self.bitboards[11])
             == 0
     }
 }

@@ -21,8 +21,28 @@ pub const RANK_6: u64 = 0x0000FF0000000000;
 pub const RANK_7: u64 = 0x00FF000000000000;
 pub const RANK_8: u64 = 0xFF00000000000000;
 
+pub const WP: usize = 0;
+pub const WN: usize = 1;
+pub const WB: usize = 2;
+pub const WR: usize = 3;
+pub const WQ: usize = 4;
+pub const WK: usize = 5;
+
+pub const BP: usize = 6;
+pub const BN: usize = 7;
+pub const BB: usize = 8;
+pub const BR: usize = 9;
+pub const BQ: usize = 10;
+pub const BK: usize = 11;
+
+pub const WHITE: usize = 0;
+pub const BLACK: usize = 1;
+pub const BOTH: usize = 2;
+
 pub const NO_SQUARE: usize = 64; //these exist because from my testing using an
 pub const NO_PIECE: usize = 15; //Option<usize> slows down perft
+
+pub const MAX_MOVES: usize = 218;
 
 pub fn file_indices() -> HashMap<char, usize> {
     let mut files = HashMap::new();

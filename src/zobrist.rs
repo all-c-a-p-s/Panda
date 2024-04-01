@@ -1,6 +1,7 @@
 use crate::{board::Colour, helper::get_bit, r#move::Move, Board, NO_SQUARE};
 use lazy_static::lazy_static;
 
+use crate::helper::*;
 use crate::rng::random_hash_u64;
 
 pub enum EntryFlag {
@@ -55,9 +56,9 @@ pub fn hash(b: &Board) -> u64 {
     let mut hash_key: u64 = 0;
 
     for square in 0..64 {
-        for i in 0..12 {
-            if get_bit(square, b.bitboards[i]) == 1 {
-                hash_key ^= PIECE_KEYS[square][i];
+        for piece in 0..12 {
+            if get_bit(square, b.bitboards[piece]) == 1 {
+                hash_key ^= PIECE_KEYS[square][piece];
             }
         }
     }
@@ -82,21 +83,21 @@ pub fn incemental_hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
     res ^= PIECE_KEYS[m.square_from()][m.piece_moved()];
     res ^= PIECE_KEYS[m.square_to()][m.piece_moved()];
 
-    if m.piece_moved() == 5 {
+    if m.piece_moved() == WK {
         res ^= CASTLING_KEYS[b.castling as usize];
         res ^= CASTLING_KEYS[(b.castling & 0b00000011) as usize];
-    } else if m.piece_moved() == 11 {
+    } else if m.piece_moved() == BK {
         res ^= CASTLING_KEYS[b.castling as usize];
         res ^= CASTLING_KEYS[(b.castling & 0b00001100) as usize];
     }
 
-    if m.piece_moved() == 3 && m.square_to() == 7 && (b.castling & 0b00001000 > 0) {
+    if m.piece_moved() == WR && m.square_to() == 7 && (b.castling & 0b00001000 > 0) {
         res ^= CASTLING_KEYS[0b00001000]
-    } else if m.piece_moved() == 3 && m.square_to() == 0 && (b.castling & 0b00000100 > 0) {
+    } else if m.piece_moved() == WR && m.square_to() == 0 && (b.castling & 0b00000100 > 0) {
         res ^= CASTLING_KEYS[0b00000100]
-    } else if m.piece_moved() == 9 && m.square_to() == 63 && (b.castling & 0b00000010 > 0) {
+    } else if m.piece_moved() == BR && m.square_to() == 63 && (b.castling & 0b00000010 > 0) {
         res ^= CASTLING_KEYS[0b00000010]
-    } else if m.piece_moved() == 9 && m.square_to() == 56 && (b.castling & 0b00000001 > 0) {
+    } else if m.piece_moved() == BR && m.square_to() == 56 && (b.castling & 0b00000001 > 0) {
         res ^= CASTLING_KEYS[0b00000001]
     }
 
@@ -104,14 +105,15 @@ pub fn incemental_hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
         //not including en passant
         for i in 0..12 {
             if get_bit(m.square_to(), b.bitboards[i]) == 1 {
+                //PERF: can be improved?
                 res ^= PIECE_KEYS[i][m.square_to()];
-                if i == 3 && m.square_to() == 7 && (b.castling & 0b00001000 > 0) {
+                if i == WR && m.square_to() == 7 && (b.castling & 0b00001000 > 0) {
                     res ^= CASTLING_KEYS[0b00001000]
-                } else if i == 3 && m.square_to() == 0 && (b.castling & 0b00000100 > 0) {
+                } else if i == WR && m.square_to() == 0 && (b.castling & 0b00000100 > 0) {
                     res ^= CASTLING_KEYS[0b00000100]
-                } else if i == 9 && m.square_to() == 63 && (b.castling & 0b00000010 > 0) {
+                } else if i == BR && m.square_to() == 63 && (b.castling & 0b00000010 > 0) {
                     res ^= CASTLING_KEYS[0b00000010]
-                } else if i == 9 && m.square_to() == 56 && (b.castling & 0b00000001 > 0) {
+                } else if i == BR && m.square_to() == 56 && (b.castling & 0b00000001 > 0) {
                     res ^= CASTLING_KEYS[0b00000001]
                 }
             }
@@ -120,17 +122,17 @@ pub fn incemental_hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
 
     if m.is_en_passant() {
         match m.piece_moved() {
-            0 => {
+            WP => {
                 res ^= PIECE_KEYS[m.square_to() - 8][6];
             }
-            6 => {
+            BP => {
                 res ^= PIECE_KEYS[m.square_to() + 8][0];
             }
             _ => panic!("non-pawn is capturing en passant 🤔"),
         }
     }
 
-    if m.promoted_piece() != 15 {
+    if m.promoted_piece() != NO_PIECE {
         res ^= PIECE_KEYS[m.square_to()][m.piece_moved()];
         //undo operation from before (works bc XOR is its own inverse)
         res ^= PIECE_KEYS[m.square_to()][m.promoted_piece()];

@@ -2,7 +2,7 @@ use crate::board::*;
 use crate::helper::*;
 use crate::magic::*;
 
-const PAWN_VALUE: (i32, i32) = (83, 100);
+const PAWN_VALUE: (i32, i32) = (83, 95);
 const KNIGHT_VALUE: (i32, i32) = (306, 311);
 const BISHOP_VALUE: (i32, i32) = (322, 350);
 const ROOK_VALUE: (i32, i32) = (490, 542);
@@ -10,6 +10,7 @@ const QUEEN_VALUE: (i32, i32) = (925, 940);
 
 //all PSQT have a1 on bottom left as viewing the code
 //currently picked pretty arbitrarily
+
 //meant to give idea that more central pawns are more valuable in mg
 #[rustfmt::skip]
 const PAWN_TABLE: [(i32, i32); 64] = [
@@ -19,7 +20,7 @@ const PAWN_TABLE: [(i32, i32); 64] = [
   (-5, 17),   (9, 8),   (3, 6),  (21, 4),  (17, 3),   (8, 4),   (3, 7), (-8, 16),
    (-9, 4), (-5, -4),   (9, 2),  (14,-2),  (10,-3),  (-2,-5),  (-8,-4),  (-9, 4),
    (-5, 3),  (-3,-2),  (4, -2),   (5,-2),   (4, 0),  (-5,-2),  (-3, 1), (-10, 3),
-   (-8, 3),   (1, 4),  (-3, 4), (-11, 5),  (-8, 6),  (11, 5),   (9, 4),  (-3, 3),
+   (-8, 3),   (1, 4),  (-3, 4), (-11, 5),  (-8, 6),  (11, 5),   (9, 4),  (-6, 3),
     (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),
 ];
 
@@ -226,16 +227,16 @@ pub fn game_phase_score(b: &Board) -> i32 {
     //lower score = closer to endgame
     match b.side_to_move {
         Colour::White => {
-            count(b.bitboards[10]) * 4
-                + count(b.bitboards[9]) * 2
-                + count(b.bitboards[8])
-                + count(b.bitboards[7])
+            count(b.bitboards[BQ]) * 4
+                + count(b.bitboards[BR]) * 2
+                + count(b.bitboards[BB])
+                + count(b.bitboards[BN])
         }
         Colour::Black => {
-            count(b.bitboards[4]) * 4
-                + count(b.bitboards[3]) * 2
-                + count(b.bitboards[2])
-                + count(b.bitboards[1])
+            count(b.bitboards[WQ]) * 4
+                + count(b.bitboards[WR]) * 2
+                + count(b.bitboards[WB])
+                + count(b.bitboards[WN])
         }
     }
     .try_into()
@@ -263,8 +264,8 @@ fn evaluate_pawns(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     //return positive values and then negate for black in main evaluation function
     let mut pawn_eval = 0;
     let mut temp_pawns = match colour {
-        Colour::White => b.bitboards[0],
-        Colour::Black => b.bitboards[6],
+        Colour::White => b.bitboards[WP],
+        Colour::Black => b.bitboards[BP],
     };
     while temp_pawns > 0 {
         let square = lsfb(temp_pawns);
@@ -276,9 +277,9 @@ fn evaluate_pawns(b: &Board, phase_score: i32, colour: Colour) -> i32 {
                     PAWN_TABLE[relative_psqt_square(square, colour)],
                     phase_score,
                 );
-                if WHITE_PASSED_MASKS[square] & b.bitboards[6] == 0 {
+                if WHITE_PASSED_MASKS[square] & b.bitboards[BP] == 0 {
                     //no blocking black pawns
-                    let can_advance = match get_bit(square + 8, b.occupancies[2]) {
+                    let can_advance = match get_bit(square + 8, b.occupancies[BOTH]) {
                         0 => 1,
                         1 => 0,
                         _ => panic!("this is very problematic..."),
@@ -287,21 +288,21 @@ fn evaluate_pawns(b: &Board, phase_score: i32, colour: Colour) -> i32 {
                         tapered_score(PASSED_PAWN_BONUS[rank(square)][can_advance], phase_score);
                 }
 
-                if ISOLATED_MASKS[square] & b.bitboards[0] == 0 {
+                if ISOLATED_MASKS[square] & b.bitboards[WP] == 0 {
                     //penalty for isolated pawns
                     pawn_eval += tapered_score(ISOLATED_PAWN_PENALTY, phase_score);
                 }
 
-                if DOUBLED_MASKS[square] & b.bitboards[0] != 0 {
+                if DOUBLED_MASKS[square] & b.bitboards[WP] != 0 {
                     //doubled pawn penalty
                     pawn_eval += tapered_score(DOUBLED_PAWN_PENALTY, phase_score);
                 }
             }
             Colour::Black => {
                 pawn_eval += tapered_score(PAWN_TABLE[square], phase_score);
-                if BLACK_PASSED_MASKS[square] & b.bitboards[0] == 0 {
+                if BLACK_PASSED_MASKS[square] & b.bitboards[WP] == 0 {
                     //no blocking black pawns
-                    let can_advance = match get_bit(square - 8, b.occupancies[2]) {
+                    let can_advance = match get_bit(square - 8, b.occupancies[BOTH]) {
                         0 => 1,
                         1 => 0,
                         _ => panic!("this aint good chief"),
@@ -312,12 +313,12 @@ fn evaluate_pawns(b: &Board, phase_score: i32, colour: Colour) -> i32 {
                     );
                 }
 
-                if ISOLATED_MASKS[square] & b.bitboards[6] == 0 {
+                if ISOLATED_MASKS[square] & b.bitboards[BP] == 0 {
                     //penalty for isolated pawns
                     pawn_eval += tapered_score(ISOLATED_PAWN_PENALTY, phase_score);
                 }
 
-                if DOUBLED_MASKS[square] & b.bitboards[6] != 0 {
+                if DOUBLED_MASKS[square] & b.bitboards[BP] != 0 {
                     pawn_eval += tapered_score(DOUBLED_PAWN_PENALTY, phase_score);
                 }
             }
@@ -330,8 +331,8 @@ fn evaluate_pawns(b: &Board, phase_score: i32, colour: Colour) -> i32 {
 fn evaluate_knights(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     let mut knight_eval = 0;
     let mut temp_knights = match colour {
-        Colour::White => b.bitboards[1],
-        Colour::Black => b.bitboards[7],
+        Colour::White => b.bitboards[WN],
+        Colour::Black => b.bitboards[BN],
     };
 
     while temp_knights > 0 {
@@ -354,8 +355,8 @@ fn evaluate_knights(b: &Board, phase_score: i32, colour: Colour) -> i32 {
 fn evaluate_bishops(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     let mut bishop_eval = 0;
     let mut temp_bishops = match colour {
-        Colour::White => b.bitboards[2],
-        Colour::Black => b.bitboards[8],
+        Colour::White => b.bitboards[WB],
+        Colour::Black => b.bitboards[BB],
     };
 
     if count(temp_bishops) >= 2 {
@@ -365,7 +366,7 @@ fn evaluate_bishops(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     while temp_bishops > 0 {
         let square = lsfb(temp_bishops);
         bishop_eval += tapered_score(BISHOP_VALUE, phase_score);
-        let attacks = get_bishop_attacks(square, b.occupancies[2]);
+        let attacks = get_bishop_attacks(square, b.occupancies[BOTH]);
         bishop_eval += (count(attacks) - BISHOP_BASE_MOBILITY) as i32
             * tapered_score(BISHOP_MOBILITY_UNIT, phase_score);
         match colour {
@@ -414,13 +415,13 @@ fn above_rank(square: usize, c: Colour) -> u64 {
 fn evaluate_rooks(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     let mut rook_eval = 0;
     let mut temp_rooks = match colour {
-        Colour::White => b.bitboards[3],
-        Colour::Black => b.bitboards[9],
+        Colour::White => b.bitboards[WR],
+        Colour::Black => b.bitboards[BR],
     };
     while temp_rooks > 0 {
         rook_eval += tapered_score(ROOK_VALUE, phase_score);
         let square = lsfb(temp_rooks);
-        let attacks = get_rook_attacks(square, b.occupancies[2]);
+        let attacks = get_rook_attacks(square, b.occupancies[BOTH]);
         let attacks_up_file = attacks & above_rank(square, colour);
         let mut open_file = false;
         let mut semi_open_file = false;
@@ -432,8 +433,8 @@ fn evaluate_rooks(b: &Board, phase_score: i32, colour: Colour) -> i32 {
                     ROOK_TABLE[relative_psqt_square(square, Colour::White)],
                     phase_score,
                 );
-                if attacks_up_file & b.bitboards[0] == 0 {
-                    if attacks_up_file & b.bitboards[6] == 0 {
+                if attacks_up_file & b.bitboards[WP] == 0 {
+                    if attacks_up_file & b.bitboards[BP] == 0 {
                         open_file = true;
                     } else {
                         semi_open_file = true;
@@ -442,8 +443,8 @@ fn evaluate_rooks(b: &Board, phase_score: i32, colour: Colour) -> i32 {
             }
             Colour::Black => {
                 rook_eval += tapered_score(ROOK_TABLE[square], phase_score);
-                if attacks_up_file & b.bitboards[6] == 0 {
-                    if attacks_up_file & b.bitboards[0] == 0 {
+                if attacks_up_file & b.bitboards[BP] == 0 {
+                    if attacks_up_file & b.bitboards[WP] == 0 {
                         open_file = true;
                     } else {
                         semi_open_file = true;
@@ -467,14 +468,14 @@ fn evaluate_rooks(b: &Board, phase_score: i32, colour: Colour) -> i32 {
 fn evaluate_queens(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     let mut queen_eval = 0;
     let mut temp_queens = match colour {
-        Colour::White => b.bitboards[4],
-        Colour::Black => b.bitboards[10],
+        Colour::White => b.bitboards[WQ],
+        Colour::Black => b.bitboards[BQ],
     };
 
     while temp_queens > 0 {
         let square = lsfb(temp_queens);
         queen_eval += tapered_score(QUEEN_VALUE, phase_score);
-        let attacks = get_queen_attacks(square, b.occupancies[2]);
+        let attacks = get_queen_attacks(square, b.occupancies[BOTH]);
         queen_eval += (count(attacks) - QUEEN_BASE_MOBILITY) as i32
             * tapered_score(QUEEN_MOBILITY_UNIT, phase_score);
         match colour {
@@ -495,8 +496,8 @@ fn evaluate_king(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     //TODO: king safety
     let mut king_eval = 0;
     let king_bb = match colour {
-        Colour::White => b.bitboards[5],
-        Colour::Black => b.bitboards[11],
+        Colour::White => b.bitboards[WK],
+        Colour::Black => b.bitboards[BK],
     };
     let king_square = lsfb(king_bb);
     king_eval += match colour {

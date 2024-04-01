@@ -181,8 +181,8 @@ impl Searcher {
 
         let is_check = match position.side_to_move {
             //used in both search extensions and LMR
-            Colour::White => is_attacked(lsfb(position.bitboards[5]), Colour::Black, position),
-            Colour::Black => is_attacked(lsfb(position.bitboards[11]), Colour::White, position),
+            Colour::White => is_attacked(lsfb(position.bitboards[WK]), Colour::Black, position),
+            Colour::Black => is_attacked(lsfb(position.bitboards[BK]), Colour::White, position),
         };
 
         if is_check && self.ply != 0 {
@@ -469,7 +469,7 @@ pub fn best_move(
         }
 
         println!(
-            "info depth {} score cp {} nodes {} pv {}",
+            "info depth {} score cp {} nodes {} pv {}time {} nps {}",
             depth,
             eval,
             s.nodes,
@@ -481,6 +481,15 @@ pub fn best_move(
                     pv += " ";
                 }
                 pv
+            },
+            start.elapsed().as_millis(),
+            {
+                let micros = start.elapsed().as_micros() as f64;
+                if micros == 0.0 {
+                    0
+                } else {
+                    ((s.nodes as f64 / micros) * 1_000_000.0) as u64
+                }
             }
         );
         if start.elapsed() > move_duration || start.elapsed() * 2 > move_duration {

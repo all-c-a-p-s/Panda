@@ -11,7 +11,6 @@ pub mod uci;
 pub mod zobrist;
 
 use crate::board::*;
-use crate::eval::evaluate;
 use crate::helper::*;
 use crate::magic::*;
 use crate::movegen::*;
@@ -28,12 +27,10 @@ fn init_all() {
 fn main() {
     init_all();
 
-    let debug = false;
+    let debug = true;
     if debug {
-        let pos = Board::from(STARTPOS);
-        println!("{}", evaluate(&pos));
         full_perft();
-        return;
+    } else {
+        uci_loop();
     }
-    uci_loop();
 }

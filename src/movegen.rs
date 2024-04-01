@@ -5,38 +5,26 @@ use crate::r#move::*;
 
 pub fn is_attacked(square: usize, colour: Colour, board: &Board) -> bool {
     //attacked BY colour
-    if colour == Colour::White {
-        //leapers
-        if BP_ATTACKS[square] & board.bitboards[0] != 0
-            || N_ATTACKS[square] & board.bitboards[1] != 0
-            || K_ATTACKS[square] & board.bitboards[5] != 0
-        {
-            return true;
+    match colour {
+        Colour::White => {
+            //leapers then sliders
+            BP_ATTACKS[square] & board.bitboards[WP] != 0
+                || N_ATTACKS[square] & board.bitboards[WN] != 0
+                || K_ATTACKS[square] & board.bitboards[WK] != 0
+                || get_bishop_attacks(square, board.occupancies[BOTH]) & board.bitboards[WB] != 0
+                || get_rook_attacks(square, board.occupancies[BOTH]) & board.bitboards[WR] != 0
+                || get_queen_attacks(square, board.occupancies[BOTH]) & board.bitboards[WQ] != 0
         }
-        //sliders
-        if get_bishop_attacks(square, board.occupancies[2]) & board.bitboards[2] != 0
-            || get_rook_attacks(square, board.occupancies[2]) & board.bitboards[3] != 0
-            || get_queen_attacks(square, board.occupancies[2]) & board.bitboards[4] != 0
-        {
-            return true;
-        }
-    } else {
-        //leapers
-        if WP_ATTACKS[square] & board.bitboards[6] != 0
-            || N_ATTACKS[square] & board.bitboards[7] != 0
-            || K_ATTACKS[square] & board.bitboards[11] != 0
-        {
-            return true;
-        }
-        //sliders
-        if get_bishop_attacks(square, board.occupancies[2]) & board.bitboards[8] != 0
-            || get_rook_attacks(square, board.occupancies[2]) & board.bitboards[9] != 0
-            || get_queen_attacks(square, board.occupancies[2]) & board.bitboards[10] != 0
-        {
-            return true;
+        Colour::Black => {
+            //leapers then sliders
+            WP_ATTACKS[square] & board.bitboards[BP] != 0
+                || N_ATTACKS[square] & board.bitboards[BN] != 0
+                || K_ATTACKS[square] & board.bitboards[BK] != 0
+                || get_bishop_attacks(square, board.occupancies[BOTH]) & board.bitboards[BB] != 0
+                || get_rook_attacks(square, board.occupancies[BOTH]) & board.bitboards[BR] != 0
+                || get_queen_attacks(square, board.occupancies[BOTH]) & board.bitboards[BQ] != 0
         }
     }
-    false
 }
 
 pub fn pawn_push_moves(board: &Board, moves: MoveList) -> MoveList {
@@ -50,55 +38,60 @@ pub fn pawn_push_moves(board: &Board, moves: MoveList) -> MoveList {
     let mut res = moves;
     match board.side_to_move {
         Colour::White => {
-            let mut bitboard = board.bitboards[0];
+            let mut bitboard = board.bitboards[WP];
             while bitboard > 0 {
                 let lsb = lsfb(bitboard);
-                if get_bit(lsb + 8, board.occupancies[2]) == 0 {
+                if get_bit(lsb + 8, board.occupancies[BOTH]) == 0 {
                     if rank(lsb) == 6 {
                         //promotion
-                        res.moves[first_unused] = encode_move(lsb, lsb + 8, 4, board, false);
+                        res.moves[first_unused] = encode_move(lsb, lsb + 8, WQ, board, false);
                         first_unused += 1;
-                        res.moves[first_unused] = encode_move(lsb, lsb + 8, 3, board, false);
+                        res.moves[first_unused] = encode_move(lsb, lsb + 8, WR, board, false);
                         first_unused += 1;
-                        res.moves[first_unused] = encode_move(lsb, lsb + 8, 2, board, false);
+                        res.moves[first_unused] = encode_move(lsb, lsb + 8, WB, board, false);
                         first_unused += 1;
-                        res.moves[first_unused] = encode_move(lsb, lsb + 8, 1, board, false);
+                        res.moves[first_unused] = encode_move(lsb, lsb + 8, WN, board, false);
                         first_unused += 1;
+                        //add all different possible promotions to move list
                     } else {
-                        res.moves[first_unused] = encode_move(lsb, lsb + 8, 15, board, false);
+                        //regular pawn push
+                        res.moves[first_unused] = encode_move(lsb, lsb + 8, NO_PIECE, board, false);
                         first_unused += 1;
                     }
-                    if rank(lsb) == 1 && get_bit(lsb + 16, board.occupancies[2]) == 0 {
-                        //double push
-                        res.moves[first_unused] = encode_move(lsb, lsb + 16, 15, board, false);
+                    if rank(lsb) == 1 && get_bit(lsb + 16, board.occupancies[BOTH]) == 0 {
+                        //double push (we already know that lsb+8 is not occupied)
+                        res.moves[first_unused] =
+                            encode_move(lsb, lsb + 16, NO_PIECE, board, false);
                         first_unused += 1;
                     }
                 }
                 bitboard = pop_bit(lsb, bitboard);
+                //pop pawns from bitboard
             }
         }
         Colour::Black => {
-            let mut bitboard = board.bitboards[6];
+            let mut bitboard = board.bitboards[BP];
             while bitboard > 0 {
                 let lsb = lsfb(bitboard);
-                if get_bit(lsb - 8, board.occupancies[2]) == 0 {
+                if get_bit(lsb - 8, board.occupancies[BOTH]) == 0 {
                     if rank(lsb - 8) == 0 {
                         //promotion
-                        res.moves[first_unused] = encode_move(lsb, lsb - 8, 10, board, false);
+                        res.moves[first_unused] = encode_move(lsb, lsb - 8, BQ, board, false);
                         first_unused += 1;
-                        res.moves[first_unused] = encode_move(lsb, lsb - 8, 9, board, false);
+                        res.moves[first_unused] = encode_move(lsb, lsb - 8, BR, board, false);
                         first_unused += 1;
-                        res.moves[first_unused] = encode_move(lsb, lsb - 8, 8, board, false);
+                        res.moves[first_unused] = encode_move(lsb, lsb - 8, BB, board, false);
                         first_unused += 1;
-                        res.moves[first_unused] = encode_move(lsb, lsb - 8, 7, board, false);
+                        res.moves[first_unused] = encode_move(lsb, lsb - 8, BN, board, false);
                         first_unused += 1;
                     } else {
-                        res.moves[first_unused] = encode_move(lsb, lsb - 8, 15, board, false);
+                        res.moves[first_unused] = encode_move(lsb, lsb - 8, NO_PIECE, board, false);
                         first_unused += 1;
                     }
-                    if rank(lsb) == 6 && get_bit(lsb - 16, board.occupancies[2]) == 0 {
+                    if rank(lsb) == 6 && get_bit(lsb - 16, board.occupancies[BOTH]) == 0 {
                         //double push
-                        res.moves[first_unused] = encode_move(lsb, lsb - 16, 15, board, false);
+                        res.moves[first_unused] =
+                            encode_move(lsb, lsb - 16, NO_PIECE, board, false);
                         first_unused += 1;
                     }
                 }
@@ -123,33 +116,33 @@ pub fn castling_moves(board: &Board, moves: MoveList) -> MoveList {
         Colour::White => {
             if (board.castling & 0b0000_0001) > 0 {
                 //white kingside castling rights
-                if get_bit(6, board.occupancies[2]) == 0
-                    && get_bit(5, board.occupancies[2]) == 0
+                if get_bit(6, board.occupancies[BOTH]) == 0
+                    && get_bit(5, board.occupancies[BOTH]) == 0
                     && !is_attacked(4, Colour::Black, board)
                     && !is_attacked(5, Colour::Black, board)
                 {
-                    res.moves[first_unused] = encode_move(4, 6, 15, board, true);
+                    res.moves[first_unused] = encode_move(4, 6, NO_PIECE, board, true);
                     first_unused += 1;
                 }
             }
 
             if (board.castling & 0b0000_0010) > 0 {
                 //white queenside
-                if get_bit(1, board.occupancies[2]) == 0
-                    && get_bit(2, board.occupancies[2]) == 0
-                    && get_bit(3, board.occupancies[2]) == 0
+                if get_bit(1, board.occupancies[BOTH]) == 0
+                    && get_bit(2, board.occupancies[BOTH]) == 0
+                    && get_bit(3, board.occupancies[BOTH]) == 0
                     && !is_attacked(4, Colour::Black, board)
                     && !is_attacked(3, Colour::Black, board)
                 {
-                    res.moves[first_unused] = encode_move(4, 2, 15, board, true);
+                    res.moves[first_unused] = encode_move(4, 2, NO_PIECE, board, true);
                 }
             }
         }
         Colour::Black => {
             if (board.castling & 0b0000_0100) > 0 {
                 //black kingside
-                if get_bit(62, board.occupancies[2]) == 0
-                    && get_bit(61, board.occupancies[2]) == 0
+                if get_bit(62, board.occupancies[BOTH]) == 0
+                    && get_bit(61, board.occupancies[BOTH]) == 0
                     && !is_attacked(60, Colour::White, board)
                     && !is_attacked(61, Colour::White, board)
                 {
@@ -160,9 +153,9 @@ pub fn castling_moves(board: &Board, moves: MoveList) -> MoveList {
 
             if (board.castling & 0b0000_1000) > 0 {
                 //black queenside
-                if get_bit(57, board.occupancies[2]) == 0
-                    && get_bit(58, board.occupancies[2]) == 0
-                    && get_bit(59, board.occupancies[2]) == 0
+                if get_bit(57, board.occupancies[BOTH]) == 0
+                    && get_bit(58, board.occupancies[BOTH]) == 0
+                    && get_bit(59, board.occupancies[BOTH]) == 0
                     && !is_attacked(60, Colour::White, board)
                     && !is_attacked(59, Colour::White, board)
                 {
@@ -175,14 +168,14 @@ pub fn castling_moves(board: &Board, moves: MoveList) -> MoveList {
 }
 
 pub fn gen_moves(board: &Board) -> MoveList {
-    let (mut min, mut max) = (0usize, 6usize);
+    let (mut min, mut max) = (WP, BP);
     if board.side_to_move == Colour::Black {
-        min = 6;
+        min = BP;
         max = 12;
     }
 
     let mut moves = MoveList {
-        moves: [NULL_MOVE; 218],
+        moves: [NULL_MOVE; MAX_MOVES],
     };
 
     moves = pawn_push_moves(board, moves);
@@ -196,62 +189,64 @@ pub fn gen_moves(board: &Board) -> MoveList {
         }
     }
 
-    for i in min..max {
+    for piece in min..max {
         //pieces of colour to move
-        let mut bitboard = board.bitboards[i];
+        let mut bitboard = board.bitboards[piece];
 
         while bitboard > 0 {
             let lsb = lsfb(bitboard); // never panics as loop will have already exited
-            let mut attacks = match i {
-                0 => {
+            let mut attacks = match piece {
+                WP => {
                     WP_ATTACKS[lsb]
                         & match board.en_passant {
-                            NO_SQUARE => board.occupancies[1],
-                            k => set_bit(k, board.occupancies[1]),
+                            NO_SQUARE => board.occupancies[BLACK],
+                            k => set_bit(k, board.occupancies[BLACK]),
                         }
                 } //en passant capture
-                6 => {
+                BP => {
                     BP_ATTACKS[lsb]
                         & match board.en_passant {
-                            NO_SQUARE => board.occupancies[0],
-                            k => set_bit(k, board.occupancies[0]),
+                            NO_SQUARE => board.occupancies[WHITE],
+                            k => set_bit(k, board.occupancies[WHITE]),
                         }
                 } //or with set en passant square if it is not 64 i.e. none
-                1 | 7 => N_ATTACKS[lsb],
-                2 | 8 => get_bishop_attacks(lsb, board.occupancies[2]),
-                3 | 9 => get_rook_attacks(lsb, board.occupancies[2]),
-                4 | 10 => get_queen_attacks(lsb, board.occupancies[2]),
-                5 | 11 => K_ATTACKS[lsb],
+                WN | BN => N_ATTACKS[lsb],
+                WB | BB => get_bishop_attacks(lsb, board.occupancies[BOTH]),
+                WR | BR => get_rook_attacks(lsb, board.occupancies[BOTH]),
+                WQ | BQ => get_queen_attacks(lsb, board.occupancies[BOTH]),
+                WK | BK => K_ATTACKS[lsb],
                 _ => panic!("this is impossible"),
             };
             match board.side_to_move {
-                Colour::White => attacks &= !board.occupancies[0], //remove attacks on own pieces
-                Colour::Black => attacks &= !board.occupancies[1],
+                Colour::White => attacks &= !board.occupancies[WHITE], //remove attacks on own pieces
+                Colour::Black => attacks &= !board.occupancies[BLACK],
             }
             while attacks > 0 {
                 let lsb_attack = lsfb(attacks);
-                if (get_bit(lsb, board.bitboards[0]) > 0) && rank(lsb) == 6 {
+                //promotions that are also captures
+                if (get_bit(lsb, board.bitboards[WP]) > 0) && rank(lsb) == 6 {
                     // white promotion
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 4, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, WQ, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 3, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, WR, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 2, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, WB, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 1, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, WN, board, false);
                     first_unused += 1;
-                } else if (get_bit(lsb, board.bitboards[6]) > 0) && rank(lsb) == 1 {
+                } else if (get_bit(lsb, board.bitboards[BP]) > 0) && rank(lsb) == 1 {
                     //black promotion
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 10, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, BQ, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 9, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, BR, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 8, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, BB, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 7, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, BN, board, false);
                     first_unused += 1;
                 } else {
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 15, board, false);
+                    moves.moves[first_unused] =
+                        encode_move(lsb, lsb_attack, NO_PIECE, board, false);
                     first_unused += 1;
                 } //list to return here
                 attacks = pop_bit(lsb_attack, attacks);
@@ -264,72 +259,73 @@ pub fn gen_moves(board: &Board) -> MoveList {
 
 pub fn gen_captures(board: &mut Board) -> MoveList {
     //special capture-only move generation for quiescence search
-    let (mut min, mut max) = (0usize, 6usize);
+    let (mut min, mut max) = (WP, BP);
     if board.side_to_move == Colour::Black {
-        min = 6;
+        min = BP;
         max = 12;
     }
 
     let mut moves = MoveList {
-        moves: [NULL_MOVE; 218],
+        moves: [NULL_MOVE; MAX_MOVES],
     };
     let mut first_unused = 0;
-    for i in min..max {
+    for piece in min..max {
         //pieces of colour to move
-        let mut bitboard = board.bitboards[i];
+        let mut bitboard = board.bitboards[piece];
 
         while bitboard > 0 {
             let lsb = lsfb(bitboard); // never panics as loop will have already exited
-            let mut attacks = match i {
-                0 => {
+            let mut attacks = match piece {
+                WP => {
                     WP_ATTACKS[lsb]
                         & match board.en_passant {
-                            NO_SQUARE => board.occupancies[1],
-                            k => set_bit(k, board.occupancies[1]),
+                            NO_SQUARE => board.occupancies[BLACK],
+                            k => set_bit(k, board.occupancies[BLACK]),
                         }
                 } //en passant capture
-                6 => {
+                BP => {
                     BP_ATTACKS[lsb]
                         & match board.en_passant {
-                            NO_SQUARE => board.occupancies[0],
-                            k => set_bit(k, board.occupancies[0]),
+                            NO_SQUARE => board.occupancies[WHITE],
+                            k => set_bit(k, board.occupancies[WHITE]),
                         }
                 } //or with set en passant square if it is not 64 i.e. none
-                1 | 7 => N_ATTACKS[lsb],
-                2 | 8 => get_bishop_attacks(lsb, board.occupancies[2]),
-                3 | 9 => get_rook_attacks(lsb, board.occupancies[2]),
-                4 | 10 => get_queen_attacks(lsb, board.occupancies[2]),
-                5 | 11 => K_ATTACKS[lsb],
+                WN | BN => N_ATTACKS[lsb],
+                WB | BB => get_bishop_attacks(lsb, board.occupancies[BOTH]),
+                WR | BR => get_rook_attacks(lsb, board.occupancies[BOTH]),
+                WQ | BQ => get_queen_attacks(lsb, board.occupancies[BOTH]),
+                WK | BK => K_ATTACKS[lsb],
                 _ => panic!("this is impossible"),
             };
             match board.side_to_move {
-                Colour::White => attacks &= board.occupancies[1], //only captures
-                Colour::Black => attacks &= board.occupancies[0],
+                Colour::White => attacks &= board.occupancies[BLACK], //only captures
+                Colour::Black => attacks &= board.occupancies[WHITE],
             }
             while attacks > 0 {
                 let lsb_attack = lsfb(attacks);
-                if (get_bit(lsb, board.bitboards[0]) > 0) && rank(lsb) == 6 {
+                if (get_bit(lsb, board.bitboards[WP]) > 0) && rank(lsb) == 6 {
                     // white promotion
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 4, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, WQ, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 3, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, WR, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 2, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, WB, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 1, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, WN, board, false);
                     first_unused += 1;
-                } else if (get_bit(lsb, board.bitboards[6]) > 0) && rank(lsb) == 1 {
+                } else if (get_bit(lsb, board.bitboards[BP]) > 0) && rank(lsb) == 1 {
                     //black promotion
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 10, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, BQ, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 9, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, BR, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 8, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, BB, board, false);
                     first_unused += 1;
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 7, board, false);
+                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, BN, board, false);
                     first_unused += 1;
                 } else {
-                    moves.moves[first_unused] = encode_move(lsb, lsb_attack, 15, board, false);
+                    moves.moves[first_unused] =
+                        encode_move(lsb, lsb_attack, NO_PIECE, board, false);
                     first_unused += 1;
                 } //list to return here
                 attacks = pop_bit(lsb_attack, attacks);
@@ -360,25 +356,25 @@ pub fn get_pin_rays(b: &Board) -> [u64; 8] {
     match b.side_to_move {
         Colour::White => {
             let mut ray_count: usize = 0;
-            let king_square = lsfb(b.bitboards[5]);
-            let rook_rays = get_rook_attacks(king_square, b.occupancies[2]);
-            let bishop_rays = get_bishop_attacks(king_square, b.occupancies[2]);
+            let king_square = lsfb(b.bitboards[WK]);
+            let rook_rays = get_rook_attacks(king_square, b.occupancies[BOTH]);
+            let bishop_rays = get_bishop_attacks(king_square, b.occupancies[BOTH]);
             //rays from king square
 
             let mut enemy_bishop_rays = 0u64;
             let mut enemy_rook_rays = 0u64;
-            let mut enemy_bishops = b.bitboards[8] | b.bitboards[10];
-            let mut enemy_rooks = b.bitboards[9] | b.bitboards[10];
+            let mut enemy_bishops = b.bitboards[BB] | b.bitboards[BQ];
+            let mut enemy_rooks = b.bitboards[BR] | b.bitboards[BQ];
 
             while enemy_bishops > 0 {
                 let square = lsfb(enemy_bishops);
-                enemy_bishop_rays |= get_bishop_attacks(square, b.occupancies[2]);
+                enemy_bishop_rays |= get_bishop_attacks(square, b.occupancies[BOTH]);
                 enemy_bishops = pop_bit(square, enemy_bishops);
             }
 
             while enemy_rooks > 0 {
                 let square = lsfb(enemy_rooks);
-                enemy_rook_rays |= get_rook_attacks(square, b.occupancies[2]);
+                enemy_rook_rays |= get_rook_attacks(square, b.occupancies[BOTH]);
                 enemy_rooks = pop_bit(square, enemy_rooks);
             }
             //generate rays for enemy slider attacks
@@ -389,8 +385,8 @@ pub fn get_pin_rays(b: &Board) -> [u64; 8] {
 
             while pinned_by_bishop > 0 {
                 let pinned_square = lsfb(pinned_by_bishop);
-                let ray = get_bishop_attacks(king_square, pop_bit(pinned_square, b.occupancies[2]))
-                    & get_bishop_attacks(pinned_square, b.occupancies[2]);
+                let ray = get_bishop_attacks(king_square, pop_bit(pinned_square, b.occupancies[BOTH]))
+                    & get_bishop_attacks(pinned_square, b.occupancies[BOTH]);
                 //ray corresponding to each pinned piece
                 res[ray_count] = ray;
                 ray_count += 1;
@@ -399,8 +395,8 @@ pub fn get_pin_rays(b: &Board) -> [u64; 8] {
 
             while pinned_by_rook > 0 {
                 let pinned_square = lsfb(pinned_by_rook);
-                let ray = get_rook_attacks(king_square, pop_bit(pinned_square, b.occupancies[2]))
-                    & get_rook_attacks(pinned_square, b.occupancies[2]);
+                let ray = get_rook_attacks(king_square, pop_bit(pinned_square, b.occupancies[BOTH]))
+                    & get_rook_attacks(pinned_square, b.occupancies[BOTH]);
                 res[ray_count] = ray;
                 ray_count += 1;
                 pinned_by_rook = pop_bit(pinned_square, pinned_by_rook);
@@ -408,24 +404,24 @@ pub fn get_pin_rays(b: &Board) -> [u64; 8] {
         }
         Colour::Black => {
             let mut ray_count: usize = 0;
-            let king_square = lsfb(b.bitboards[11]);
-            let rook_rays = get_rook_attacks(king_square, b.occupancies[2]);
-            let bishop_rays = get_bishop_attacks(king_square, b.occupancies[2]);
+            let king_square = lsfb(b.bitboards[BK]);
+            let rook_rays = get_rook_attacks(king_square, b.occupancies[BOTH]);
+            let bishop_rays = get_bishop_attacks(king_square, b.occupancies[BOTH]);
 
             let mut enemy_bishop_rays = 0u64;
             let mut enemy_rook_rays = 0u64;
-            let mut enemy_bishops = b.bitboards[2] | b.bitboards[4];
-            let mut enemy_rooks = b.bitboards[3] | b.bitboards[4];
+            let mut enemy_bishops = b.bitboards[WB] | b.bitboards[WQ];
+            let mut enemy_rooks = b.bitboards[WR] | b.bitboards[WQ];
 
             while enemy_bishops > 0 {
                 let square = lsfb(enemy_bishops);
-                enemy_bishop_rays |= get_bishop_attacks(square, b.occupancies[2]);
+                enemy_bishop_rays |= get_bishop_attacks(square, b.occupancies[BOTH]);
                 enemy_bishops = pop_bit(square, enemy_bishops);
             }
 
             while enemy_rooks > 0 {
                 let square = lsfb(enemy_rooks);
-                enemy_rook_rays |= get_rook_attacks(square, b.occupancies[2]);
+                enemy_rook_rays |= get_rook_attacks(square, b.occupancies[BOTH]);
                 enemy_rooks = pop_bit(square, enemy_rooks);
             }
 
@@ -434,8 +430,8 @@ pub fn get_pin_rays(b: &Board) -> [u64; 8] {
 
             while pinned_by_bishop > 0 {
                 let pinned_square = lsfb(pinned_by_bishop);
-                let ray = get_bishop_attacks(king_square, pop_bit(pinned_square, b.occupancies[2]))
-                    & get_bishop_attacks(pinned_square, b.occupancies[2]);
+                let ray = get_bishop_attacks(king_square, pop_bit(pinned_square, b.occupancies[BOTH]))
+                    & get_bishop_attacks(pinned_square, b.occupancies[BOTH]);
                 res[ray_count] = ray;
                 ray_count += 1;
                 pinned_by_bishop = pop_bit(pinned_square, pinned_by_bishop);
@@ -443,8 +439,8 @@ pub fn get_pin_rays(b: &Board) -> [u64; 8] {
 
             while pinned_by_rook > 0 {
                 let pinned_square = lsfb(pinned_by_rook);
-                let ray = get_rook_attacks(king_square, pop_bit(pinned_square, b.occupancies[2]))
-                    & get_rook_attacks(pinned_square, b.occupancies[2]);
+                let ray = get_rook_attacks(king_square, pop_bit(pinned_square, b.occupancies[BOTH]))
+                    & get_rook_attacks(pinned_square, b.occupancies[BOTH]);
                 res[ray_count] = ray;
                 ray_count += 1;
                 pinned_by_rook = pop_bit(pinned_square, pinned_by_rook);
@@ -458,17 +454,17 @@ pub fn check_en_passant(m: Move, b: &Board) -> bool {
     //checks en passant edge case where en passant reveals check on the king
     match m.piece_moved() {
         0 => {
-            let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[2]);
+            let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[BOTH]);
             relevant_blockers = pop_bit(m.square_to() - 8, relevant_blockers);
-            get_rook_attacks(lsfb(b.bitboards[5]), relevant_blockers)
-                & (b.bitboards[9] | b.bitboards[10])
+            get_rook_attacks(lsfb(b.bitboards[WK]), relevant_blockers)
+                & (b.bitboards[BR] | b.bitboards[BQ])
                 == 0
         }
         6 => {
-            let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[2]);
+            let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[BOTH]);
             relevant_blockers = pop_bit(m.square_to() + 8, relevant_blockers);
-            get_rook_attacks(lsfb(b.bitboards[11]), relevant_blockers)
-                & (b.bitboards[3] | b.bitboards[4])
+            get_rook_attacks(lsfb(b.bitboards[BK]), relevant_blockers)
+                & (b.bitboards[WR] | b.bitboards[WQ])
                 == 0
         }
         _ => panic!("impossible"),
@@ -490,7 +486,7 @@ pub fn legal_non_check_evasion(m: Move, b: &Board) -> bool {
         let mut black_attacks = 0u64;
         for i in 6..12 {
             let mut piece_bb = b.bitboards[i];
-            let relevant_blockers = b.occupancies[2] ^ b.bitboards[5];
+            let relevant_blockers = b.occupancies[BOTH] ^ b.bitboards[WK];
             //king blocking slider attacks doesn't count because it can move back
             //into a new attack from the same slider
             while piece_bb > 0 {
@@ -512,7 +508,7 @@ pub fn legal_non_check_evasion(m: Move, b: &Board) -> bool {
         let mut white_attacks = 0u64;
         for i in 0..6 {
             let mut piece_bb = b.bitboards[i];
-            let relevant_blockers = b.occupancies[2] ^ b.bitboards[11];
+            let relevant_blockers = b.occupancies[BOTH] ^ b.bitboards[BK];
             //king blocking slider attacks doesn't count because it can move back
             //into a new attack from the same slider
             while piece_bb > 0 {
