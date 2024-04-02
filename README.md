@@ -22,8 +22,8 @@ Current elo ~2000
 
 ## Todo:
 - king safety evaluation
-- opening book
-- tablebases
+- more search improvements
+- faster movegen using check/pins masks instead of make/unmake
 
 ## Usage:
 - download [rust](https://www.rust-lang.org/)
