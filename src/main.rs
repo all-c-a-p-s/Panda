@@ -26,7 +26,7 @@ fn init_all() {
 fn main() {
     init_all();
 
-    let debug = false;
+    let debug = true;
     if debug {
         full_perft();
     } else {

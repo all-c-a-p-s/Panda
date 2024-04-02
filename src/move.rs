@@ -129,14 +129,10 @@ impl Move {
             "promoted to {}",
             if self.is_promotion() {
                 match self.promoted_piece() {
-                    WN => "white knight",
-                    WB => "white bishop",
-                    WR => "white rook",
-                    WQ => "white queen",
-                    BN => "black knight",
-                    BB => "black bishop",
-                    BR => "black rook",
-                    BQ => "black queen",
+                    KNIGHT => "knight",
+                    BISHOP => "bishop",
+                    ROOK => "rook",
+                    QUEEN => "queen",
                     NO_PIECE => "NONE",
                     _ => "impossible",
                 }

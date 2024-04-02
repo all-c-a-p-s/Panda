@@ -65,16 +65,16 @@ impl MoveList {
                         if rank(lsb) == 6 {
                             //promotion
                             self.moves[first_unused] =
-                                encode_move(lsb, lsb + 8, WQ, PROMOTION_FLAG);
+                                encode_move(lsb, lsb + 8, QUEEN, PROMOTION_FLAG);
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, lsb + 8, WR, PROMOTION_FLAG);
+                                encode_move(lsb, lsb + 8, ROOK, PROMOTION_FLAG);
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, lsb + 8, WB, PROMOTION_FLAG);
+                                encode_move(lsb, lsb + 8, BISHOP, PROMOTION_FLAG);
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, lsb + 8, WN, PROMOTION_FLAG);
+                                encode_move(lsb, lsb + 8, KNIGHT, PROMOTION_FLAG);
                             first_unused += 1;
                             //add all different possible promotions to move list
                         } else {
@@ -101,16 +101,16 @@ impl MoveList {
                         if rank(lsb - 8) == 0 {
                             //promotion
                             self.moves[first_unused] =
-                                encode_move(lsb, lsb - 8, BQ, PROMOTION_FLAG);
+                                encode_move(lsb, lsb - 8, QUEEN, PROMOTION_FLAG);
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, lsb - 8, BR, PROMOTION_FLAG);
+                                encode_move(lsb, lsb - 8, ROOK, PROMOTION_FLAG);
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, lsb - 8, BB, PROMOTION_FLAG);
+                                encode_move(lsb, lsb - 8, BISHOP, PROMOTION_FLAG);
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, lsb - 8, BN, PROMOTION_FLAG);
+                                encode_move(lsb, lsb - 8, KNIGHT, PROMOTION_FLAG);
                             first_unused += 1;
                         } else {
                             self.moves[first_unused] = encode_move(lsb, lsb - 8, NO_PIECE, NO_FLAG);
@@ -238,30 +238,30 @@ impl MoveList {
                     if piece == WP && rank(lsb) == 6 {
                         // white promotion
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, WQ, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, QUEEN, PROMOTION_FLAG);
                         first_unused += 1;
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, WR, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, ROOK, PROMOTION_FLAG);
                         first_unused += 1;
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, WB, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, BISHOP, PROMOTION_FLAG);
                         first_unused += 1;
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, WN, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, KNIGHT, PROMOTION_FLAG);
                         first_unused += 1;
                     } else if piece == BP && rank(lsb) == 1 {
                         //black promotion
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, BQ, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, QUEEN, PROMOTION_FLAG);
                         first_unused += 1;
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, BR, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, ROOK, PROMOTION_FLAG);
                         first_unused += 1;
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, BB, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, BISHOP, PROMOTION_FLAG);
                         first_unused += 1;
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, BN, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, KNIGHT, PROMOTION_FLAG);
                         first_unused += 1;
                     } else if lsb_attack == board.en_passant && piece_type(piece) == PAWN {
                         moves.moves[first_unused] =
@@ -337,30 +337,30 @@ impl MoveList {
                     if (get_bit(lsb, board.bitboards[WP]) > 0) && rank(lsb) == 6 {
                         // white promotion
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, WQ, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, QUEEN, PROMOTION_FLAG);
                         first_unused += 1;
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, WR, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, ROOK, PROMOTION_FLAG);
                         first_unused += 1;
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, WB, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, BISHOP, PROMOTION_FLAG);
                         first_unused += 1;
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, WN, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, KNIGHT, PROMOTION_FLAG);
                         first_unused += 1;
                     } else if (get_bit(lsb, board.bitboards[BP]) > 0) && rank(lsb) == 1 {
                         //black promotion
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, BQ, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, QUEEN, PROMOTION_FLAG);
                         first_unused += 1;
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, BR, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, ROOK, PROMOTION_FLAG);
                         first_unused += 1;
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, BB, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, BISHOP, PROMOTION_FLAG);
                         first_unused += 1;
                         moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, BN, PROMOTION_FLAG);
+                            encode_move(lsb, lsb_attack, KNIGHT, PROMOTION_FLAG);
                         first_unused += 1;
                     } else if lsb_attack == board.en_passant && piece_type(piece) == PAWN {
                         moves.moves[first_unused] =

@@ -55,7 +55,7 @@ pub fn parse_move(input: &str, board: Board) -> Move {
                 input.chars().collect::<Vec<char>>()[4]
             ),
         };
-        return encode_move(sq_from, sq_to, promoted_piece, PROMOTION_FLAG);
+        return encode_move(sq_from, sq_to, piece_type(promoted_piece), PROMOTION_FLAG);
     }
     if (sq_from == E1 && get_bit(E1, board.bitboards[WK]) == 1 && (sq_to == G1 || sq_to == C1))
         || (sq_from == E8 && get_bit(E8, board.bitboards[BK]) == 1 && (sq_to == G8 || sq_to == C8))
@@ -178,7 +178,7 @@ pub fn uci_loop() {
             CommandType::Position => parse_position(buffer.as_str(), &mut board),
             CommandType::Go => {
                 let move_data = parse_go(buffer.as_str(), &mut board);
-                if move_data.m == NULL_MOVE {
+                if move_data.m.is_null() {
                     break;
                 }
                 print!("bestmove ");
@@ -188,11 +188,11 @@ pub fn uci_loop() {
                         + {
                             if move_data.m.is_promotion() {
                                 match move_data.m.promoted_piece() {
-                                    1 | 7 => "n",
-                                    2 | 8 => "b",
-                                    3 | 9 => "r",
-                                    4 | 10 => "q",
-                                    15 => "",
+                                    WN | BN => "n",
+                                    WB | BB => "b",
+                                    WR | BR => "r",
+                                    WQ | BQ => "q",
+                                    NO_PIECE => "",
                                     _ => "impossible",
                                 }
                             } else {
