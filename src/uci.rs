@@ -34,40 +34,35 @@ pub fn parse_move(input: &str, board: Board) -> Move {
     let sq_to = square(&input[2..4]);
     if input.len() == 5 {
         let promoted_piece = match input.chars().collect::<Vec<char>>()[4] {
-            'q' => match board.side_to_move {
-                Colour::White => 4,
-                Colour::Black => 10,
+            'q' | 'Q' => match board.side_to_move {
+                Colour::White => WQ,
+                Colour::Black => BQ,
             },
-            'r' => match board.side_to_move {
-                Colour::White => 3,
-                Colour::Black => 9,
+            'r' | 'R' => match board.side_to_move {
+                Colour::White => WR,
+                Colour::Black => BR,
             },
-            'b' => match board.side_to_move {
-                Colour::White => 2,
-                Colour::Black => 8,
+            'b' | 'B' => match board.side_to_move {
+                Colour::White => WB,
+                Colour::Black => BB,
             },
-            'n' => match board.side_to_move {
-                Colour::White => 1,
-                Colour::Black => 7,
+            'n' | 'N' => match board.side_to_move {
+                Colour::White => WN,
+                Colour::Black => BN,
             },
             _ => panic!(
                 "invalid promoted piece {}",
                 input.chars().collect::<Vec<char>>()[4]
             ),
         };
-        return encode_move(sq_from, sq_to, promoted_piece, &board, false);
+        return encode_move(sq_from, sq_to, promoted_piece, PROMOTION_FLAG);
     }
-    let mut castling = false;
-    if (sq_from == square("e1")
-        && get_bit(square("e1"), board.bitboards[5]) == 1
-        && (sq_to == square("g1") || sq_to == square("c1")))
-        || (sq_from == square("e8")
-            && get_bit(square("e8"), board.bitboards[11]) == 1
-            && (sq_to == square("g8") || sq_to == square("c8")))
+    if (sq_from == E1 && get_bit(E1, board.bitboards[WK]) == 1 && (sq_to == G1 || sq_to == C1))
+        || (sq_from == E8 && get_bit(E8, board.bitboards[BK]) == 1 && (sq_to == G8 || sq_to == C8))
     {
-        castling = true;
+        return encode_move(sq_from, sq_to, NO_PIECE, CASTLING_FLAG);
     }
-    encode_move(sq_from, sq_to, 15, &board, castling)
+    encode_move(sq_from, sq_to, NO_PIECE, NO_FLAG)
 }
 
 pub fn parse_uci(command: &str) {
@@ -190,13 +185,19 @@ pub fn uci_loop() {
                 println!("{}", {
                     coordinate(move_data.m.square_from())
                         + coordinate(move_data.m.square_to()).as_str()
-                        + match move_data.m.promoted_piece() {
-                            1 | 7 => "n",
-                            2 | 8 => "b",
-                            3 | 9 => "r",
-                            4 | 10 => "q",
-                            15 => "",
-                            _ => "impossible",
+                        + {
+                            if move_data.m.is_promotion() {
+                                match move_data.m.promoted_piece() {
+                                    1 | 7 => "n",
+                                    2 | 8 => "b",
+                                    3 | 9 => "r",
+                                    4 | 10 => "q",
+                                    15 => "",
+                                    _ => "impossible",
+                                }
+                            } else {
+                                ""
+                            }
                         }
                 });
             }

@@ -3,7 +3,8 @@ use crate::helper::*;
 #[derive(Debug, Clone, Copy)]
 pub struct Board {
     pub bitboards: [u64; 12],
-    pub occupancies: [u64; 3], //white, black, both
+    pub pieces_array: [usize; 64], //used to speed up move generation
+    pub occupancies: [u64; 3],     //white, black, both
     pub castling: u8, //4 bits only should be used 0001 = wk, 0010 = wq, 0100 = bk, 1000 = bq
     pub en_passant: usize, //ep square index
     pub side_to_move: Colour,
@@ -40,6 +41,7 @@ impl Board {
     pub fn from(fen: &str) -> Self {
         let mut new_board = Board {
             bitboards: [0u64; 12],
+            pieces_array: [NO_PIECE; 64],
             occupancies: [0u64; 3],
             castling: 0,
             en_passant: NO_SQUARE,
@@ -124,6 +126,7 @@ impl Board {
                         rank * 8 + file,
                         new_board.bitboards[ascii_to_piece_index(c)],
                     );
+                    new_board.pieces_array[rank * 8 + file] = ascii_to_piece_index(c);
                     file += 1
                 }
                 _ => panic!("unexpected character {}", c),

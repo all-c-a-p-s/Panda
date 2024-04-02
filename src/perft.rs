@@ -6,11 +6,10 @@ pub const PERFT_DEPTH: usize = 5;
 
 pub fn perft(depth: usize, b: &mut Board) -> usize {
     let mut total = 0;
-    let moves = gen_legal(b);
+    let moves = MoveList::gen_legal(b);
     let mut added = 0;
-    //(*b).print_board();
     for i in 0..MAX_MOVES {
-        if moves.moves[i] == NULL_MOVE {
+        if moves.moves[i].is_null() {
             if depth == 1 {
                 return i;
             }

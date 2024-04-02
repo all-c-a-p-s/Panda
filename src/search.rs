@@ -1,6 +1,5 @@
 use crate::board::*;
 use crate::eval::*;
-use crate::get_bit;
 use crate::helper::*;
 use crate::movegen::*;
 use crate::r#move::*;
@@ -39,11 +38,8 @@ pub struct Searcher {
     pub moves_searched: usize,
 }
 
-fn reduction_ok(m: Move, is_check: bool) -> bool {
-    if m.is_capture() || m.promoted_piece() != 15 {
-        return false;
-    }
-    !is_check //false if board is check
+fn reduction_ok(tactical: bool, is_check: bool) -> bool {
+    !(tactical || is_check)
 }
 
 fn make_null_move(b: &mut Board) -> usize {
@@ -106,15 +102,22 @@ impl Searcher {
         self.pv_length[self.ply] = self.ply;
         let mut hash_flag = EntryFlag::Alpha;
 
-        if depth == 0 {
-            return self.quiescence_search(position, alpha, beta);
-        }
+        if self.ply != 0 {
+            if position.fifty_move == 100 {
+                //this is here instead of eval to save some nodes in cases
+                //where 50 move rule is reached on non-leaf node
+                //in theory if the fiftieth move is mate this doesn't work
+                return 0;
+            }
 
-        if position.fifty_move == 100 {
-            //this is here instead of eval to save some nodes in cases
-            //where 50 move rule is reached on non-leaf node
-            //in theory if the fiftieth move is mate this doesn't work
-            return 0;
+            //mate distance pruning:
+            //check if line is so good/bad that being mated in the current ply
+            //or mating in the next ply would not change alpha/beta
+            let r_alpha = cmp::max(alpha, -INFINITY + self.ply as i32);
+            let r_beta = cmp::min(beta, INFINITY - self.ply as i32 - 1);
+            if r_alpha >= r_beta {
+                return r_alpha;
+            }
         }
 
         let hash_key = hash(position);
@@ -179,6 +182,10 @@ impl Searcher {
             }
         }
 
+        if depth == 0 {
+            return self.quiescence_search(position, alpha, beta);
+        }
+
         let is_check = match position.side_to_move {
             //used in both search extensions and LMR
             Colour::White => is_attacked(lsfb(position.bitboards[WK]), Colour::Black, position),
@@ -211,10 +218,10 @@ impl Searcher {
             }
         }
 
-        let mut child_nodes = gen_legal(position);
-        child_nodes.order_moves(*position, self);
+        let mut child_nodes = MoveList::gen_legal(position);
+        child_nodes.order_moves(position, self);
 
-        if child_nodes.moves[0] == NULL_MOVE {
+        if child_nodes.moves[0].is_null() {
             //no legal moves
             return match is_check {
                 true => -INFINITY + self.ply as i32,
@@ -223,9 +230,13 @@ impl Searcher {
         }
 
         for i in 0..MAX_MOVES {
-            if child_nodes.moves[i] == NULL_MOVE {
+            if child_nodes.moves[i].is_null() {
                 break;
             }
+
+            let tactical = child_nodes.moves[i].is_tactical(position);
+            //must be done before making the move on the board
+
             let commit = position.make_move(child_nodes.moves[i]);
             self.ply += 1;
 
@@ -237,7 +248,7 @@ impl Searcher {
                 false => {
                     let mut reduction_eval = match i >= FULL_DEPTH_MOVES
                         && depth >= REDUCTION_LIMIT
-                        && reduction_ok(child_nodes.moves[i], is_check)
+                        && reduction_ok(tactical, is_check)
                     {
                         true => -self.negamax(position, depth - 2, -alpha - 1, -alpha),
                         false => alpha + 1, //hack to make sure always > alpha so always searched properly
@@ -259,7 +270,7 @@ impl Searcher {
             unsafe { REPETITION_TABLE[position.ply] = 0u64 };
 
             if eval >= beta {
-                if !child_nodes.moves[i].is_capture() {
+                if !tactical {
                     self.killer_moves[1][self.ply] = self.killer_moves[0][self.ply];
                     self.killer_moves[0][self.ply] = child_nodes.moves[i];
                 }
@@ -277,8 +288,8 @@ impl Searcher {
                 return beta;
             }
             if eval > alpha {
-                if !child_nodes.moves[i].is_capture() {
-                    self.history_scores[child_nodes.moves[i].piece_moved()]
+                if !tactical {
+                    self.history_scores[child_nodes.moves[i].piece_moved(position)]
                         [child_nodes.moves[i].square_to()] += depth as i32 * depth as i32;
                     //idea that moves closer to root node are more significant
                 }
@@ -314,14 +325,59 @@ impl Searcher {
     }
 
     pub fn quiescence_search(&mut self, position: &mut Board, alpha: i32, beta: i32) -> i32 {
+        let hash_key = hash(position);
+        let mut hash_flag = EntryFlag::Alpha;
+        match position.side_to_move {
+            //hash lookup
+            //hash entry of any depth will necessarily have had a quiesecence search done
+            //so we accept any hash entry that we find
+            Colour::White => {
+                if let Some(entry) = self.tt_white.get(&hash_key) {
+                    match entry.flag {
+                        EntryFlag::Beta => {
+                            //lower bound hash entry
+                            if entry.eval >= beta {
+                                return beta;
+                            }
+                        }
+                        EntryFlag::Alpha => {
+                            //upper bound entry
+                            if entry.eval <= alpha {
+                                return alpha;
+                            }
+                        }
+                        EntryFlag::Exact => return entry.eval,
+                        //pv entry
+                    }
+                }
+            }
+            Colour::Black => {
+                if let Some(entry) = self.tt_black.get(&hash_key) {
+                    match entry.flag {
+                        EntryFlag::Beta => {
+                            if entry.eval >= beta {
+                                return beta;
+                            }
+                        }
+                        EntryFlag::Alpha => {
+                            if entry.eval <= alpha {
+                                return alpha;
+                            }
+                        }
+                        EntryFlag::Exact => return entry.eval,
+                    }
+                };
+            }
+        }
+
         let eval = evaluate(position);
         self.nodes += 1;
+        //node count = every position that gets evaluated
         if eval >= beta {
             return beta;
         }
 
         //don't need repetition detection as it's impossible to have repetition with captures
-
         let delta = 1000; //delta pruning - try to avoid wasting time on hopeless positions
         if eval < alpha - delta {
             return alpha;
@@ -329,86 +385,141 @@ impl Searcher {
 
         let mut alpha = cmp::max(alpha, eval);
 
-        let mut moves = gen_captures(position);
+        let mut captures = MoveList::gen_captures(position);
 
-        if moves.moves[0] == NULL_MOVE {
+        if captures.moves[0].is_null() {
+            //no captures
             return alpha;
         }
 
-        moves.order_moves(*position, self);
+        captures.order_moves(position, self);
         for i in 0..MAX_MOVES {
-            if moves.moves[i] == NULL_MOVE {
+            if captures.moves[i].is_null() {
                 break;
             }
-            let commit = position.make_move(moves.moves[i]);
+            let commit = position.make_move(captures.moves[i]);
             self.ply += 1;
             let eval = -self.quiescence_search(position, -beta, -alpha);
-            position.undo_move(moves.moves[i], commit);
+            position.undo_move(captures.moves[i], commit);
             self.ply -= 1;
             if eval >= beta {
+                let hash_entry = TTEntry {
+                    flag: EntryFlag::Beta,
+                    depth: 0,
+                    eval: beta,
+                };
+                match position.side_to_move {
+                    Colour::White => self.tt_white.insert(hash_key, hash_entry),
+                    Colour::Black => self.tt_black.insert(hash_key, hash_entry),
+                };
                 return beta;
+            }
+            if eval > alpha {
+                alpha = eval;
+                hash_flag = EntryFlag::Exact;
             }
             alpha = cmp::max(alpha, eval);
         }
+        let hash_entry = TTEntry {
+            flag: hash_flag,
+            depth: 0,
+            eval: alpha,
+        };
+        match position.side_to_move {
+            Colour::White => self.tt_white.insert(hash_key, hash_entry),
+            Colour::Black => self.tt_black.insert(hash_key, hash_entry),
+        };
         alpha
     }
 }
 
 const MVV_LVA: [[i32; 6]; 6] = [
     //most valuable victim least valuable attacker
-    [601, 501, 401, 301, 201, 101], //victim pawn
-    [602, 502, 402, 302, 202, 102], //victim knight
-    [603, 503, 403, 303, 203, 103], //victim bishop
-    [604, 504, 404, 304, 204, 104], //victim rook
-    [605, 505, 405, 305, 205, 105], //victim queen
+    [205, 204, 203, 202, 201, 200], //victim pawn
+    [305, 304, 303, 302, 301, 300], //victim knight
+    [405, 404, 403, 402, 401, 400], //victim bishop
+    [505, 504, 503, 502, 501, 500], //victim rook
+    [605, 604, 603, 602, 601, 600], //victim queen
     [0, 0, 0, 0, 0, 0],             //victim king
 ];
 
 impl Move {
-    pub fn score_move(&mut self, b: Board, s: &Searcher) {
-        if (*self) == NULL_MOVE {
-            self.move_order_score = -INFINITY;
-            return;
+    pub fn score_move(self, b: &Board, s: &Searcher) -> i32 {
+        if self.is_null() {
+            return -INFINITY;
         }
-
         let pv_move = s.pv[0][s.ply];
         if self.square_from() == pv_move.square_from() && self.square_to() == pv_move.square_to() {
             //there has to be a cleaner way to do this but dereferencing pointer doesn't work
-            self.move_order_score = INFINITY; //pv move searched first
-            return;
-        }
-        if self.is_capture() {
-            let mut victim_type: usize = 7; //initialise as impossible value
-            for i in 0..12 {
-                if get_bit(self.square_to(), b.bitboards[i]) == 1 {
-                    victim_type = i % 6;
-                    break;
-                }
+            INFINITY //pv move searched first
+        } else if self.is_capture(b) {
+            let victim_type: usize = piece_type(b.pieces_array[self.square_to()]);
+            let attacker_type = piece_type(self.piece_moved(b));
+            if self.is_promotion() {
+                return match self.promoted_piece() {
+                    //promotions sorted by likelihood to be good
+                    4 => 1000,
+                    1 => 900,
+                    3 => 800,
+                    2 => 700,
+                    _ => panic!("impossible"),
+                } + MVV_LVA[victim_type][attacker_type];
             }
-            let attacker_type = self.piece_moved() % 6;
-            self.move_order_score = MVV_LVA[victim_type][attacker_type];
+            MVV_LVA[victim_type][attacker_type]
+        } else if self.is_promotion() {
+            match self.promoted_piece() {
+                //promotions sorted by likelihood to be good
+                4 => 1000,
+                1 => 900,
+                3 => 800,
+                2 => 700,
+                _ => panic!("impossible"),
+            }
         } else if self.is_en_passant() {
-            self.move_order_score = MVV_LVA[0][0];
-        } else if s.killer_moves[0][s.ply] == *self {
-            self.move_order_score = 90; //after captures
-        } else if s.killer_moves[1][s.ply] == *self {
-            self.move_order_score = 80;
+            MVV_LVA[PAWN][PAWN]
+        } else if s.killer_moves[0][s.ply] == self {
+            90 //after captures
+        } else if s.killer_moves[1][s.ply] == self {
+            80
         } else {
-            self.move_order_score = s.history_scores[self.piece_moved()][self.square_to()];
+            s.history_scores[self.piece_moved(b)][self.square_to()]
         }
     }
 }
 
+#[derive(Copy, Clone)]
+pub struct MoveOrderEntry<'a> {
+    m: &'a Move,
+    score: i32,
+}
+
 impl MoveList {
-    pub fn order_moves(&mut self, board: Board, s: &Searcher) {
-        for i in 0..MAX_MOVES {
-            if self.moves[i] == NULL_MOVE {
+    pub fn order_moves(&mut self, board: &Board, s: &Searcher) {
+        let mut ordered_moves = [MoveOrderEntry {
+            m: &NULL_MOVE,
+            score: 0,
+        }; MAX_MOVES];
+
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..self.moves.len() {
+            if self.moves[i].is_null() {
                 break;
             }
-            self.moves[i].score_move(board, s);
+            ordered_moves[i].m = &self.moves[i];
+            ordered_moves[i].score = self.moves[i].score_move(board, s);
         }
-        self.moves
-            .sort_by(|a, b| b.move_order_score.cmp(&a.move_order_score));
+
+        ordered_moves.sort_by(|a, b| b.score.cmp(&a.score));
+
+        let mut final_moves = [NULL_MOVE; MAX_MOVES];
+
+        for i in 0..MAX_MOVES {
+            if ordered_moves[i].m.is_null() {
+                break;
+            }
+            final_moves[i] = *ordered_moves[i].m;
+        }
+        self.moves = final_moves
     }
 }
 

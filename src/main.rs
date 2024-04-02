@@ -13,8 +13,7 @@ pub mod zobrist;
 use crate::board::*;
 use crate::helper::*;
 use crate::magic::*;
-use crate::movegen::*;
-use crate::perft::full_perft;
+use crate::perft::*;
 use crate::r#move::*;
 use crate::search::*;
 use crate::uci::*;
@@ -27,7 +26,7 @@ fn init_all() {
 fn main() {
     init_all();
 
-    let debug = true;
+    let debug = false;
     if debug {
         full_perft();
     } else {

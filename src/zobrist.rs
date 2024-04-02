@@ -80,28 +80,28 @@ pub fn incemental_hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
     //call with board state before move was made
     let mut res = hash_key;
 
-    res ^= PIECE_KEYS[m.square_from()][m.piece_moved()];
-    res ^= PIECE_KEYS[m.square_to()][m.piece_moved()];
+    res ^= PIECE_KEYS[m.square_from()][m.piece_moved(b)];
+    res ^= PIECE_KEYS[m.square_to()][m.piece_moved(b)];
 
-    if m.piece_moved() == WK {
+    if m.piece_moved(b) == WK {
         res ^= CASTLING_KEYS[b.castling as usize];
         res ^= CASTLING_KEYS[(b.castling & 0b00000011) as usize];
-    } else if m.piece_moved() == BK {
+    } else if m.piece_moved(b) == BK {
         res ^= CASTLING_KEYS[b.castling as usize];
         res ^= CASTLING_KEYS[(b.castling & 0b00001100) as usize];
     }
 
-    if m.piece_moved() == WR && m.square_to() == 7 && (b.castling & 0b00001000 > 0) {
+    if m.piece_moved(b) == WR && m.square_to() == H1 && (b.castling & 0b00001000 > 0) {
         res ^= CASTLING_KEYS[0b00001000]
-    } else if m.piece_moved() == WR && m.square_to() == 0 && (b.castling & 0b00000100 > 0) {
+    } else if m.piece_moved(b) == WR && m.square_to() == A1 && (b.castling & 0b00000100 > 0) {
         res ^= CASTLING_KEYS[0b00000100]
-    } else if m.piece_moved() == BR && m.square_to() == 63 && (b.castling & 0b00000010 > 0) {
+    } else if m.piece_moved(b) == BR && m.square_to() == H8 && (b.castling & 0b00000010 > 0) {
         res ^= CASTLING_KEYS[0b00000010]
-    } else if m.piece_moved() == BR && m.square_to() == 56 && (b.castling & 0b00000001 > 0) {
+    } else if m.piece_moved(b) == BR && m.square_to() == A8 && (b.castling & 0b00000001 > 0) {
         res ^= CASTLING_KEYS[0b00000001]
     }
 
-    if m.is_capture() {
+    if m.is_capture(b) {
         //not including en passant
         for i in 0..12 {
             if get_bit(m.square_to(), b.bitboards[i]) == 1 {
@@ -121,7 +121,7 @@ pub fn incemental_hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
     }
 
     if m.is_en_passant() {
-        match m.piece_moved() {
+        match m.piece_moved(b) {
             WP => {
                 res ^= PIECE_KEYS[m.square_to() - 8][6];
             }
@@ -133,7 +133,7 @@ pub fn incemental_hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
     }
 
     if m.promoted_piece() != NO_PIECE {
-        res ^= PIECE_KEYS[m.square_to()][m.piece_moved()];
+        res ^= PIECE_KEYS[m.square_to()][m.piece_moved(b)];
         //undo operation from before (works bc XOR is its own inverse)
         res ^= PIECE_KEYS[m.square_to()][m.promoted_piece()];
     }
