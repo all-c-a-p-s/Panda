@@ -30,37 +30,31 @@ pub fn recognise_command(command: &str) -> CommandType {
 pub const STARTPOS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 pub fn parse_move(input: &str, board: Board) -> Move {
+    //BUG: needs to detect e.p. flag
     let sq_from = square(&input[0..2]);
     let sq_to = square(&input[2..4]);
+    let piece = board.pieces_array[sq_from];
     if input.len() == 5 {
+        //only type of piece encoded because only 2 bits used in the move
+        //and the flag is used to detect promotions
         let promoted_piece = match input.chars().collect::<Vec<char>>()[4] {
-            'q' | 'Q' => match board.side_to_move {
-                Colour::White => WQ,
-                Colour::Black => BQ,
-            },
-            'r' | 'R' => match board.side_to_move {
-                Colour::White => WR,
-                Colour::Black => BR,
-            },
-            'b' | 'B' => match board.side_to_move {
-                Colour::White => WB,
-                Colour::Black => BB,
-            },
-            'n' | 'N' => match board.side_to_move {
-                Colour::White => WN,
-                Colour::Black => BN,
-            },
+            'q' | 'Q' => QUEEN,
+            'r' | 'R' => ROOK,
+            'b' | 'B' => BISHOP,
+            'n' | 'N' => KNIGHT,
             _ => panic!(
                 "invalid promoted piece {}",
                 input.chars().collect::<Vec<char>>()[4]
             ),
         };
-        return encode_move(sq_from, sq_to, piece_type(promoted_piece), PROMOTION_FLAG);
+        return encode_move(sq_from, sq_to, promoted_piece, PROMOTION_FLAG);
     }
-    if (sq_from == E1 && get_bit(E1, board.bitboards[WK]) == 1 && (sq_to == G1 || sq_to == C1))
-        || (sq_from == E8 && get_bit(E8, board.bitboards[BK]) == 1 && (sq_to == G8 || sq_to == C8))
+    if (sq_from == E1 && piece == WK && (sq_to == G1 || sq_to == C1))
+        || (sq_from == E8 && piece == BK && (sq_to == G8 || sq_to == C8))
     {
         return encode_move(sq_from, sq_to, NO_PIECE, CASTLING_FLAG);
+    } else if sq_to == board.en_passant && piece_type(piece) == PAWN {
+        return encode_move(sq_from, sq_to, NO_PIECE, EN_PASSANT_FLAG);
     }
     encode_move(sq_from, sq_to, NO_PIECE, NO_FLAG)
 }

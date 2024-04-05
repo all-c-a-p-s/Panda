@@ -11,6 +11,7 @@ pub struct Board {
     pub fifty_move: u8,
     pub ply: usize,
     pub last_move_null: bool,
+    pub hash_key: u64,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -49,6 +50,7 @@ impl Board {
             fifty_move: 0,
             ply: 0,
             last_move_null: false,
+            hash_key: 0,
         };
 
         let mut board_fen: String = String::new();

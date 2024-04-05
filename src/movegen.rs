@@ -64,6 +64,8 @@ impl MoveList {
                     if get_bit(lsb + 8, board.occupancies[BOTH]) == 0 {
                         if rank(lsb) == 6 {
                             //promotion
+                            //the piece type is passed into encode_move because only 2 bits are used to encode
+                            //the promoted piece (and flag is used to detect if there is one)
                             self.moves[first_unused] =
                                 encode_move(lsb, lsb + 8, QUEEN, PROMOTION_FLAG);
                             first_unused += 1;
@@ -139,7 +141,7 @@ impl MoveList {
                         && get_bit(G1, board.occupancies[BOTH]) == 0
                         && !is_attacked(E1, Colour::Black, board)
                         && !is_attacked(F1, Colour::Black, board)
-                    //g1 chcked later
+                    //g1 checked later
                     {
                         self.moves[first_unused] = encode_move(E1, G1, NO_PIECE, CASTLING_FLAG);
                         first_unused += 1;

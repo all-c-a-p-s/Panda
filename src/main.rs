@@ -7,6 +7,7 @@ pub mod movegen;
 pub mod perft;
 pub mod rng;
 pub mod search;
+pub mod transposition;
 pub mod uci;
 pub mod zobrist;
 
@@ -26,8 +27,9 @@ fn init_all() {
 fn main() {
     init_all();
 
-    let debug = true;
+    let debug = false;
     if debug {
+        //full_hash_test();
         full_perft();
     } else {
         uci_loop();

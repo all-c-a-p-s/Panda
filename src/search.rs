@@ -3,7 +3,7 @@ use crate::eval::*;
 use crate::helper::*;
 use crate::movegen::*;
 use crate::r#move::*;
-use crate::zobrist::*;
+use crate::transposition::*;
 
 use std::cmp;
 use std::collections::HashMap;
@@ -18,10 +18,17 @@ const FULL_DEPTH_MOVES: usize = 4;
 const NULLMOVE_R: usize = 2;
 const ASPIRATION_WINDOW: i32 = 50;
 
+const RAZORING_MARGIN: i32 = 300;
+const MAX_RAZOR_DEPTH: usize = 4;
+
+const ALPHA_PRUNING_DEPTH: usize = 4;
+const ALPHA_PRUNING_MARGIN: i32 = 2000;
+
 pub const MAX_GAME_PLY: usize = 1024;
 
-const TIME_TO_MOVE: usize = 1000;
-//leave a second to cancel search and output best move
+const TIME_TO_MOVE: usize = 100;
+const TIME_TO_START_SEARCH: usize = 0; //initialise big TT (if not using HashMap)
+                                       //leave a second total margin
 
 pub static mut REPETITION_TABLE: [u64; MAX_GAME_PLY] = [0u64; MAX_GAME_PLY];
 
@@ -75,8 +82,8 @@ impl Searcher {
             history_scores: [[0; 64]; 12],
             pv_length: [0usize; 64],
             pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
-            tt_white: HashMap::new(),
-            tt_black: HashMap::new(),
+            tt_white: HashMap::new(), //128 MB
+            tt_black: HashMap::new(), //seems to work pretty well (avoids t1 errors)
             ply: 0,
             nodes: 0,
             end_time,
@@ -88,16 +95,25 @@ impl Searcher {
         &mut self,
         position: &mut Board,
         mut depth: usize,
-        alpha: i32,
+        mut alpha: i32,
         beta: i32,
     ) -> i32 {
-        if Instant::now() > self.end_time {
+        /* return a score that can never be >= alpha if the search is cancelled
+        other engines return zero here but I don't see how this would work
+        in cases where 0 > alpha. Returning value that gets recursively passed
+        so that it is equal to -INFINITY for the engine should work imo because
+        if this happens on PV move it breaks during the main moves loop below
+        and so count of moves searched fully is zero -> discard result */
+        if Instant::now() > self.end_time && self.ply != 0 {
             return match self.ply % 2 {
                 0 => -INFINITY,
                 1 => INFINITY,
-                _ => panic!("maths is broken lol"),
+                _ => unreachable!(),
             };
         }
+
+        let is_pv = beta - alpha != 1;
+        //full window search
 
         self.pv_length[self.ply] = self.ply;
         let mut hash_flag = EntryFlag::Alpha;
@@ -118,71 +134,33 @@ impl Searcher {
             if r_alpha >= r_beta {
                 return r_alpha;
             }
-        }
 
-        let hash_key = hash(position);
-        let mut repetition_count = 0;
-        unsafe {
-            for key in REPETITION_TABLE.iter().take(position.ply) {
-                if *key == hash_key {
-                    repetition_count += 1;
-                    //return 0 even for single repetition
+            let mut repetition_count = 0;
+            unsafe {
+                for key in REPETITION_TABLE.iter().take(position.ply) {
+                    if *key == position.hash_key {
+                        repetition_count += 1;
+                    }
                 }
+            }
+
+            if repetition_count > 1 {
+                return 0;
             }
         }
 
-        if repetition_count > 1 {
-            return 0;
-        }
-
-        let mut alpha = alpha;
-
-        match position.side_to_move {
+        let hash_lookup = match position.side_to_move {
             //hash lookup
-            Colour::White => {
-                if let Some(entry) = self.tt_white.get(&hash_key) {
-                    if entry.depth >= depth {
-                        match entry.flag {
-                            EntryFlag::Beta => {
-                                //lower bound hash entry
-                                if entry.eval >= beta {
-                                    return beta;
-                                }
-                            }
-                            EntryFlag::Alpha => {
-                                //upper bound entry
-                                if entry.eval <= alpha {
-                                    return alpha;
-                                }
-                            }
-                            EntryFlag::Exact => return entry.eval,
-                            //pv entry
-                        }
-                    }
-                }
-            }
-            Colour::Black => {
-                if let Some(entry) = self.tt_black.get(&hash_key) {
-                    if entry.depth >= depth {
-                        match entry.flag {
-                            EntryFlag::Beta => {
-                                if entry.eval >= beta {
-                                    return beta;
-                                }
-                            }
-                            EntryFlag::Alpha => {
-                                if entry.eval <= alpha {
-                                    return alpha;
-                                }
-                            }
-                            EntryFlag::Exact => return entry.eval,
-                        }
-                    }
-                };
-            }
-        }
+            Colour::White => self.tt_white.lookup(position.hash_key, alpha, beta, depth),
+            Colour::Black => self.tt_black.lookup(position.hash_key, alpha, beta, depth),
+        };
+
+        if let Some(k) = hash_lookup {
+            return k;
+        };
 
         if depth == 0 {
+            //qsearch on leaf nodes
             return self.quiescence_search(position, alpha, beta);
         }
 
@@ -191,6 +169,23 @@ impl Searcher {
             Colour::White => is_attacked(lsfb(position.bitboards[WK]), Colour::Black, position),
             Colour::Black => is_attacked(lsfb(position.bitboards[BK]), Colour::White, position),
         };
+
+        let static_eval = evaluate(position);
+        if !is_check && !is_pv {
+            //eval is very low so only realistic way to increase it is with captures
+            //we only need to qsearch to evaluate the position
+            if depth <= MAX_RAZOR_DEPTH && static_eval + RAZORING_MARGIN * (depth as i32) <= alpha {
+                let score = self.quiescence_search(position, alpha, beta);
+                if score > alpha {
+                    return score;
+                }
+            }
+
+            //eval is so bad that even a huge margin fails to raise alpha
+            if depth <= ALPHA_PRUNING_DEPTH && static_eval + ALPHA_PRUNING_MARGIN <= alpha {
+                return static_eval;
+            }
+        }
 
         if is_check && self.ply != 0 {
             depth += 1;
@@ -222,7 +217,7 @@ impl Searcher {
         child_nodes.order_moves(position, self);
 
         if child_nodes.moves[0].is_null() {
-            //no legal moves
+            //no legal moves -> mate or stalemate
             return match is_check {
                 true => -INFINITY + self.ply as i32,
                 false => 0,
@@ -231,6 +226,7 @@ impl Searcher {
 
         for i in 0..MAX_MOVES {
             if child_nodes.moves[i].is_null() {
+                //no moves/no time left
                 break;
             }
 
@@ -240,12 +236,17 @@ impl Searcher {
             let commit = position.make_move(child_nodes.moves[i]);
             self.ply += 1;
 
-            unsafe { REPETITION_TABLE[position.ply] = hash(position) };
+            unsafe { REPETITION_TABLE[position.ply] = position.hash_key };
 
             let eval = match i == 0 {
                 true => -self.negamax(position, depth - 1, -beta, -alpha),
-                //normal search on pv move
+                //normal search on pv move (no moves searched yet)
                 false => {
+                    /* non-pv move -> search with reduced window
+                    this assumes that our move ordering is good enough
+                    that we will be able to prove that these moves are bad
+                    often enough that it outweighs the cost of re-searching
+                    then if we are unable to prove so */
                     let mut reduction_eval = match i >= FULL_DEPTH_MOVES
                         && depth >= REDUCTION_LIMIT
                         && reduction_ok(tactical, is_check)
@@ -254,10 +255,13 @@ impl Searcher {
                         false => alpha + 1, //hack to make sure always > alpha so always searched properly
                     };
                     if reduction_eval > alpha {
+                        //failed to prove that move is bad -> re-search with same depth but reduced
+                        //window
                         reduction_eval = -self.negamax(position, depth - 1, -alpha - 1, -alpha);
                     }
 
                     if reduction_eval > alpha && reduction_eval < beta {
+                        //move actually inside PV window -> search at full depth
                         reduction_eval = -self.negamax(position, depth - 1, -beta, -alpha);
                     }
                     reduction_eval
@@ -269,20 +273,24 @@ impl Searcher {
 
             unsafe { REPETITION_TABLE[position.ply] = 0u64 };
 
+            if Instant::now() > self.end_time && self.ply == 0 {
+                break;
+                //as above
+            }
+
             if eval >= beta {
+                //only write quiet moves into history table because captures
+                //will be scored separately
                 if !tactical {
                     self.killer_moves[1][self.ply] = self.killer_moves[0][self.ply];
                     self.killer_moves[0][self.ply] = child_nodes.moves[i];
                 }
 
-                let hash_entry = TTEntry {
-                    flag: EntryFlag::Beta,
-                    depth,
-                    eval: beta,
-                };
+                //write to hash table
+                let hash_entry = TTEntry::new(depth, beta, EntryFlag::Beta);
                 match position.side_to_move {
-                    Colour::White => self.tt_white.insert(hash(position), hash_entry),
-                    Colour::Black => self.tt_black.insert(hash(position), hash_entry),
+                    Colour::White => self.tt_white.write(position.hash_key, hash_entry),
+                    Colour::Black => self.tt_black.write(position.hash_key, hash_entry),
                 };
 
                 return beta;
@@ -304,71 +312,34 @@ impl Searcher {
                 hash_flag = EntryFlag::Exact;
             }
 
-            if Instant::now() > self.end_time && self.ply == 0 {
-                //check if time is up every time at root node
-                //this way pv shouldn't get messed up, although time usage might be imperfect
-                break;
-            } else if self.ply == 0 {
+            if self.ply == 0 {
                 self.moves_searched += 1;
+                //used to ensure in the iterative deepening search that
+                //at least one move has been searched fully
             }
         }
-        let hash_entry = TTEntry {
-            flag: hash_flag,
-            depth,
-            eval: alpha,
-        };
+        let hash_entry = TTEntry::new(depth, alpha, hash_flag);
         match position.side_to_move {
-            Colour::White => self.tt_white.insert(hash_key, hash_entry),
-            Colour::Black => self.tt_black.insert(hash_key, hash_entry),
+            Colour::White => self.tt_white.write(position.hash_key, hash_entry),
+            Colour::Black => self.tt_black.write(position.hash_key, hash_entry),
         };
         alpha
     }
 
-    pub fn quiescence_search(&mut self, position: &mut Board, alpha: i32, beta: i32) -> i32 {
-        let hash_key = hash(position);
+    pub fn quiescence_search(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
         let mut hash_flag = EntryFlag::Alpha;
-        match position.side_to_move {
+
+        let hash_lookup = match position.side_to_move {
             //hash lookup
-            //hash entry of any depth will necessarily have had a quiesecence search done
-            //so we accept any hash entry that we find
-            Colour::White => {
-                if let Some(entry) = self.tt_white.get(&hash_key) {
-                    match entry.flag {
-                        EntryFlag::Beta => {
-                            //lower bound hash entry
-                            if entry.eval >= beta {
-                                return beta;
-                            }
-                        }
-                        EntryFlag::Alpha => {
-                            //upper bound entry
-                            if entry.eval <= alpha {
-                                return alpha;
-                            }
-                        }
-                        EntryFlag::Exact => return entry.eval,
-                        //pv entry
-                    }
-                }
-            }
-            Colour::Black => {
-                if let Some(entry) = self.tt_black.get(&hash_key) {
-                    match entry.flag {
-                        EntryFlag::Beta => {
-                            if entry.eval >= beta {
-                                return beta;
-                            }
-                        }
-                        EntryFlag::Alpha => {
-                            if entry.eval <= alpha {
-                                return alpha;
-                            }
-                        }
-                        EntryFlag::Exact => return entry.eval,
-                    }
-                };
-            }
-        }
+            Colour::White => self.tt_white.lookup(position.hash_key, alpha, beta, 0),
+            Colour::Black => self.tt_black.lookup(position.hash_key, alpha, beta, 0),
+            //lookups with depth zero because any TT entry will necessarily
+            //have had a quiescence search done so we will always take it
+        };
+
+        if let Some(k) = hash_lookup {
+            return k;
+        };
 
         let eval = evaluate(position);
         self.nodes += 1;
@@ -383,7 +354,7 @@ impl Searcher {
             return alpha;
         }
 
-        let mut alpha = cmp::max(alpha, eval);
+        alpha = cmp::max(alpha, eval);
 
         let mut captures = MoveList::gen_captures(position);
 
@@ -403,14 +374,11 @@ impl Searcher {
             position.undo_move(captures.moves[i], commit);
             self.ply -= 1;
             if eval >= beta {
-                let hash_entry = TTEntry {
-                    flag: EntryFlag::Beta,
-                    depth: 0,
-                    eval: beta,
-                };
+                //hash write in case of beta cutoff
+                let hash_entry = TTEntry::new(0, beta, EntryFlag::Beta);
                 match position.side_to_move {
-                    Colour::White => self.tt_white.insert(hash_key, hash_entry),
-                    Colour::Black => self.tt_black.insert(hash_key, hash_entry),
+                    Colour::White => self.tt_white.write(position.hash_key, hash_entry),
+                    Colour::Black => self.tt_black.write(position.hash_key, hash_entry),
                 };
                 return beta;
             }
@@ -420,16 +388,21 @@ impl Searcher {
             }
             alpha = cmp::max(alpha, eval);
         }
-        let hash_entry = TTEntry {
-            flag: hash_flag,
-            depth: 0,
-            eval: alpha,
-        };
+        let hash_entry = TTEntry::new(0, alpha, hash_flag);
         match position.side_to_move {
-            Colour::White => self.tt_white.insert(hash_key, hash_entry),
-            Colour::Black => self.tt_black.insert(hash_key, hash_entry),
+            Colour::White => self.tt_white.write(position.hash_key, hash_entry),
+            Colour::Black => self.tt_black.write(position.hash_key, hash_entry),
         };
         alpha
+    }
+
+    pub fn reset_searcher(&mut self) {
+        //try to keep tt, history and killer moves
+        self.nodes = 0;
+        self.pv_length = [0; 64];
+        self.pv = [[NULL_MOVE; MAX_PLY]; MAX_PLY];
+        self.ply = 0;
+        self.moves_searched = 0;
     }
 }
 
@@ -458,22 +431,22 @@ impl Move {
             if self.is_promotion() {
                 return match self.promoted_piece() {
                     //promotions sorted by likelihood to be good
-                    4 => 1000,
-                    1 => 900,
-                    3 => 800,
-                    2 => 700,
-                    _ => panic!("impossible"),
+                    QUEEN => 1000,
+                    KNIGHT => 900,
+                    ROOK => 800,
+                    BISHOP => 700,
+                    _ => unreachable!(),
                 } + MVV_LVA[victim_type][attacker_type];
             }
             MVV_LVA[victim_type][attacker_type]
         } else if self.is_promotion() {
             match self.promoted_piece() {
                 //promotions sorted by likelihood to be good
-                4 => 1000,
-                1 => 900,
-                3 => 800,
-                2 => 700,
-                _ => panic!("impossible"),
+                QUEEN => 1000,
+                KNIGHT => 900,
+                ROOK => 800,
+                BISHOP => 700,
+                _ => unreachable!(),
             }
         } else if self.is_en_passant() {
             MVV_LVA[PAWN][PAWN]
@@ -537,6 +510,7 @@ pub fn move_time(time: usize, increment: usize, moves_to_go: usize, ply: usize) 
         11..=16 => (time - TIME_TO_MOVE) as f32 / (moves_to_go as f32),
         _ => (time - TIME_TO_MOVE) as f32 / cmp::max((moves_to_go as f32 / 2.0) as usize, 1) as f32,
     }) as usize
+        + TIME_TO_START_SEARCH
 }
 
 pub fn best_move(
@@ -545,12 +519,14 @@ pub fn best_move(
     inc: usize,
     moves_to_go: usize,
 ) -> MoveData {
+    //TODO: test using one searcher across whole game (not clearing TT)
     let start = Instant::now();
     let move_duration = Duration::from_millis(
         move_time(time_left, inc, moves_to_go, position.ply)
             .try_into()
             .unwrap(),
     );
+
     let end_time = start + move_duration;
     //calculate time to cancel search
 
@@ -603,8 +579,11 @@ pub fn best_move(
                 }
             }
         );
-        if start.elapsed() > move_duration || start.elapsed() * 2 > move_duration {
-            //more than half of time used -> no point starting another search as it won't be completed
+
+        if start.elapsed() * 2 > move_duration {
+            /*more than half of time used -> no point starting another search as its likely
+             * that zero moves will be searched fully.
+             * ofc this also catches situations where all of move duration has elapsed */
             break;
         }
 

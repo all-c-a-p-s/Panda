@@ -13,6 +13,7 @@
 use crate::board::*;
 use crate::helper::*;
 use crate::movegen::*;
+use crate::zobrist::*;
 
 pub const SQUARE_FROM_MASK: u16 = 0b0000_0000_0011_1111;
 pub const SQUARE_TO_MASK: u16 = 0b0000_1111_1100_0000;
@@ -42,6 +43,7 @@ pub struct Commit {
     pub ep_reset: usize,
     pub fifty_move_reset: u8,
     pub piece_captured: usize,
+    pub hash_key: u64,
 }
 
 impl Move {
@@ -133,8 +135,7 @@ impl Move {
                     BISHOP => "bishop",
                     ROOK => "rook",
                     QUEEN => "queen",
-                    NO_PIECE => "NONE",
-                    _ => "impossible",
+                    _ => unreachable!(),
                 }
             } else {
                 "NONE"
@@ -162,7 +163,11 @@ impl Board {
             ep_reset: self.en_passant,
             fifty_move_reset: self.fifty_move,
             piece_captured: NO_PIECE,
+            hash_key: self.hash_key,
         };
+
+        self.hash_key = hash_update(self.hash_key, &m, self);
+        //MUST be done before any changes made on the board
 
         let sq_from = m.square_from();
         let sq_to = m.square_to();
@@ -333,6 +338,8 @@ impl Board {
             Colour::White => Colour::Black,
             Colour::Black => Colour::White,
         };
+        self.hash_key = c.hash_key;
+
         let sq_to = m.square_to();
         let sq_from = m.square_from();
         let piece = match m.is_promotion() {
