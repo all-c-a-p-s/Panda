@@ -18,12 +18,12 @@ Current elo ~2000
 - mobility evaluation + open files
 - pawn structure evaluation + passed pawns
 - tapered eval
-- hashing (todo: incremental update hash key)
+- hashing
 
 ## Todo:
 - king safety evaluation
 - more search improvements
-- faster movegen using check/pins masks instead of make/unmake
+- eval tuning
 
 ## Usage:
 - download [rust](https://www.rust-lang.org/)
