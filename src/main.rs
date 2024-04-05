@@ -30,6 +30,8 @@ fn main() {
     let debug = false;
     if debug {
         //full_hash_test();
+        //let pos = Board::from(STARTPOS);
+        //println!("{}", evaluate(&pos));
         full_perft();
     } else {
         uci_loop();

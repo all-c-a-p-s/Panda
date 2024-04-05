@@ -84,6 +84,20 @@ const KING_TABLE: [(i32, i32); 64] = [
     (-10,-51),  (20,-36), (15,-20),(-23,-16),  (0,-24),(-18,-20), (21,-24),  (8,-45),
 ];
 
+pub const fn set_file(square: usize) -> u64 {
+    match square % 8 {
+        0 => A_FILE,
+        1 => B_FILE,
+        2 => C_FILE,
+        3 => D_FILE,
+        4 => E_FILE,
+        5 => F_FILE,
+        6 => G_FILE,
+        7 => H_FILE,
+        _ => unreachable!(),
+    }
+}
+
 pub const fn passed_pawn_mask_white(square: usize) -> u64 {
     let mut res = 0u64;
     let mut sq = 0;
@@ -191,6 +205,16 @@ pub const BLACK_PASSED_MASKS: [u64; 64] = {
     table
 };
 
+pub const FILES: [u64; 64] = {
+    let mut table = [0u64; 64];
+    let mut square = 0;
+    while square < 64 {
+        table[square] = set_file(square);
+        square += 1;
+    }
+    table
+};
+
 //mobility scores worse than these give negative bonus
 const BISHOP_BASE_MOBILITY: usize = 4;
 const ROOK_BASE_MOBILITY: usize = 2;
@@ -200,9 +224,14 @@ const BISHOP_MOBILITY_UNIT: (i32, i32) = (2, 2);
 const ROOK_MOBILITY_UNIT: (i32, i32) = (1, 2);
 const QUEEN_MOBILITY_UNIT: (i32, i32) = (1, 1);
 
-const BISHOP_PAIR: (i32, i32) = (21, 42);
+const BISHOP_PAIR: (i32, i32) = (21, 32);
 const ROOK_OPEN_FILE: (i32, i32) = (22, 9);
 const ROOK_SEMI_OPEN_FILE: (i32, i32) = (10, 6);
+
+const KING_SHIELD_BONUS: (i32, i32) = (6, 1);
+const KING_OPEN_FILE_PENALTY: (i32, i32) = (-12, -4);
+const KING_SEMI_OPEN_FILE_PENALTY: (i32, i32) = (-6, -1);
+const KING_VIRTUAL_MOBILITY: (i32, i32) = (-2, 0);
 
 const START_PHASE_SCORE: i32 = 12;
 //possible for promotions to in theory result in more material than this
@@ -489,11 +518,14 @@ fn evaluate_queens(b: &Board, phase_score: i32, colour: Colour) -> i32 {
         }
         temp_queens = pop_bit(square, temp_queens);
     }
+
+    //maybe experiment with queen open file bonus
+    //for now I haven't added because queen on open file in mg is often exposed to rooks
+    //so idk if its actually something you should reward
     queen_eval
 }
 
 fn evaluate_king(b: &Board, phase_score: i32, colour: Colour) -> i32 {
-    //TODO: king safety
     let mut king_eval = 0;
     let king_bb = match colour {
         Colour::White => b.bitboards[WK],
@@ -507,11 +539,58 @@ fn evaluate_king(b: &Board, phase_score: i32, colour: Colour) -> i32 {
         ),
         Colour::Black => tapered_score(KING_TABLE[king_square], phase_score),
     };
+
+    //will get queen attacks anyway for virtual mobility so this is better than
+    //getting rook attacks and then queen attacks
+    let attacks = get_queen_attacks(king_square, b.occupancies[BOTH]);
+    let attacks_up_file = attacks & above_rank(king_square, colour) & FILES[king_square];
+
+    let mut open_file = false;
+    let mut semi_open_file = false;
+
+    let mut safety_score: i32 = 0;
+    match colour {
+        Colour::White => {
+            //bonus for pawns shielding the king
+            safety_score += count(K_ATTACKS[king_square] & b.bitboards[WP]) as i32
+                * tapered_score(KING_SHIELD_BONUS, phase_score);
+            if attacks_up_file & b.bitboards[BP] == 0 {
+                if attacks_up_file & b.bitboards[WP] == 0 {
+                    open_file = true;
+                } else {
+                    semi_open_file = true;
+                }
+            }
+        }
+        Colour::Black => {
+            safety_score += count(K_ATTACKS[king_square] & b.bitboards[BP]) as i32
+                * tapered_score(KING_SHIELD_BONUS, phase_score);
+            if attacks_up_file & b.bitboards[WP] == 0 {
+                if attacks_up_file & b.bitboards[BP] == 0 {
+                    open_file = true;
+                } else {
+                    semi_open_file = true;
+                }
+            }
+        }
+    };
+
+    //idea of virtual mobility heuristic:
+    //count number of attacks king would have if it were a queen and give penatly
+    //scaled by how many there are (i.e. how exposed the king is)
+    safety_score += count(attacks) as i32 * tapered_score(KING_VIRTUAL_MOBILITY, phase_score);
+
+    if open_file {
+        safety_score += tapered_score(KING_OPEN_FILE_PENALTY, phase_score);
+    } else if semi_open_file {
+        safety_score += tapered_score(KING_SEMI_OPEN_FILE_PENALTY, phase_score);
+    }
+
+    king_eval += safety_score;
     king_eval
 }
 
 pub fn evaluate(b: &Board) -> i32 {
-    //TODO: king safety
     let mut eval: i32 = 0;
     let phase_score = game_phase_score(b);
 
