@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::zobrist::hash;
 use crate::*;
 
@@ -121,7 +123,7 @@ pub fn parse_position(command: &str, b: &mut Board) {
     };
 }
 
-pub fn parse_go(command: &str, position: &mut Board) -> MoveData {
+pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveData {
     let words = command.split_whitespace().collect::<Vec<&str>>();
     //go wtime x btime x winc x binc x movestogo x
     let w_time: usize = words[2].parse().expect("failed to convert wtime to int");
@@ -147,11 +149,12 @@ pub fn parse_go(command: &str, position: &mut Board) -> MoveData {
         Colour::Black => b_inc,
     };
 
-    best_move(position, engine_time, engine_inc, moves_to_go)
+    best_move(position, engine_time, engine_inc, moves_to_go, s)
 }
 
 pub fn uci_loop() {
     let mut board = Board::from(STARTPOS);
+    let mut s = Searcher::new(Instant::now());
     loop {
         let mut buffer = String::new();
         let ok = std::io::stdin().read_line(&mut buffer);
@@ -171,7 +174,7 @@ pub fn uci_loop() {
             CommandType::IsReady => parse_isready(buffer.as_str()),
             CommandType::Position => parse_position(buffer.as_str(), &mut board),
             CommandType::Go => {
-                let move_data = parse_go(buffer.as_str(), &mut board);
+                let move_data = parse_go(buffer.as_str(), &mut board, &mut s);
                 if move_data.m.is_null() {
                     break;
                 }

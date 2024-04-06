@@ -1,3 +1,4 @@
+use crate::{Move, NULL_MOVE};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy)]
@@ -14,12 +15,18 @@ pub struct TTEntry {
     pub depth: usize,
     pub eval: i32,
     pub flag: EntryFlag,
+    pub best_move: Move,
 }
 
 pub struct TranspositionTable {
     pub tt: Box<[TTEntry]>, //using array = stack overflow
     pub size: usize,
     pub mask: usize,
+}
+
+pub struct LookupResult {
+    pub eval: Option<i32>,
+    pub best_move: Move,
 }
 
 /*
@@ -41,13 +48,19 @@ impl Default for TTEntry {
             depth: 0,
             eval: 0,
             flag: EntryFlag::Missing,
+            best_move: NULL_MOVE,
         }
     }
 }
 
 impl TTEntry {
-    pub fn new(depth: usize, eval: i32, flag: EntryFlag) -> Self {
-        Self { depth, eval, flag }
+    pub fn new(depth: usize, eval: i32, flag: EntryFlag, best_move: Move) -> Self {
+        Self {
+            depth,
+            eval,
+            flag,
+            best_move,
+        }
     }
 
     pub fn zero(&mut self) {
@@ -58,7 +71,7 @@ impl TTEntry {
 }
 
 pub trait TT {
-    fn lookup(&self, key: u64, alpha: i32, beta: i32, depth: usize) -> Option<i32>;
+    fn lookup(&self, key: u64, alpha: i32, beta: i32, depth: usize) -> LookupResult;
     fn write(&mut self, hash: u64, entry: TTEntry);
 }
 
@@ -96,23 +109,37 @@ impl TranspositionTable {
 }
 
 impl TT for TranspositionTable {
-    fn lookup(&self, hash_key: u64, alpha: i32, beta: i32, depth: usize) -> Option<i32> {
+    fn lookup(&self, hash_key: u64, alpha: i32, beta: i32, depth: usize) -> LookupResult {
+        let mut best_move = NULL_MOVE;
         if let Some(entry) = self.get(hash_key) {
+            best_move = entry.best_move;
             if entry.depth >= depth {
                 match entry.flag {
                     EntryFlag::Beta => {
                         //lower bound hash entry
                         if entry.eval >= beta {
-                            return Some(entry.eval);
+                            return LookupResult {
+                                eval: Some(entry.eval),
+                                best_move: entry.best_move,
+                            };
                         }
                     }
                     EntryFlag::Alpha => {
                         //upper bound entry
                         if entry.eval <= alpha {
-                            return Some(entry.eval);
+                            return LookupResult {
+                                eval: Some(entry.eval),
+                                best_move: entry.best_move,
+                            };
                         }
                     }
-                    EntryFlag::Exact => return Some(entry.eval),
+                    EntryFlag::Exact => {
+                        //don't update best move because this always returns an eval
+                        return LookupResult {
+                            eval: Some(entry.eval),
+                            best_move: entry.best_move,
+                        };
+                    }
                     //pv entry
                     EntryFlag::Missing => unreachable!(),
                     //as above, the get() function will return none
@@ -120,7 +147,10 @@ impl TT for TranspositionTable {
                 }
             }
         }
-        None
+        LookupResult {
+            eval: None,
+            best_move,
+        }
     }
 
     fn write(&mut self, hash: u64, entry: TTEntry) {
@@ -130,23 +160,37 @@ impl TT for TranspositionTable {
 }
 
 impl TT for HashMap<u64, TTEntry> {
-    fn lookup(&self, key: u64, alpha: i32, beta: i32, depth: usize) -> Option<i32> {
+    fn lookup(&self, key: u64, alpha: i32, beta: i32, depth: usize) -> LookupResult {
+        let mut best_move = NULL_MOVE;
         if let Some(entry) = self.get(&key) {
+            best_move = entry.best_move;
             if entry.depth >= depth {
                 match entry.flag {
                     EntryFlag::Beta => {
                         //lower bound hash entry
                         if entry.eval >= beta {
-                            return Some(entry.eval);
+                            return LookupResult {
+                                eval: Some(entry.eval),
+                                best_move: entry.best_move,
+                            };
                         }
                     }
                     EntryFlag::Alpha => {
                         //upper bound entry
                         if entry.eval <= alpha {
-                            return Some(entry.eval);
+                            return LookupResult {
+                                eval: Some(entry.eval),
+                                best_move: entry.best_move,
+                            };
                         }
                     }
-                    EntryFlag::Exact => return Some(entry.eval),
+                    EntryFlag::Exact => {
+                        //don't return best move because this always returns an eval
+                        return LookupResult {
+                            eval: Some(entry.eval),
+                            best_move: entry.best_move,
+                        };
+                    }
                     //pv entry
                     EntryFlag::Missing => unreachable!(),
                     //as above, the get() function will return none
@@ -154,7 +198,11 @@ impl TT for HashMap<u64, TTEntry> {
                 }
             }
         }
-        None
+
+        LookupResult {
+            eval: None,
+            best_move,
+        }
     }
 
     fn write(&mut self, hash: u64, entry: TTEntry) {
