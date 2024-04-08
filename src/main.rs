@@ -12,6 +12,7 @@ pub mod uci;
 pub mod zobrist;
 
 use crate::board::*;
+use crate::eval::evaluate;
 use crate::helper::*;
 use crate::magic::*;
 use crate::perft::*;
@@ -29,6 +30,8 @@ fn main() {
 
     let debug = false;
     if debug {
+        let pos = Board::from("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1");
+        println!("{}", evaluate(&pos));
         //full_hash_test();
         //let pos = Board::from(STARTPOS);
         //println!("{}", evaluate(&pos));

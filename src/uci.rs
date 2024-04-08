@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::zobrist::hash;
+use crate::zobrist::*;
 use crate::*;
 
 pub enum CommandType {
@@ -32,7 +32,6 @@ pub fn recognise_command(command: &str) -> CommandType {
 pub const STARTPOS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 pub fn parse_move(input: &str, board: Board) -> Move {
-    //BUG: needs to detect e.p. flag
     let sq_from = square(&input[0..2]);
     let sq_to = square(&input[2..4]);
     let piece = board.pieces_array[sq_from];
@@ -85,6 +84,9 @@ pub fn reset(b: &mut Board) {
 
 pub fn parse_position(command: &str, b: &mut Board) {
     reset(b);
+    b.hash_key = hash(b);
+    //^ is necessary becuse reset doesn't update hash key
+    unsafe { REPETITION_TABLE[b.ply] = b.hash_key }
     let words = command.split_whitespace().collect::<Vec<&str>>();
     if words.len() < 2 {
         panic!("invalid position command");
@@ -96,8 +98,7 @@ pub fn parse_position(command: &str, b: &mut Board) {
                     //parse moves
                     let m = parse_move(w, *b);
                     b.make_move(m);
-                    let hash = hash(b);
-                    unsafe { REPETITION_TABLE[b.ply] = hash }; //hash to avoid repetitions
+                    unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
                 }
             }
         }
@@ -115,8 +116,7 @@ pub fn parse_position(command: &str, b: &mut Board) {
             for w in words.iter().skip(2) {
                 let m = parse_move(w, *b);
                 b.make_move(m);
-                let hash = hash(b);
-                unsafe { REPETITION_TABLE[b.ply] = hash }; //hash to avoid repetitions
+                unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
             }
         }
         _ => panic!("invalid position command"),

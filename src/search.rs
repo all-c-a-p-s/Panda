@@ -119,7 +119,8 @@ unsafe fn is_drawn(position: &Board) -> bool {
         return true;
     }
     unsafe {
-        for key in REPETITION_TABLE.iter().take(position.ply) {
+        for key in REPETITION_TABLE.iter().take(position.ply - 1) {
+            //take ply - 1 because the start position (with 0 ply) is included
             if *key == position.hash_key {
                 return true;
                 //return true on one repetition because otherwise the third
@@ -294,12 +295,12 @@ impl Searcher {
         }
 
         /*
-         * Generate pseudo-legal moves here because this should be faster in cases where
-         * the search is pruned early, and so we don't actually have to check whether later
-         * pseudo-legal moves are legal. The downside of this is that these can theoretically
-         * interfere with move ordering, but my testing seems to show that this ultimately results
-         * in a net performace gain due to higher NPS.
-         */
+         Generate pseudo-legal moves here because this should be faster in cases where
+         the search is pruned early, and so we don't actually have to check whether later
+         pseudo-legal moves are legal. The downside of this is that these can theoretically
+         interfere with move ordering, but my testing seems to show that this ultimately results
+         in a net performace gain due to higher NPS.
+        */
         let mut child_nodes = MoveList::gen_moves(position);
         child_nodes.order_moves(position, self, &best_move);
 
@@ -321,8 +322,6 @@ impl Searcher {
             let tactical = m.is_tactical(position);
             let not_mated = alpha > -INFINITY + MAX_SEARCH_DEPTH as i32;
             //must be done before making the move on the board
-
-            unsafe { REPETITION_TABLE[position.ply] = position.hash_key };
 
             /*
             SEE Pruning: if the opponent move fails to beat a depth dependent
@@ -375,8 +374,6 @@ impl Searcher {
 
             position.undo_move(m, commit);
             self.ply -= 1;
-
-            unsafe { REPETITION_TABLE[position.ply] = 0u64 };
 
             if Instant::now() > self.end_time && self.ply == 0 {
                 break;
@@ -451,6 +448,14 @@ impl Searcher {
     }
 
     pub fn quiescence_search(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
+        self.nodes += 1;
+
+        unsafe {
+            if is_drawn(position) {
+                return 0;
+            }
+        }
+
         let mut hash_flag = EntryFlag::Alpha;
 
         let hash_lookup = match position.side_to_move {
@@ -469,7 +474,6 @@ impl Searcher {
         };
 
         let eval = evaluate(position);
-        self.nodes += 1;
         //node count = every position that gets evaluated
         if eval >= beta {
             return beta;
@@ -971,7 +975,13 @@ pub fn best_move(
             s.pv_length = previous_pv_length;
         } else {
             // >= 1 move searched ok
-            previous_eval = eval;
+            //this can sometimes cause it to report eval of -INFINITY if it falls
+            //out of aspiration window and then searches no moves fully
+            if eval != -INFINITY {
+                //note that -INFINITY can only happen in the case of aspiration window bug mentioned
+                //above, as mates will be -INFINITY + some ply that is at least one
+                previous_eval = eval;
+            }
             previous_pv = s.pv;
             previous_pv_length = s.pv_length;
         }

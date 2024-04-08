@@ -14,6 +14,7 @@ use crate::board::*;
 use crate::helper::*;
 use crate::movegen::*;
 use crate::zobrist::*;
+use crate::REPETITION_TABLE;
 
 pub const SQUARE_FROM_MASK: u16 = 0b0000_0000_0011_1111;
 pub const SQUARE_TO_MASK: u16 = 0b0000_1111_1100_0000;
@@ -328,6 +329,11 @@ impl Board {
             Colour::White => Colour::Black,
             Colour::Black => Colour::White,
         };
+
+        unsafe {
+            REPETITION_TABLE[self.ply] = self.hash_key;
+        }
+
         commit
     }
 
@@ -440,6 +446,10 @@ impl Board {
         self.castling = c.castling_reset;
         self.fifty_move = c.fifty_move_reset;
         self.ply -= 1;
+
+        unsafe {
+            REPETITION_TABLE[self.ply + 1] = 0u64;
+        }
     }
 }
 

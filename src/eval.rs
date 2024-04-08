@@ -17,10 +17,10 @@ const PAWN_TABLE: [(i32, i32); 64] = [
     (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),
   (11,132), (78,110), (69,103),  (91,95), (80, 90),  (95,93), (79,108),  (8,125),
   (-1, 63),  (11,53),  (13,51),  (39,43), (35, 42),  (25,48),  (11,50), (-5, 59),
-  (-5, 17),   (9, 8),   (3, 6),  (21, 4),  (17, 3),   (8, 4),   (3, 7), (-8, 16),
-   (-9, 4), (-5, -4),   (9, 2),  (14,-2),  (10,-3),  (-2,-5),  (-8,-4),  (-9, 4),
-   (-5, 3),  (-3,-2),  (4, -2),   (5,-2),   (4, 0),  (-5,-2),  (-3, 1), (-10, 3),
-   (-8, 3),   (1, 4),  (-3, 4), (-11, 5),  (-8, 6),  (11, 5),   (9, 4),  (-6, 3),
+  (-5, 17),   (9, 8),   (3, 6),  (22, 4),  (18, 3),   (8, 4),   (3, 7), (-8, 16),
+   (-9, 4), (-5, -4),   (8, 2),  (14,-2),  (11,-3),  (-2,-5),  (-8,-4),  (-9, 4),
+   (-5, 3),  (-3,-2),  (1, -2),   (5,-2),   (4, 0),  (-5,-2),  (-3, 1), (-10, 3),
+   (-8, 3),   (1, 4),  (-3, 4), (-11, 5),  (-9, 6),  (11, 5),   (9, 4),  (-6, 3),
     (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),
 ];
 
@@ -29,11 +29,11 @@ const KNIGHT_TABLE: [(i32, i32); 64] = [
     (-70,-35),(-51,-23),(-41,-15),(-26,-12),(-24,-12),(-37,-14),(-49,-21),(-60,-31),
     (-22,-14),(-19,-12),  (20,-8),  (22,-5),  (23,-5),  (28,-7),  (-6,-6),(-19,-13),
       (-5,-7),   (3,-1),  (17, 3),  (28, 8),  (34, 8),  (42, 5),  (30,-1),  (8,-10),
-      (-4,-5),   (2, 0),  (10, 7),  (16,12),  (14,11),  (17, 7),   (9, 0),  (-4,-7),
+      (-4,-5),   (2, 0),  (10, 7),  (15,12),  (14,11),  (16, 7),   (9, 0),  (-4,-7),
       (-5,-6),  (-1, 0),   (9, 6),  (10, 8),  (11, 8),   (8, 6),  (-2, 0),  (-7,-9),
       (-8,-6),   (3, 2),   (9, 2),   (2, 1),   (4, 3),  (10, 3),   (4, 1), (-9,-11),
      (-10,-6), (-10,-8),  (-7,-2),  (-1,-3),  (-2,-3), (-12,-9), (-10,-8), (-9,-10),
-     (-22,-7),(-10,-10), (-11,-6), (-10,-5),  (-4,-4),   (0,-5),(-12,-12), (-9,-14),
+     (-22,-7),(-10,-10), (-11,-6), (-10,-5),  (-6,-4),  (-6,-5),(-12,-12), (-9,-14),
 ];
 
 #[rustfmt::skip]
@@ -43,9 +43,9 @@ const BISHOP_TABLE: [(i32, i32); 64] = [
      (-5, 0),  (10, 1),  (20, 3),  (32, 3),  (30, 3),   (39,4),  (13, 1),   (1, 0),
       (0,-2),   (4, 1),  (12, 3),  (26,10),  (23,10),   (14,6),   (8, 0),   (0,-2),
     (-1, -3),   (3, 1),  (11, 3),  (18, 8),  (20, 8),   (9, 3),   (2, 1),   (2,-3),
-     (2, -4),   (9, 0),   (7, 0),   (9, 3),   (6, 3),   (8, 1),   (6, 2),  (-2,-4),
+     (2, -4),   (9, 0),   (7, 0),   (7, 3),   (4, 3),   (8, 1),   (6, 2),  (-2,-4),
      (-8,-5),  (10, 0),   (1, 0),   (0, 0),   (2, 1),   (0,-2),  (16, 4),   (1,-4),
-     (-7,-5),  (-7,-6),  (-4,-4), (-8, -6), (-8, -6),  (-4,-4),  (-8,-6),  (-4,-3),
+     (-7,-5),  (-8,-6),  (-4,-4), (-8, -6), (-8, -6),  (-5,-4),  (-9,-6),  (-5,-3),
 ];
 
 #[rustfmt::skip]
@@ -226,9 +226,9 @@ const MIRROR: [usize; 64] = {
 };
 
 //mobility scores worse than these give negative bonus
-const BISHOP_BASE_MOBILITY: usize = 4;
-const ROOK_BASE_MOBILITY: usize = 2;
-const QUEEN_BASE_MOBILITY: usize = 3;
+const BISHOP_BASE_MOBILITY: i32 = 4;
+const ROOK_BASE_MOBILITY: i32 = 2;
+const QUEEN_BASE_MOBILITY: i32 = 3;
 
 const BISHOP_MOBILITY_UNIT: (i32, i32) = (2, 2);
 const ROOK_MOBILITY_UNIT: (i32, i32) = (1, 2);
@@ -259,7 +259,7 @@ const PASSED_PAWN_BONUS: [[(i32, i32); 2]; 8] = [
 ];
 
 const ISOLATED_PAWN_PENALTY: (i32, i32) = (-2, -16);
-const DOUBLED_PAWN_PENALTY: (i32, i32) = (-4, -23); //only given to the first pawn
+const DOUBLED_PAWN_PENALTY: (i32, i32) = (-5, -22); //only given to the first pawn
 
 pub fn game_phase_score(b: &Board) -> i32 {
     //score in starting position will be 4*1 + 2*2 + 1*2 + 1*2 = 12
@@ -397,8 +397,12 @@ fn evaluate_bishops(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     while temp_bishops > 0 {
         let square = lsfb(temp_bishops);
         bishop_eval += tapered_score(BISHOP_VALUE, phase_score);
-        let attacks = get_bishop_attacks(square, b.occupancies[BOTH]);
-        bishop_eval += (count(attacks) - BISHOP_BASE_MOBILITY) as i32
+        let attacks = get_bishop_attacks(square, b.occupancies[BOTH])
+            & !b.occupancies[match colour {
+                Colour::White => WHITE,
+                Colour::Black => BLACK,
+            }];
+        bishop_eval += (count(attacks) as i32 - BISHOP_BASE_MOBILITY)
             * tapered_score(BISHOP_MOBILITY_UNIT, phase_score);
         match colour {
             Colour::White => {
@@ -449,11 +453,15 @@ fn evaluate_rooks(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     while temp_rooks > 0 {
         rook_eval += tapered_score(ROOK_VALUE, phase_score);
         let square = lsfb(temp_rooks);
-        let attacks = get_rook_attacks(square, b.occupancies[BOTH]);
+        let attacks = get_rook_attacks(square, b.occupancies[BOTH])
+            & !b.occupancies[match colour {
+                Colour::White => WHITE,
+                Colour::Black => BLACK,
+            }];
         let attacks_up_file = attacks & above_rank(square, colour);
         let mut open_file = false;
         let mut semi_open_file = false;
-        rook_eval += (count(attacks) - ROOK_BASE_MOBILITY) as i32
+        rook_eval += (count(attacks) as i32 - ROOK_BASE_MOBILITY)
             * tapered_score(ROOK_MOBILITY_UNIT, phase_score);
         match colour {
             Colour::White => {
@@ -500,8 +508,12 @@ fn evaluate_queens(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     while temp_queens > 0 {
         let square = lsfb(temp_queens);
         queen_eval += tapered_score(QUEEN_VALUE, phase_score);
-        let attacks = get_queen_attacks(square, b.occupancies[BOTH]);
-        queen_eval += (count(attacks) - QUEEN_BASE_MOBILITY) as i32
+        let attacks = get_queen_attacks(square, b.occupancies[BOTH])
+            & !b.occupancies[match colour {
+                Colour::White => WHITE,
+                Colour::Black => BLACK,
+            }];
+        queen_eval += (count(attacks) as i32 - QUEEN_BASE_MOBILITY)
             * tapered_score(QUEEN_MOBILITY_UNIT, phase_score);
         match colour {
             Colour::White => {
@@ -532,7 +544,12 @@ fn evaluate_king(b: &Board, phase_score: i32, colour: Colour) -> i32 {
 
     //will get queen attacks anyway for virtual mobility so this is better than
     //getting rook attacks and then queen attacks
-    let attacks = get_queen_attacks(king_square, b.occupancies[BOTH]);
+    let attacks = get_queen_attacks(king_square, b.occupancies[BOTH])
+        & !b.occupancies[match colour {
+            Colour::White => WHITE,
+            Colour::Black => BLACK,
+        }];
+
     let attacks_up_file = attacks & above_rank(king_square, colour) & FILES[king_square];
 
     let mut open_file = false;
@@ -583,7 +600,37 @@ fn evaluate_king(b: &Board, phase_score: i32, colour: Colour) -> i32 {
 pub fn evaluate(b: &Board) -> i32 {
     let mut eval: i32 = 0;
     let phase_score = game_phase_score(b);
-
+    /*
+        println!(
+            "pawn {}",
+            evaluate_pawns(b, phase_score, Colour::White)
+                - evaluate_pawns(b, phase_score, Colour::Black)
+        );
+        println!(
+            "knight {}",
+            evaluate_knights(b, phase_score, Colour::White)
+                - evaluate_knights(b, phase_score, Colour::Black)
+        );
+        println!(
+            "bishop {}",
+            evaluate_bishops(b, phase_score, Colour::White)
+                - evaluate_bishops(b, phase_score, Colour::Black)
+        );
+        println!(
+            "rook {}",
+            evaluate_rooks(b, phase_score, Colour::White)
+                - evaluate_rooks(b, phase_score, Colour::Black)
+        );
+        println!(
+            "queen {}",
+            evaluate_queens(b, phase_score, Colour::White)
+                - evaluate_queens(b, phase_score, Colour::Black)
+        );
+        println!(
+            "king {}",
+            evaluate_king(b, phase_score, Colour::White) - evaluate_king(b, phase_score, Colour::Black)
+        );
+    */
     eval += evaluate_pawns(b, phase_score, Colour::White);
     eval += evaluate_knights(b, phase_score, Colour::White);
     eval += evaluate_bishops(b, phase_score, Colour::White);
