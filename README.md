@@ -6,7 +6,9 @@ Panda is a chess engine written in Rust (still a work in progress). It is called
 
 ![](logo.jpeg)
 
-Current elo ~2100
+## Lichess Bot
+
+I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lichess bot for Panda. Unfortunately it probably won't be online that much because I'm hosting it locally.
 
 ## Features:
 - __Move Generation__
