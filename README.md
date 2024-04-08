@@ -1,32 +1,59 @@
 # Panda
-Chess engine written in Rust (WIP).
+Panda is a chess engine written in Rust (still a work in progress). It is called Panda because:
+- pandas are black and white like a chess board
+- pandas are pretty cool
+- red pandas are also pretty cool, and they are orange (like Rust)
 
-Current elo ~2000
+Current elo ~2100
 
 ## Features:
-- magic bitboards
-- negamax search
-- alpha/beta pruning
-- quiescence search
-- mvv-lva move ordering
-- iterative deepening
-- aspiration windows
-- principal variation search
-- late move reductions
-- null move pruning
-- piece square tables
-- mobility evaluation + open files
-- pawn structure evaluation + passed pawns
-- tapered eval
-- hashing
+- __Move Generation__
+  - Magic Bitboards
+  - Make/Unmake Approach
+- __Search__
+  - Negamax Search
+  - Quiescence Search
+  - Principal Variation Search
+  - Iterative Deepening
+  - Transposition Table
+  - Aspiration Windows
+  - __Pruning__
+    - Alpha/Beta Pruning
+    - Null Move Pruning
+    - Beta Pruning/Reverse Futility Pruning
+    - Alpha Pruning/Futility Pruning
+    - Razoring into Quiescence Search
+    - SEE Pruning
+    - Mate Distance Pruning
+    - Late Move Reductions
+  - __Move Ordering__
+    - Moves are ordered as follows:
+    - Move from transposition table (if available)
+    - PV Move
+    - Winning captures by SEE (ordered by MVV/LVA)
+    - Killer Moves
+    - Moves Sorted by History Heuristic
+    - Losing captures by SEE (ordered by MVV/LVA)
+    - Underpromotions
+- __Evaluation__
+  - Piece-Square Tables with middlegame and endgame weights
+  - Mobility Calculations
+  - Pawn Structure Evaluation + Passed Pawns
+  - Tapered Evaluation
+  - Mobility Score
+  - King Safety
+  + Some other stuff
 
 ## Todo:
-- king safety evaluation
-- more search improvements
-- eval tuning
+The best way to improve the engine's playing strength would probably be to optimise move generation by calculating check and pin masks instead of using make/unmake to verify legality. Instead, I'm probably gonna work on finding a way to tune the evaluation function using Genetic Algorithm/Simulated Annealing because that's more fun.
 
 ## Usage:
-- download [rust](https://www.rust-lang.org/)
-- build and run the project (NOTE: you must use ```--release``` mode or the magic bitboards will not work)
-- connect to a uci gui such as cutechess or arena
+- [Download Rust](https://www.rust-lang.org/)
+- Build and run the project (NOTE: you must use ```--release``` mode or the magic bitboards will not work)
+- connect to a UCI gui such as CuteChess or Arena
 
+## Acknowledgements
+Here are some of the many resources wihtout which this engine would be much less strong:
+- [Chess Programming Wiki](https://www.chessprogramming.org/Main_Page)
+- [BBC Chess Engine](https://github.com/maksimKorzh/bbc) + videos
+- Most of all, open source chess engines such as Stockfish, Ethereal and Weiss which have extremely clear and helpful documentation 
