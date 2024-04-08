@@ -17,6 +17,7 @@ Current elo ~2100
   - Iterative Deepening
   - Transposition Table
   - Aspiration Windows
+  - Internal Iterative Deepening
   - __Pruning__
     - Alpha/Beta Pruning
     - Null Move Pruning
