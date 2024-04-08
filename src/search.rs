@@ -1,9 +1,12 @@
 use crate::board::*;
 use crate::eval::*;
+use crate::get_bishop_attacks;
+use crate::get_rook_attacks;
 use crate::helper::*;
 use crate::movegen::*;
 use crate::r#move::*;
 use crate::transposition::*;
+use crate::STARTPOS;
 
 use std::cmp;
 use std::collections::HashMap;
@@ -16,7 +19,7 @@ pub const REDUCTION_LIMIT: usize = 3;
 // can't reduce search to below 3 - 2 = 1 ply
 const FULL_DEPTH_MOVES: usize = 4;
 const NULLMOVE_R: usize = 2;
-const ASPIRATION_WINDOW: i32 = 50;
+const ASPIRATION_WINDOW: i32 = 40;
 
 const RAZORING_MARGIN: i32 = 300;
 const MAX_RAZOR_DEPTH: usize = 4;
@@ -27,10 +30,18 @@ const BETA_PRUNING_MARGIN: usize = 80;
 const ALPHA_PRUNING_DEPTH: usize = 4;
 const ALPHA_PRUNING_MARGIN: i32 = 2000;
 
+const SEE_PRUNING_DEPTH: i32 = 4;
+const SEE_PRUNING_MARGIN: i32 = 100;
+const SEE_QSEARCH_MARGIN: i32 = 130;
+
 const HASH_MOVE_SCORE: i32 = 20_000;
 const PV_MOVE_SCORE: i32 = 10_000;
+const QUEEN_PROMOTION: i32 = 6_000;
+const WINNING_CAPTURE: i32 = 5_000;
 const FIRST_KILLER_MOVE: i32 = 90;
 const SECOND_KILLER_MOVE: i32 = 80;
+const LOSING_CAPTURE: i32 = -5_000;
+const UNDER_PROMOTION: i32 = -10_000;
 
 pub const MAX_GAME_PLY: usize = 1024;
 
@@ -50,7 +61,7 @@ pub struct Searcher {
     pub ply: usize,
     pub nodes: usize,
     pub end_time: Instant,
-    pub moves_searched: usize,
+    pub moves_fully_searched: usize,
 }
 
 fn reduction_ok(tactical: bool, is_check: bool) -> bool {
@@ -132,7 +143,7 @@ impl Searcher {
             ply: 0,
             nodes: 0,
             end_time,
-            moves_searched: 0,
+            moves_fully_searched: 0,
         }
     }
 
@@ -143,12 +154,14 @@ impl Searcher {
         mut alpha: i32,
         beta: i32,
     ) -> i32 {
-        /* return a score that can never be >= alpha if the search is cancelled
+        /*
+        return a score that can never be >= alpha if the search is cancelled
         other engines return zero here but I don't see how this would work
         in cases where 0 > alpha. Returning value that gets recursively passed
         so that it is equal to -INFINITY for the engine should work imo because
         if this happens on PV move it breaks during the main moves loop below
-        and so count of moves searched fully is zero -> discard result */
+        and so count of moves searched fully is zero -> discard result
+        */
         if Instant::now() > self.end_time && self.ply != 0 {
             return match self.ply % 2 {
                 0 => -INFINITY,
@@ -156,12 +169,18 @@ impl Searcher {
                 _ => unreachable!(),
             };
         }
-
         let is_pv = beta - alpha != 1;
         //full window search
 
         self.pv_length[self.ply] = self.ply;
+
+        if depth == 0 {
+            //qsearch on leaf nodes
+            return self.quiescence_search(position, alpha, beta);
+        }
+
         let mut hash_flag = EntryFlag::Alpha;
+        self.nodes += 1;
 
         if self.ply != 0 {
             //check 50 move rule, repetition and insufficient material
@@ -171,9 +190,11 @@ impl Searcher {
                 }
             }
 
-            //mate distance pruning:
-            //check if line is so good/bad that being mated in the current ply
-            //or mating in the next ply would not change alpha/beta
+            /*
+            mate distance pruning:
+            check if line is so good/bad that being mated in the current ply
+            or mating in the next ply would not change alpha/beta
+            */
             let r_alpha = cmp::max(alpha, -INFINITY + self.ply as i32);
             let r_beta = cmp::min(beta, INFINITY - self.ply as i32 - 1);
             if r_alpha >= r_beta {
@@ -198,11 +219,6 @@ impl Searcher {
             };
         }
 
-        if depth == 0 {
-            //qsearch on leaf nodes
-            return self.quiescence_search(position, alpha, beta);
-        }
-
         let is_check = match position.side_to_move {
             //used in both search extensions and LMR
             Colour::White => is_attacked(lsfb(position.bitboards[WK]), Colour::Black, position),
@@ -210,6 +226,11 @@ impl Searcher {
         };
 
         let static_eval = evaluate(position);
+
+        //reset killers for child nodes
+        self.killer_moves[0][self.ply + 1] = NULL_MOVE;
+        self.killer_moves[1][self.ply + 1] = NULL_MOVE;
+
         if !is_check && !is_pv {
             //eval is very low so only realistic way to increase it is with captures
             //we only need to qsearch to evaluate the position
@@ -260,52 +281,79 @@ impl Searcher {
             }
         }
 
-        //Internal Iterative Deepening:
-        //pv node and no tt hit -> move ordering will be terrible
-        //so do a shallower search to rectify move ordering
-        //by fixing history tables and pv move
-        //according to wiki this should make little difference on average
-        //but should make the search more consistent
+        /*
+        Internal Iterative Deepening:
+        pv node and no tt hit -> move ordering will be terrible
+        so do a shallower search to rectify move ordering
+        by fixing history tables and pv move
+        according to wiki this should make little difference on average
+        but should make the search more consistent
+        */
         if is_pv && depth > 3 && best_move.is_null() {
             self.negamax(position, depth - 2, alpha, beta);
         }
 
-        let mut child_nodes = MoveList::gen_legal(position);
+        /*
+         * Generate pseudo-legal moves here because this should be faster in cases where
+         * the search is pruned early, and so we don't actually have to check whether later
+         * pseudo-legal moves are legal. The downside of this is that these can theoretically
+         * interfere with move ordering, but my testing seems to show that this ultimately results
+         * in a net performace gain due to higher NPS.
+         */
+        let mut child_nodes = MoveList::gen_moves(position);
         child_nodes.order_moves(position, self, &best_move);
 
-        if child_nodes.moves[0].is_null() {
-            //no legal moves -> mate or stalemate
-            return match is_check {
-                true => -INFINITY + self.ply as i32,
-                false => 0,
-            };
-        }
+        let mut moves_played = 0;
 
-        for i in 0..MAX_MOVES {
-            if child_nodes.moves[i].is_null() {
-                //no moves/no time left
+        for m in child_nodes.moves {
+            if m.is_null() {
+                //no pseudolegal moves left in move list
                 break;
             }
 
-            let tactical = child_nodes.moves[i].is_tactical(position);
+            if !is_legal(m, position) {
+                //skip illegal moves (see above)
+                continue;
+            }
+
+            moves_played += 1;
+
+            let tactical = m.is_tactical(position);
+            let not_mated = alpha > -INFINITY + MAX_SEARCH_DEPTH as i32;
             //must be done before making the move on the board
 
             unsafe { REPETITION_TABLE[position.ply] = position.hash_key };
 
-            let commit = position.make_move(child_nodes.moves[i]);
+            /*
+            SEE Pruning: if the opponent move fails to beat a depth dependent
+            SEE threshold, skip it
+            */
+            if depth as i32 <= SEE_PRUNING_DEPTH && not_mated && moves_played > 1 && !is_pv {
+                let threshold = SEE_PRUNING_MARGIN * depth as i32;
+                if !m.static_exchange_evaluation(position, threshold) {
+                    //move fails to beat SEE threshold
+                    continue;
+                }
+            }
+
+            let commit = position.make_move(m);
             self.ply += 1;
 
-            let eval = match i == 0 {
+            let eval = match moves_played == 1 {
+                //note that this is one because the variable is updates above
                 true => -self.negamax(position, depth - 1, -beta, -alpha),
                 //normal search on pv move (no moves searched yet)
                 false => {
-                    /* non-pv move -> search with reduced window
+                    /*
+                    non-pv move -> search with reduced window
                     this assumes that our move ordering is good enough
                     that we will be able to prove that these moves are bad
                     often enough that it outweighs the cost of re-searching
-                    then if we are unable to prove so */
-                    let mut reduction_eval = match i >= FULL_DEPTH_MOVES
+                    then if we are unable to prove so
+                    */
+                    let mut reduction_eval = match moves_played > FULL_DEPTH_MOVES
                         && depth >= REDUCTION_LIMIT
+                        && not_mated
                         && reduction_ok(tactical, is_check)
                     {
                         true => -self.negamax(position, depth - 2, -alpha - 1, -alpha),
@@ -325,7 +373,7 @@ impl Searcher {
                 }
             };
 
-            position.undo_move(child_nodes.moves[i], commit);
+            position.undo_move(m, commit);
             self.ply -= 1;
 
             unsafe { REPETITION_TABLE[position.ply] = 0u64 };
@@ -335,12 +383,19 @@ impl Searcher {
                 //as above
             }
 
+            if self.ply == 0 {
+                self.moves_fully_searched += 1;
+                //used to ensure in the iterative deepening search that
+                //at least one move has been searched fully
+            }
+
             if eval >= beta {
                 //only write quiet moves into history table because captures
                 //will be scored separately
-                if !tactical {
+                if !tactical && self.killer_moves[0][self.ply] != m {
+                    //avoid saving the same killer move twice
                     self.killer_moves[1][self.ply] = self.killer_moves[0][self.ply];
-                    self.killer_moves[0][self.ply] = child_nodes.moves[i];
+                    self.killer_moves[0][self.ply] = m;
                 }
 
                 //write to hash table
@@ -353,13 +408,16 @@ impl Searcher {
                 return beta;
             }
             if eval > alpha {
+                //all top engines whose source code I have looked at update history scores on beta
+                //cutoffs. I originally did this on moves that raise alpha by mistake, and for some
+                //reason it is faster for me...
                 if !tactical {
-                    self.history_scores[child_nodes.moves[i].piece_moved(position)]
-                        [child_nodes.moves[i].square_to()] += depth as i32 * depth as i32;
+                    self.history_scores[m.piece_moved(position)][m.square_to()] +=
+                        depth as i32 * depth as i32;
                     //idea that moves closer to root node are more significant
                 }
                 let next_ply = self.ply + 1;
-                self.pv[self.ply][self.ply] = child_nodes.moves[i];
+                self.pv[self.ply][self.ply] = m;
                 for j in next_ply..self.pv_length[next_ply] {
                     self.pv[self.ply][j] = self.pv[next_ply][j];
                     //copy from next row in pv table
@@ -367,14 +425,21 @@ impl Searcher {
                 self.pv_length[self.ply] = self.pv_length[next_ply];
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
-                best_move = child_nodes.moves[i];
-            }
+                best_move = m;
 
-            if self.ply == 0 {
-                self.moves_searched += 1;
-                //used to ensure in the iterative deepening search that
-                //at least one move has been searched fully
+                //search failed high
+                if alpha >= beta {
+                    break;
+                }
             }
+        }
+
+        if moves_played == 0 {
+            //no legal moves -> mate or stalemate
+            return match is_check {
+                true => -INFINITY + self.ply as i32,
+                false => 0,
+            };
         }
 
         let hash_entry = TTEntry::new(depth, alpha, hash_flag, best_move);
@@ -420,20 +485,38 @@ impl Searcher {
 
         let mut captures = MoveList::gen_captures(position);
 
-        if captures.moves[0].is_null() {
-            //no captures
-            return alpha;
-        }
-
         captures.order_moves(position, self, &best_move);
-        for i in 0..MAX_MOVES {
-            if captures.moves[i].is_null() {
+        for c in captures.moves {
+            if c.is_null() {
+                //no more pseudo-legal moves
                 break;
             }
-            let commit = position.make_move(captures.moves[i]);
+
+            //as in the main search, it should be faster to check this in place
+            //because with pruning we can avoid checking whether or not some moves
+            //are legal -> higher NPS
+            if !is_legal(c, position) {
+                continue;
+            }
+
+            let worst_case = SEE_VALUES[piece_type(position.pieces_array[c.square_to()])]
+                - SEE_VALUES[piece_type(c.piece_moved(position))];
+            if eval + worst_case > beta {
+                //prune in the case that our move > beta even if we lose the piece
+                //that we just moved
+                return beta;
+            }
+
+            if !c.static_exchange_evaluation(position, SEE_QSEARCH_MARGIN) {
+                //prune moves that fail see by threshold
+                continue;
+            }
+
+            let commit = position.make_move(c);
             self.ply += 1;
+
             let eval = -self.quiescence_search(position, -beta, -alpha);
-            position.undo_move(captures.moves[i], commit);
+            position.undo_move(c, commit);
             self.ply -= 1;
             if eval >= beta {
                 //hash write in case of beta cutoff
@@ -447,11 +530,12 @@ impl Searcher {
             if eval > alpha {
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
-                best_move = captures.moves[i];
+                best_move = c;
             }
             alpha = cmp::max(alpha, eval);
         }
 
+        //write eval to hash table
         let hash_entry = TTEntry::new(0, alpha, hash_flag, best_move);
         match position.side_to_move {
             Colour::White => self.tt_white.write(position.hash_key, hash_entry),
@@ -466,7 +550,7 @@ impl Searcher {
         self.pv_length = [0; 64];
         self.pv = [[NULL_MOVE; MAX_PLY]; MAX_PLY];
         self.ply = 0;
-        self.moves_searched = 0;
+        self.moves_fully_searched = 0;
 
         //not clearing seems to be worse as even though the first few search depths are instant
         //the next depths don't have advantages of iterative deepening like pv and move ordering
@@ -474,19 +558,8 @@ impl Searcher {
         self.tt_white = HashMap::new();
         self.tt_black = HashMap::new();
 
-        //test shifting killer moves by 2
+        //reset move ordering heuristics
         self.killer_moves = [[NULL_MOVE; MAX_PLY]; 2];
-        /*
-                for i in 2..MAX_PLY {
-                    self.killer_moves[0][i - 2] = self.killer_moves[0][i];
-                    self.killer_moves[1][i - 2] = self.killer_moves[1][i];
-                }
-
-                self.killer_moves[0][MAX_PLY - 2] = NULL_MOVE;
-                self.killer_moves[1][MAX_PLY - 2] = NULL_MOVE;
-                self.killer_moves[0][MAX_PLY - 1] = NULL_MOVE;
-                self.killer_moves[1][MAX_PLY - 1] = NULL_MOVE;
-        */
         self.history_scores = [[0; 64]; 12];
     }
 }
@@ -501,8 +574,246 @@ const MVV_LVA: [[i32; 6]; 6] = [
     [0, 0, 0, 0, 0, 0],             //victim king
 ];
 
+/*
+fn static_exchange_evaluation(b: &mut Board, square: usize, balance: i32) -> bool {
+    //NOTE: for speed this does not take pins into account
+
+    let victim = b.pieces_array[square];
+    let next_move = get_smallest_attack(b, square);
+
+    let piece = next_move.piece_moved(b);
+
+    if next_move.is_null() {
+        return balance >= 0;
+    }
+
+    if victim == KING {
+        //previous move was illegal af lol
+        return true;
+    }
+
+    let move_value = match next_move.is_promotion() {
+        true => SEE_VALUES[piece_type(victim)] + SEE_VALUES[QUEEN] - SEE_VALUES[PAWN],
+        //only consider queen promotions
+        false => SEE_VALUES[piece_type(victim)],
+    };
+
+    if balance + move_value <= 0 {
+        //still behind even after taking piece
+        //i.e. best case scenario still bad
+        return false;
+    }
+
+    if balance + move_value - SEE_VALUES[piece_type(piece)] >= 0 {
+        //still ahead even if we lose our piece
+        //i.e. worst case scenario still good
+        return true;
+    }
+
+    let commit = b.make_move(next_move);
+
+    let res = !static_exchange_evaluation(b, square, -(balance + move_value));
+
+    b.undo_move(next_move, commit);
+    res
+}
+*/
+
+pub fn see_test() {
+    let position1 = Board::from("8/7k/8/4p3/8/5N2/K7/8 w - - 0 1");
+    let m = encode_move(F3, E5, NO_PIECE, NO_FLAG);
+    let res1 = m.static_exchange_evaluation(&position1, 0);
+    assert!(res1, "first see test position failed");
+
+    let position2 = Board::from("8/2b4k/8/4p3/8/5N2/K7/8 w - - 0 1");
+    let m = encode_move(F3, E5, NO_PIECE, NO_FLAG);
+    let res2 = m.static_exchange_evaluation(&position2, 0);
+    assert!(!res2, "second see test position failed");
+
+    let position3 = Board::from("8/2b4k/8/4p3/8/5N2/K7/4R3 w - - 0 1");
+    let m = encode_move(F3, E5, NO_PIECE, NO_FLAG);
+    let res3 = m.static_exchange_evaluation(&position3, 0);
+    assert!(res3, "third see test position failed");
+
+    let position4 = Board::from("4q3/2b4k/8/4p3/8/5N2/K7/4R3 w - - 0 1");
+    let m = encode_move(F3, E5, NO_PIECE, NO_FLAG);
+    let res4 = m.static_exchange_evaluation(&position4, 0);
+    assert!(!res4, "fourth see test position failed");
+
+    let position5 = Board::from("4q3/2b4k/8/4p3/8/5N2/K7/Q3R3 w - - 0 1");
+    let m = encode_move(F3, E5, NO_PIECE, NO_FLAG);
+    let res5 = m.static_exchange_evaluation(&position5, 0);
+    assert!(res5, "fifth see test position failed");
+
+    //test start position with no captures
+    let position6 = Board::from(STARTPOS);
+    let m = encode_move(E2, E4, NO_PIECE, NO_FLAG);
+    let res6 = m.static_exchange_evaluation(&position6, 0);
+    assert!(res6, "sixth see test position failed");
+
+    let position7 = Board::from("4k3/8/2n2b2/8/3P4/2P5/8/3K4 b - - 0 1");
+    let m = encode_move(C6, D4, NO_PIECE, NO_FLAG);
+    let res7 = m.static_exchange_evaluation(&position7, 0);
+    assert!(!res7, "seventh see test position failed");
+
+    //test sliding attack updates
+    let position8 = Board::from("3q3k/3r4/3r4/3p4/8/3R4/3R4/3Q3K w - - 0 1");
+    let m = encode_move(D3, D5, NO_PIECE, NO_FLAG);
+    let res8 = m.static_exchange_evaluation(&position8, 0);
+    assert!(!res8, "eighth see test position failed");
+
+    let position9 = Board::from("7k/8/3r4/3p4/4P3/5B2/8/7K w - - 0 1");
+    let m = encode_move(E4, D5, NO_PIECE, NO_FLAG);
+    let res9 = m.static_exchange_evaluation(&position9, 0);
+    assert!(res9, "ninth see test position failed");
+
+    println!("see test passed");
+}
+
+//same as MG evaluation weights
+const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, INFINITY];
+
 impl Move {
-    pub fn score_move(self, b: &Board, s: &Searcher, hash_move: &Move) -> i32 {
+    fn static_exchange_evaluation(self, b: &Board, threshold: i32) -> bool {
+        /*
+         Iterative approach to SEE inspired by engine Ethereal. This is much faster
+         than the recursive implementation I tried to make becuase most of the attack
+         bitboards won't change during the SEE search so it's faster to keep them and
+         only update slider attack bitboards when it's possible that they changed.
+         This also avoids using make_move() and undo_move().
+        */
+        let sq_from = self.square_from();
+        let sq_to = self.square_to();
+
+        let mut next_victim = match self.is_promotion() {
+            true => match b.side_to_move {
+                //only consider queen promotions
+                Colour::White => WQ,
+                Colour::Black => BQ,
+            },
+            false => self.piece_moved(b),
+        };
+
+        let mut balance = match b.pieces_array[sq_to] {
+            NO_PIECE => 0,
+            k => SEE_VALUES[piece_type(k)],
+        } + threshold;
+
+        if self.is_promotion() {
+            balance += SEE_VALUES[QUEEN] - SEE_VALUES[PAWN];
+        }
+
+        if balance < 0 {
+            //bad even in best case
+            return false;
+        }
+
+        balance -= SEE_VALUES[piece_type(next_victim)];
+
+        if balance >= 0 {
+            //good even in worst case
+            return true;
+        }
+
+        let bishop_attackers =
+            b.bitboards[WB] | b.bitboards[BB] | b.bitboards[WQ] | b.bitboards[BQ];
+        let rook_attackers = b.bitboards[WR] | b.bitboards[BR] | b.bitboards[WQ] | b.bitboards[BQ];
+
+        let mut occupancies = b.occupancies[BOTH] ^ (set_bit(sq_from, 0) | set_bit(sq_to, 0));
+
+        let mut attackers = get_attackers(sq_to, Colour::White, b, occupancies)
+            | get_attackers(sq_to, Colour::Black, b, occupancies);
+
+        let mut colour = match b.side_to_move {
+            Colour::White => Colour::Black,
+            Colour::Black => Colour::White,
+        };
+
+        loop {
+            let side_attackers = attackers
+                & b.occupancies[match colour {
+                    Colour::White => WHITE,
+                    Colour::Black => BLACK,
+                }];
+            //doesn't matter that actual board struct isn't getting updated because attackers
+            //that get traded off will get popped from the attackers bitboard
+
+            if side_attackers == 0 {
+                break;
+            }
+
+            let (min, max) = match colour {
+                Colour::White => (WP, BP),
+                Colour::Black => (BP, 12),
+            };
+
+            for piece in min..max {
+                if side_attackers & b.bitboards[piece] > 0 {
+                    next_victim = piece;
+                    break;
+                }
+            }
+
+            occupancies ^= set_bit(lsfb(side_attackers & b.bitboards[next_victim]), 0);
+
+            if piece_type(next_victim) == PAWN
+                || piece_type(next_victim) == BISHOP
+                || piece_type(next_victim) == QUEEN
+            {
+                //only diagonal moves can reveal new diagonal attackers
+                attackers |= get_bishop_attacks(sq_to, occupancies) & bishop_attackers;
+            }
+
+            if piece_type(next_victim) == ROOK || piece_type(next_victim) == QUEEN {
+                //same for rook attacks
+                attackers |= get_rook_attacks(sq_to, occupancies) & rook_attackers;
+            }
+
+            attackers &= occupancies;
+            colour = match colour {
+                Colour::White => Colour::Black,
+                Colour::Black => Colour::White,
+            };
+
+            balance = -balance - 1 - SEE_VALUES[piece_type(next_victim)];
+
+            if balance >= 0 {
+                //if last move was king move and opponent still has attackers, the move
+                //must have been illegal
+                if next_victim == KING
+                    && (attackers
+                        & b.occupancies[match colour {
+                            Colour::White => WHITE,
+                            Colour::Black => BLACK,
+                        }])
+                        > 0
+                {
+                    colour = match colour {
+                        Colour::White => Colour::Black,
+                        Colour::Black => Colour::White,
+                    };
+                }
+                break;
+            }
+        }
+
+        //side to move after the loop loses
+        b.side_to_move != colour
+    }
+
+    pub fn score_move(self, b: &mut Board, s: &Searcher, hash_move: &Move) -> i32 {
+        /*
+          MOVE ORDER:
+        - TT Move
+        - PV Move
+        - Queen Promotion
+        - Winning Capture + E.P.
+        - Killers
+        - History
+        - Losing Capture
+        - Underpromotion
+         */
+
         if self.is_null() {
             -INFINITY
             //important for this to come before checking hash move
@@ -515,24 +826,20 @@ impl Move {
         } else if self.is_capture(b) {
             let victim_type: usize = piece_type(b.pieces_array[self.square_to()]);
             let attacker_type = piece_type(self.piece_moved(b));
-            if self.is_promotion() {
-                return match self.promoted_piece() {
-                    //promotions sorted by likelihood to be good
-                    QUEEN => 1000,
-                    KNIGHT => 900,
-                    ROOK => 800,
-                    BISHOP => 700,
-                    _ => unreachable!(),
-                } + MVV_LVA[victim_type][attacker_type];
+            let winning_capture = self.static_exchange_evaluation(b, 0);
+            match winning_capture {
+                true => WINNING_CAPTURE + MVV_LVA[victim_type][attacker_type],
+                false => LOSING_CAPTURE + MVV_LVA[victim_type][attacker_type],
             }
-            MVV_LVA[victim_type][attacker_type]
         } else if self.is_promotion() {
+            //maybe this should fo before checking if capture
+            //because of promotions that are also captures
             match self.promoted_piece() {
                 //promotions sorted by likelihood to be good
-                QUEEN => 1000,
-                KNIGHT => 900,
-                ROOK => 800,
-                BISHOP => 700,
+                QUEEN => QUEEN_PROMOTION,
+                KNIGHT => UNDER_PROMOTION,
+                ROOK => UNDER_PROMOTION,
+                BISHOP => UNDER_PROMOTION,
                 _ => unreachable!(),
             }
         } else if self.is_en_passant() {
@@ -554,10 +861,10 @@ pub struct MoveOrderEntry<'a> {
 }
 
 impl MoveList {
-    pub fn order_moves(&mut self, board: &Board, s: &Searcher, best_move: &Move) {
+    pub fn order_moves(&mut self, board: &mut Board, s: &Searcher, best_move: &Move) {
         let mut ordered_moves = [MoveOrderEntry {
             m: &NULL_MOVE,
-            score: 0,
+            score: -INFINITY,
         }; MAX_MOVES];
 
         #[allow(clippy::needless_range_loop)]
@@ -592,12 +899,33 @@ pub struct MoveData {
 
 #[allow(unused_variables)]
 pub fn move_time(time: usize, increment: usize, moves_to_go: usize, ply: usize) -> usize {
-    (match ply {
-        0..=10 => (time - TIME_TO_MOVE) as f32 / 40.0,
-        11..=16 => (time - TIME_TO_MOVE) as f32 / (moves_to_go as f32),
-        _ => (time - TIME_TO_MOVE) as f32 / cmp::max((moves_to_go as f32 / 2.0) as usize, 1) as f32,
-    }) as usize
-        + TIME_TO_START_SEARCH
+    let time_until_flag = time - TIME_TO_MOVE;
+
+    let ideal_time = match moves_to_go {
+        0 => {
+            (match ply {
+                0..=10 => time_until_flag / 45,
+                11..=16 => time_until_flag / 25,
+                _ => time_until_flag / 20,
+            } + increment
+                + TIME_TO_START_SEARCH)
+        }
+        _ => {
+            (match ply {
+                0..=10 => (time_until_flag) as f32 / 40.0,
+                11..=16 => (time_until_flag) as f32 / (moves_to_go as f32),
+                _ => {
+                    (time_until_flag) as f32
+                        / cmp::max((moves_to_go as f32 / 2.0) as usize, 1) as f32
+                }
+            }) as usize
+                + TIME_TO_START_SEARCH
+                + increment
+        }
+    };
+
+    //prevent that high increment > time left breaks this
+    cmp::min(time_until_flag, ideal_time)
 }
 
 pub fn best_move(
@@ -636,7 +964,7 @@ pub fn best_move(
 
     while depth < MAX_SEARCH_DEPTH {
         eval = s.negamax(position, depth, alpha, beta);
-        if s.moves_searched == 0 {
+        if s.moves_fully_searched == 0 {
             //search cancelled before even pv was searched
             eval = previous_eval;
             s.pv = previous_pv;
@@ -674,13 +1002,15 @@ pub fn best_move(
         );
 
         if start.elapsed() * 2 > move_duration {
-            /*more than half of time used -> no point starting another search as its likely
-             * that zero moves will be searched fully.
-             * ofc this also catches situations where all of move duration has elapsed */
+            /*
+             more than half of time used -> no point starting another search as its likely
+             that zero moves will be searched fully.
+             ofc this also catches situations where all of move duration has elapsed
+            */
             break;
         }
 
-        s.moves_searched = 0;
+        s.moves_fully_searched = 0;
         unsafe { REPETITION_TABLE = rt_table_reset };
 
         if eval <= alpha || eval >= beta {

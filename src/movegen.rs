@@ -47,6 +47,26 @@ pub fn is_attacked(square: usize, colour: Colour, board: &Board) -> bool {
     }
 }
 
+pub fn get_attackers(square: usize, colour: Colour, b: &Board, occupancies: u64) -> u64 {
+    //attacked BY colour
+    match colour {
+        Colour::White => {
+            BP_ATTACKS[square] & b.bitboards[WP]
+                | N_ATTACKS[square] & b.bitboards[WN]
+                | K_ATTACKS[square] & b.bitboards[WK]
+                | get_bishop_attacks(square, occupancies) & (b.bitboards[WB] | b.bitboards[WQ])
+                | get_rook_attacks(square, occupancies) & (b.bitboards[WR] | b.bitboards[WQ])
+        }
+        Colour::Black => {
+            WP_ATTACKS[square] & b.bitboards[BP]
+                | N_ATTACKS[square] & b.bitboards[BN]
+                | K_ATTACKS[square] & b.bitboards[BK]
+                | get_bishop_attacks(square, occupancies) & (b.bitboards[BB] | b.bitboards[BQ])
+                | get_rook_attacks(square, occupancies) & (b.bitboards[BR] | b.bitboards[BQ])
+        }
+    }
+}
+
 //PERF: impl with mutable reference?
 impl MoveList {
     pub fn empty() -> Self {
@@ -283,6 +303,7 @@ impl MoveList {
 
     pub fn gen_captures(board: &mut Board) -> Self {
         //special capture-only move generation for quiescence search
+        //NOTE: this generates pseudo-legal captures, and they are checked to be legal in place
         let (min, max) = match board.side_to_move {
             Colour::White => (WP, BP),
             Colour::Black => (BP, 12),
@@ -377,20 +398,7 @@ impl MoveList {
                 bitboard = pop_bit(lsb, bitboard);
             }
         }
-        let mut legal = MoveList {
-            moves: [NULL_MOVE; MAX_MOVES],
-        };
-        let mut last = 0;
-        for i in 0..MAX_MOVES {
-            if moves.moves[i].is_null() {
-                break;
-            }
-            if is_legal(moves.moves[i], board) {
-                legal.moves[last] = moves.moves[i];
-                last += 1;
-            }
-        }
-        legal
+        moves
     }
 
     pub fn gen_legal(b: &mut Board) -> Self {
@@ -410,6 +418,94 @@ impl MoveList {
         }
         legal
     }
+}
+
+pub fn get_smallest_attack(b: &mut Board, square: usize) -> Move {
+    //NOTE: for speed this does not take pins into account
+    //attacked BY colour
+    match b.side_to_move {
+        Colour::White => {
+            let pawn_attackers = BP_ATTACKS[square] & b.bitboards[WP];
+            if pawn_attackers > 0 {
+                let sq_from = lsfb(pawn_attackers);
+                return match rank(square) {
+                    7 => encode_move(sq_from, square, QUEEN, PROMOTION_FLAG),
+                    //no point considering underpromotions
+                    _ => encode_move(sq_from, square, NO_PIECE, NO_FLAG),
+                };
+            }
+            let knight_attackers = N_ATTACKS[square] & b.bitboards[WN];
+            if knight_attackers > 0 {
+                let sq_from = lsfb(knight_attackers);
+                return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
+            }
+            let king_attackers = K_ATTACKS[square] & b.bitboards[WK];
+            if king_attackers > 0 {
+                //only one king
+                let sq_from = lsfb(king_attackers);
+                return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
+            }
+            let bishop_attacks = get_bishop_attacks(square, b.occupancies[BOTH]);
+            //use later to get queen attackers
+            let bishop_attackers = bishop_attacks & b.bitboards[WB];
+            if bishop_attackers > 0 {
+                let sq_from = lsfb(bishop_attackers);
+                return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
+            }
+            let rook_attacks = get_rook_attacks(square, b.occupancies[BOTH]);
+            let rook_attackers = rook_attacks & b.bitboards[WR];
+            if rook_attackers > 0 {
+                let sq_from = lsfb(rook_attackers);
+                return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
+            }
+            let queen_attackers = (rook_attacks | bishop_attacks) & b.bitboards[WQ];
+            if queen_attackers > 0 {
+                let sq_from = lsfb(queen_attackers);
+                return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
+            }
+        }
+        Colour::Black => {
+            let pawn_attackers = WP_ATTACKS[square] & b.bitboards[BP];
+            if pawn_attackers > 0 {
+                let sq_from = lsfb(pawn_attackers);
+                return match rank(square) {
+                    0 => encode_move(sq_from, square, QUEEN, PROMOTION_FLAG),
+                    //no point considering underpromotions
+                    _ => encode_move(sq_from, square, NO_PIECE, NO_FLAG),
+                };
+            }
+            let knight_attackers = N_ATTACKS[square] & b.bitboards[BN];
+            if knight_attackers > 0 {
+                let sq_from = lsfb(knight_attackers);
+                return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
+            }
+            let king_attackers = K_ATTACKS[square] & b.bitboards[BK];
+            if king_attackers > 0 {
+                //only one king
+                let sq_from = lsfb(king_attackers);
+                return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
+            }
+            let bishop_attacks = get_bishop_attacks(square, b.occupancies[BOTH]);
+            //use later to get queen attackers
+            let bishop_attackers = bishop_attacks & b.bitboards[BB];
+            if bishop_attackers > 0 {
+                let sq_from = lsfb(bishop_attackers);
+                return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
+            }
+            let rook_attacks = get_rook_attacks(square, b.occupancies[BOTH]);
+            let rook_attackers = rook_attacks & b.bitboards[BR];
+            if rook_attackers > 0 {
+                let sq_from = lsfb(rook_attackers);
+                return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
+            }
+            let queen_attackers = (rook_attacks | bishop_attacks) & b.bitboards[BQ];
+            if queen_attackers > 0 {
+                let sq_from = lsfb(queen_attackers);
+                return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
+            }
+        }
+    }
+    NULL_MOVE
 }
 
 /* I don't think checking all edge cases separately is actually faster

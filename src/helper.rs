@@ -130,10 +130,12 @@ pub fn file_indices() -> HashMap<char, usize> {
     files
 }
 
+#[inline(always)]
 pub const fn set_bit(square: usize, bitboard: u64) -> u64 {
     bitboard | (1 << square)
 }
 
+#[inline(always)]
 pub const fn get_bit(square: usize, bitboard: u64) -> usize {
     if bitboard & (1 << square) != 0 {
         1
@@ -142,6 +144,7 @@ pub const fn get_bit(square: usize, bitboard: u64) -> usize {
     }
 }
 
+#[inline(always)]
 pub const fn pop_bit(square: usize, bitboard: u64) -> u64 {
     if get_bit(square, bitboard) == 1 {
         return bitboard ^ set_bit(square, 0);
@@ -149,6 +152,7 @@ pub const fn pop_bit(square: usize, bitboard: u64) -> u64 {
     bitboard
 }
 
+#[inline(always)]
 pub const fn count(bitboard: u64) -> usize {
     let mut prev: u64 = bitboard;
     let mut count: usize = 0;
@@ -159,6 +163,7 @@ pub const fn count(bitboard: u64) -> usize {
     count
 }
 
+#[inline(always)]
 pub const fn lsfb(bitboard: u64) -> usize {
     if bitboard != 0 {
         return count(((bitboard as i64) & -(bitboard as i64)) as u64 - 1);
@@ -196,14 +201,17 @@ pub fn coordinate(sq: usize) -> String {
     format!("{}{}", f, r)
 }
 
+#[inline(always)]
 pub const fn rank(sq: usize) -> usize {
     sq / 8
 }
 
+#[inline(always)]
 pub const fn file(sq: usize) -> usize {
     sq % 8
 }
 
+#[inline(always)]
 pub const fn piece_type(piece: usize) -> usize {
     piece % 6
 }

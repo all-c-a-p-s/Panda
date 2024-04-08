@@ -32,6 +32,7 @@ fn main() {
         //full_hash_test();
         //let pos = Board::from(STARTPOS);
         //println!("{}", evaluate(&pos));
+        see_test();
         full_perft();
     } else {
         uci_loop();

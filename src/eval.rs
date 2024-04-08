@@ -2,11 +2,11 @@ use crate::board::*;
 use crate::helper::*;
 use crate::magic::*;
 
-const PAWN_VALUE: (i32, i32) = (83, 95);
-const KNIGHT_VALUE: (i32, i32) = (306, 311);
-const BISHOP_VALUE: (i32, i32) = (322, 350);
-const ROOK_VALUE: (i32, i32) = (490, 542);
-const QUEEN_VALUE: (i32, i32) = (925, 940);
+pub const PAWN_VALUE: (i32, i32) = (83, 95);
+pub const KNIGHT_VALUE: (i32, i32) = (306, 311);
+pub const BISHOP_VALUE: (i32, i32) = (322, 350);
+pub const ROOK_VALUE: (i32, i32) = (490, 542);
+pub const QUEEN_VALUE: (i32, i32) = (925, 940);
 
 //all PSQT have a1 on bottom left as viewing the code
 //currently picked pretty arbitrarily
@@ -215,6 +215,16 @@ pub const FILES: [u64; 64] = {
     table
 };
 
+const MIRROR: [usize; 64] = {
+    let mut mirror = [0usize; 64];
+    let mut square = 0;
+    while square < 64 {
+        mirror[square] = relative_psqt_square(square, Colour::White);
+        square += 1;
+    }
+    mirror
+};
+
 //mobility scores worse than these give negative bonus
 const BISHOP_BASE_MOBILITY: usize = 4;
 const ROOK_BASE_MOBILITY: usize = 2;
@@ -254,7 +264,7 @@ const DOUBLED_PAWN_PENALTY: (i32, i32) = (-4, -23); //only given to the first pa
 pub fn game_phase_score(b: &Board) -> i32 {
     //score in starting position will be 4*1 + 2*2 + 1*2 + 1*2 = 12
     //lower score = closer to endgame
-    match b.side_to_move {
+    (match b.side_to_move {
         Colour::White => {
             count(b.bitboards[BQ]) * 4
                 + count(b.bitboards[BR]) * 2
@@ -267,9 +277,7 @@ pub fn game_phase_score(b: &Board) -> i32 {
                 + count(b.bitboards[WB])
                 + count(b.bitboards[WN])
         }
-    }
-    .try_into()
-    .unwrap()
+    }) as i32
 }
 
 pub fn tapered_score(weight: (i32, i32), phase_score: i32) -> i32 {
@@ -277,7 +285,7 @@ pub fn tapered_score(weight: (i32, i32), phase_score: i32) -> i32 {
     (phase_score * weight.0 + (START_PHASE_SCORE - phase_score) * weight.1) / START_PHASE_SCORE
 }
 
-pub fn relative_psqt_square(square: usize, c: Colour) -> usize {
+pub const fn relative_psqt_square(square: usize, c: Colour) -> usize {
     match c {
         Colour::White => {
             //piece-square tables have a1 on bottom left -> a8 at index 0
@@ -302,10 +310,7 @@ fn evaluate_pawns(b: &Board, phase_score: i32, colour: Colour) -> i32 {
 
         match colour {
             Colour::White => {
-                pawn_eval += tapered_score(
-                    PAWN_TABLE[relative_psqt_square(square, colour)],
-                    phase_score,
-                );
+                pawn_eval += tapered_score(PAWN_TABLE[MIRROR[square]], phase_score);
                 if WHITE_PASSED_MASKS[square] & b.bitboards[BP] == 0 {
                     //no blocking black pawns
                     let can_advance = match get_bit(square + 8, b.occupancies[BOTH]) {
@@ -369,10 +374,7 @@ fn evaluate_knights(b: &Board, phase_score: i32, colour: Colour) -> i32 {
         knight_eval += tapered_score(KNIGHT_VALUE, phase_score);
         match colour {
             Colour::White => {
-                knight_eval += tapered_score(
-                    KNIGHT_TABLE[relative_psqt_square(square, Colour::White)],
-                    phase_score,
-                );
+                knight_eval += tapered_score(KNIGHT_TABLE[MIRROR[square]], phase_score);
             }
             Colour::Black => knight_eval += tapered_score(KNIGHT_TABLE[square], phase_score),
         }
@@ -400,10 +402,7 @@ fn evaluate_bishops(b: &Board, phase_score: i32, colour: Colour) -> i32 {
             * tapered_score(BISHOP_MOBILITY_UNIT, phase_score);
         match colour {
             Colour::White => {
-                bishop_eval += tapered_score(
-                    BISHOP_TABLE[relative_psqt_square(square, Colour::White)],
-                    phase_score,
-                )
+                bishop_eval += tapered_score(BISHOP_TABLE[MIRROR[square]], phase_score)
             }
             Colour::Black => bishop_eval += tapered_score(BISHOP_TABLE[square], phase_score),
         }
@@ -458,10 +457,7 @@ fn evaluate_rooks(b: &Board, phase_score: i32, colour: Colour) -> i32 {
             * tapered_score(ROOK_MOBILITY_UNIT, phase_score);
         match colour {
             Colour::White => {
-                rook_eval += tapered_score(
-                    ROOK_TABLE[relative_psqt_square(square, Colour::White)],
-                    phase_score,
-                );
+                rook_eval += tapered_score(ROOK_TABLE[MIRROR[square]], phase_score);
                 if attacks_up_file & b.bitboards[WP] == 0 {
                     if attacks_up_file & b.bitboards[BP] == 0 {
                         open_file = true;
@@ -509,10 +505,7 @@ fn evaluate_queens(b: &Board, phase_score: i32, colour: Colour) -> i32 {
             * tapered_score(QUEEN_MOBILITY_UNIT, phase_score);
         match colour {
             Colour::White => {
-                queen_eval += tapered_score(
-                    QUEEN_TABLE[relative_psqt_square(square, Colour::White)],
-                    phase_score,
-                );
+                queen_eval += tapered_score(QUEEN_TABLE[MIRROR[square]], phase_score);
             }
             Colour::Black => queen_eval += tapered_score(QUEEN_TABLE[square], phase_score),
         }
@@ -533,10 +526,7 @@ fn evaluate_king(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     };
     let king_square = lsfb(king_bb);
     king_eval += match colour {
-        Colour::White => tapered_score(
-            KING_TABLE[relative_psqt_square(king_square, Colour::White)],
-            phase_score,
-        ),
+        Colour::White => tapered_score(KING_TABLE[MIRROR[king_square]], phase_score),
         Colour::Black => tapered_score(KING_TABLE[king_square], phase_score),
     };
 
