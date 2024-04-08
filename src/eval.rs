@@ -116,7 +116,7 @@ pub const fn passed_pawn_mask_white(square: usize) -> u64 {
         5 => E_FILE | F_FILE | G_FILE,
         6 => F_FILE | G_FILE | H_FILE,
         7 => G_FILE | H_FILE,
-        _ => panic!("impossible"),
+        _ => unreachable!(),
     };
 
     res
@@ -140,7 +140,7 @@ pub const fn passed_pawn_mask_black(square: usize) -> u64 {
         5 => E_FILE | F_FILE | G_FILE,
         6 => F_FILE | G_FILE | H_FILE,
         7 => G_FILE | H_FILE,
-        _ => panic!("impossible"),
+        _ => unreachable!(),
     };
     res
 }
@@ -158,7 +158,7 @@ pub const ISOLATED_MASKS: [u64; 64] = {
             5 => E_FILE | G_FILE,
             6 => F_FILE | H_FILE,
             7 => G_FILE,
-            _ => panic!("impossible"),
+            _ => unreachable!(),
         };
         square += 1;
     }
@@ -178,7 +178,7 @@ pub const DOUBLED_MASKS: [u64; 64] = {
             5 => pop_bit(square, F_FILE),
             6 => pop_bit(square, G_FILE),
             7 => pop_bit(square, H_FILE),
-            _ => panic!("impossible"),
+            _ => unreachable!(),
         };
         square += 1;
     }
@@ -600,37 +600,7 @@ fn evaluate_king(b: &Board, phase_score: i32, colour: Colour) -> i32 {
 pub fn evaluate(b: &Board) -> i32 {
     let mut eval: i32 = 0;
     let phase_score = game_phase_score(b);
-    /*
-        println!(
-            "pawn {}",
-            evaluate_pawns(b, phase_score, Colour::White)
-                - evaluate_pawns(b, phase_score, Colour::Black)
-        );
-        println!(
-            "knight {}",
-            evaluate_knights(b, phase_score, Colour::White)
-                - evaluate_knights(b, phase_score, Colour::Black)
-        );
-        println!(
-            "bishop {}",
-            evaluate_bishops(b, phase_score, Colour::White)
-                - evaluate_bishops(b, phase_score, Colour::Black)
-        );
-        println!(
-            "rook {}",
-            evaluate_rooks(b, phase_score, Colour::White)
-                - evaluate_rooks(b, phase_score, Colour::Black)
-        );
-        println!(
-            "queen {}",
-            evaluate_queens(b, phase_score, Colour::White)
-                - evaluate_queens(b, phase_score, Colour::Black)
-        );
-        println!(
-            "king {}",
-            evaluate_king(b, phase_score, Colour::White) - evaluate_king(b, phase_score, Colour::Black)
-        );
-    */
+
     eval += evaluate_pawns(b, phase_score, Colour::White);
     eval += evaluate_knights(b, phase_score, Colour::White);
     eval += evaluate_bishops(b, phase_score, Colour::White);

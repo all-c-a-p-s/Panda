@@ -67,7 +67,6 @@ pub fn get_attackers(square: usize, colour: Colour, b: &Board, occupancies: u64)
     }
 }
 
-//PERF: impl with mutable reference?
 impl MoveList {
     pub fn empty() -> Self {
         MoveList {

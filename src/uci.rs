@@ -126,12 +126,37 @@ pub fn parse_position(command: &str, b: &mut Board) {
 pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveData {
     let words = command.split_whitespace().collect::<Vec<&str>>();
     //go wtime x btime x winc x binc x movestogo x
-    let w_time: usize = words[2].parse().expect("failed to convert wtime to int");
-    let b_time: usize = words[4].parse().expect("failed to convert btime to int");
-    let w_inc: usize = words[6].parse().expect("failed to convert winc to int");
-    let b_inc: usize = words[8].parse().expect("failed to convert binc to int");
 
-    let mut moves_to_go: usize = 20;
+    let (mut w_inc, mut b_inc, mut moves_to_go) = (0, 0, 0);
+
+    let w_time = words[2].parse().expect("failed to convert wtime to int");
+    let b_time = words[4].parse().expect("failed to convert btime to int");
+
+    match words.len() {
+        5 => {
+            //go wtime x btime x
+        }
+        7 => {
+            //go wtime x btime x movestogo x
+            moves_to_go = words[6]
+                .parse()
+                .expect("failed to convert movestogo to int");
+        }
+        9 => {
+            //go wtime x btime x winc x binc x
+            w_inc = words[6].parse().expect("failed to convert winc to int");
+            b_inc = words[8].parse().expect("failed to covnert binc to int");
+        }
+        11 => {
+            //go wtime x btime x winc x binc x movestogo x
+            w_inc = words[6].parse().expect("failed to convert winc to int");
+            b_inc = words[8].parse().expect("failed to covnert binc to int");
+            moves_to_go = words[10]
+                .parse()
+                .expect("failed to convert movestogo to int");
+        }
+        _ => panic!("unexpected length of go command"),
+    }
 
     if words.len() > 9 {
         moves_to_go = words[10]
