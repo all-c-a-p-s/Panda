@@ -4,6 +4,8 @@ Panda is a chess engine written in Rust (still a work in progress). It is called
 - pandas are pretty cool
 - red pandas are also pretty cool, and they are orange (like Rust)
 
+![](logo.jpeg)
+
 Current elo ~2100
 
 ## Features:
