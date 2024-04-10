@@ -234,7 +234,7 @@ impl Board {
         //used to avoid null move pruning in king and pawn endgames
         //where zugzwang is very common
         self.occupancies[BOTH]
-            ^ (self.bitboards[WP] | self.bitboards[WK] | self.bitboards[BP] | self.bitboards[11])
+            ^ (self.bitboards[WP] | self.bitboards[WK] | self.bitboards[BP] | self.bitboards[BK])
             == 0
     }
 }

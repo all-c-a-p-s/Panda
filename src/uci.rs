@@ -64,8 +64,8 @@ pub fn parse_uci(command: &str) {
     match command {
         "uci" => {
             println!("uciok");
-            println!("id name Panda 1.0");
-            println!("id author Sebastiano Rebonato-Scott");
+            //println!("id name Panda 1.0");
+            //println!("id author Sebastiano Rebonato-Scott");
         }
         _ => panic!("invalid uci command"),
     }
@@ -123,11 +123,92 @@ pub fn parse_position(command: &str, b: &mut Board) {
     };
 }
 
+pub fn parse_special_go(command: &str, b: &mut Board, s: &mut Searcher) -> MoveData {
+    //special combination of go and position command by lichess bot api
+    reset(b);
+    b.hash_key = hash(b);
+    //^ is necessary becuse reset doesn't update hash key
+    unsafe { REPETITION_TABLE[b.ply] = b.hash_key }
+    let words = command.split_whitespace().collect::<Vec<&str>>();
+    if words.len() < 2 {
+        panic!("invalid position command");
+    }
+
+    let mut end_of_moves = 0;
+
+    match words[1] {
+        "startpos" => {
+            if words.len() != 2 {
+                #[allow(clippy::needless_range_loop)]
+                for i in 3..words.len() {
+                    if words[i].chars().collect::<Vec<char>>()[0] == 'w' {
+                        end_of_moves = i;
+                        break;
+                    }
+                    //parse moves
+                    let m = parse_move(words[i], *b);
+                    b.make_move(m);
+                    unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
+                }
+            }
+        }
+        "fen" => {
+            let mut fen_string = String::new();
+            #[allow(clippy::needless_range_loop)]
+            for i in 2..words.len() {
+                if words[i].chars().collect::<Vec<char>>()[0] == 'w' {
+                    end_of_moves = i;
+                    break;
+                }
+                fen_string += words[i];
+                if i != words.len() - 1 {
+                    fen_string += " ";
+                }
+            }
+            *b = Board::from(&fen_string)
+        }
+        "moves" => {
+            #[allow(clippy::needless_range_loop)]
+            for i in 2..words.len() {
+                if words[i].chars().collect::<Vec<char>>()[0] == 'w' {
+                    end_of_moves = i;
+                    break;
+                }
+                let m = parse_move(words[i], *b);
+                b.make_move(m);
+                unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
+            }
+        }
+        _ => panic!("invalid position command"),
+    };
+
+    let time_words = &words[end_of_moves..];
+
+    let mut fake_go_command = String::from("go ");
+    for w in time_words {
+        fake_go_command += w;
+        fake_go_command += " ";
+    }
+
+    parse_go(fake_go_command.as_str(), b, s)
+}
+
 pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveData {
     let words = command.split_whitespace().collect::<Vec<&str>>();
     //go wtime x btime x winc x binc x movestogo x
 
+    let mut movetime = 0;
+    // if go command sets move time for engine
+
     let (mut w_inc, mut b_inc, mut moves_to_go) = (0, 0, 0);
+
+    if words[1] == "moves" {
+        //special command lichess-bot protocol uses
+        return parse_special_go(command, position, s);
+    } else if words[1] == "movetime" {
+        movetime = words[2].parse().expect("failed to convert movetime to int");
+        return best_move(position, 0, 0, 0, movetime, s);
+    }
 
     let w_time = words[2].parse().expect("failed to convert wtime to int");
     let b_time = words[4].parse().expect("failed to convert btime to int");
@@ -155,8 +236,8 @@ pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveDa
                 .parse()
                 .expect("failed to convert movestogo to int");
         }
-        _ => panic!("unexpected length of go command"),
-    }
+        _ => return parse_special_go(command, position, s),
+    };
 
     if words.len() > 9 {
         moves_to_go = words[10]
@@ -174,7 +255,7 @@ pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveDa
         Colour::Black => b_inc,
     };
 
-    best_move(position, engine_time, engine_inc, moves_to_go, s)
+    best_move(position, engine_time, engine_inc, moves_to_go, movetime, s)
 }
 
 pub fn uci_loop() {

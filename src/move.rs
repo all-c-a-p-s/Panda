@@ -464,3 +464,15 @@ pub fn is_legal(m: Move, b: &mut Board) -> bool {
     b.undo_move(m, commit);
     legal
 }
+impl Board {
+    pub fn try_move(&mut self, m: Move) -> (Commit, bool) {
+        let commit = self.make_move(m);
+        let ok = match self.side_to_move {
+            // AFTER move has been made
+            Colour::White => !is_attacked(lsfb(self.bitboards[BK]), Colour::White, self),
+            Colour::Black => !is_attacked(lsfb(self.bitboards[WK]), Colour::Black, self),
+        };
+
+        (commit, ok)
+    }
+}

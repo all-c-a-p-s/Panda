@@ -5,8 +5,8 @@ use std::collections::HashMap;
 pub enum EntryFlag {
     Missing,
     Exact,
-    Beta,
-    Alpha,
+    LowerBound,
+    UpperBound,
 }
 
 #[derive(Clone, Copy)]
@@ -30,16 +30,16 @@ pub struct LookupResult {
 }
 
 /*
-* TT implementation inspired by engine Black Marlin
-* the idea of the mask field is that it will be set to
-* (2^k - 1), where the capacity of the table = 2^k.
-* This means that the mask will have all bits less
-* significant than the kth bit set and all others zeroed.
-* Mask acts as a filter so that u64 hash key can get
-* indexed in a hash table of some size.
-*
-* Somehow using a hashmap with default capacity still gives
-* higher NPS for me tho...
+ TT implementation inspired by engine Black Marlin
+ the idea of the mask field is that it will be set to
+ (2^k - 1), where the capacity of the table = 2^k.
+ This means that the mask will have all bits less
+ significant than the kth bit set and all others zeroed.
+ Mask acts as a filter so that u64 hash key can get
+ indexed in a hash table of some size.
+
+ Somehow using a hashmap with default capacity still gives
+ higher NPS for me tho...
 */
 
 impl Default for TTEntry {
@@ -115,7 +115,7 @@ impl TT for TranspositionTable {
             best_move = entry.best_move;
             if entry.depth >= depth {
                 match entry.flag {
-                    EntryFlag::Beta => {
+                    EntryFlag::LowerBound => {
                         //lower bound hash entry
                         if entry.eval >= beta {
                             return LookupResult {
@@ -124,7 +124,7 @@ impl TT for TranspositionTable {
                             };
                         }
                     }
-                    EntryFlag::Alpha => {
+                    EntryFlag::UpperBound => {
                         //upper bound entry
                         if entry.eval <= alpha {
                             return LookupResult {
@@ -166,7 +166,7 @@ impl TT for HashMap<u64, TTEntry> {
             best_move = entry.best_move;
             if entry.depth >= depth {
                 match entry.flag {
-                    EntryFlag::Beta => {
+                    EntryFlag::LowerBound => {
                         //lower bound hash entry
                         if entry.eval >= beta {
                             return LookupResult {
@@ -175,7 +175,7 @@ impl TT for HashMap<u64, TTEntry> {
                             };
                         }
                     }
-                    EntryFlag::Alpha => {
+                    EntryFlag::UpperBound => {
                         //upper bound entry
                         if entry.eval <= alpha {
                             return LookupResult {
@@ -196,6 +196,13 @@ impl TT for HashMap<u64, TTEntry> {
                     //as above, the get() function will return none
                     //if the entry is missing
                 }
+            } else {
+                //return best move even in the case that we cannot rely on the evaluation for the
+                //purpose of move ordering
+                return LookupResult {
+                    eval: None,
+                    best_move: entry.best_move,
+                };
             }
         }
 
