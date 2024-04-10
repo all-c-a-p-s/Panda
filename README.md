@@ -60,7 +60,7 @@ The best way to improve the engine's playing strength would probably be to optim
 - connect to a UCI gui such as CuteChess or Arena
 
 ## Acknowledgements
-Here are some of the many resources wihtout which this engine would be much less strong:
+Here are some of the many resources without which this engine would be much less strong:
 - [Chess Programming Wiki](https://www.chessprogramming.org/Main_Page)
 - [BBC Chess Engine](https://github.com/maksimKorzh/bbc) + videos
 - Most of all, open source chess engines such as Stockfish, Ethereal and Weiss which have extremely clear and helpful documentation 
