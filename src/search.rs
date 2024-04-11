@@ -18,7 +18,7 @@ pub const MAX_SEARCH_DEPTH: usize = 32;
 pub const REDUCTION_LIMIT: usize = 3;
 // can't reduce search to below 3 - 2 = 1 ply
 const FULL_DEPTH_MOVES: usize = 4;
-const NULLMOVE_MIN_DEPTH: usize = 2;
+const NULLMOVE_MAX_DEPTH: usize = 6;
 const ASPIRATION_WINDOW: i32 = 40;
 
 const RAZORING_MARGIN: i32 = 300;
@@ -39,7 +39,7 @@ const SEE_QSEARCH_MARGIN: i32 = 130;
 //in SEE pruning in QSearch
 
 #[allow(unused)]
-const LMP_DEPTH: usize = 4;
+const LMP_DEPTH: usize = 5;
 
 const HASH_MOVE_SCORE: i32 = 1_000_000;
 const PV_MOVE_SCORE: i32 = 500_000;
@@ -312,7 +312,7 @@ impl Searcher {
         if !position.is_kp_endgame()
             && !position.last_move_null
             && static_eval >= beta
-            && depth >= NULLMOVE_MIN_DEPTH
+            && depth <= NULLMOVE_MAX_DEPTH
             && !is_check
             && !root
         {
@@ -378,7 +378,6 @@ impl Searcher {
                 || m == self.info.killer_moves[1][self.ply];
 
             if !root && not_mated {
-                //skip quiet moves that we do not expect much from
                 if quiet && skip_quiets && !is_killer {
                     //this is kinda messy but you have to know whether the move was legal
                     //to update the moves_played counter
@@ -395,9 +394,10 @@ impl Searcher {
                 let lmr_depth = depth as i32 - 1 - r;
 
                 /*
-                 SEE Pruning: if the opponent move fails to beat a depth dependent
-                 SEE threshold, skip it
+                 SEE Pruning: if a move fails SEE by a depth-dependent threshold,
+                 prune it
                 */
+
                 if lmr_depth <= SEE_PRUNING_DEPTH && moves_played > 1 && !pv_node {
                     let margin = if tactical {
                         SEE_NOISY_MARGIN
