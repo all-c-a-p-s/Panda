@@ -18,7 +18,7 @@ pub const MAX_SEARCH_DEPTH: usize = 32;
 pub const REDUCTION_LIMIT: usize = 3;
 // can't reduce search to below 3 - 2 = 1 ply
 const FULL_DEPTH_MOVES: usize = 4;
-const NULLMOVE_R: usize = 2;
+const NULLMOVE_MIN_DEPTH: usize = 2;
 const ASPIRATION_WINDOW: i32 = 40;
 
 const RAZORING_MARGIN: i32 = 300;
@@ -31,20 +31,24 @@ const ALPHA_PRUNING_DEPTH: usize = 4;
 const ALPHA_PRUNING_MARGIN: i32 = 2000;
 
 const SEE_PRUNING_DEPTH: i32 = 4;
-const SEE_PRUNING_MARGIN: i32 = 100;
+const SEE_QUIET_MARGIN: i32 = 100;
+const SEE_NOISY_MARGIN: i32 = 70;
 #[allow(unused)]
 const SEE_QSEARCH_MARGIN: i32 = 130;
 //TODO: test using static margin or just zero
 //in SEE pruning in QSearch
 
-const HASH_MOVE_SCORE: i32 = 30_000;
-const PV_MOVE_SCORE: i32 = 20_000;
-const QUEEN_PROMOTION: i32 = 15_000;
-const WINNING_CAPTURE: i32 = 10_000;
-const FIRST_KILLER_MOVE: i32 = 9000;
-const SECOND_KILLER_MOVE: i32 = 8000;
-const LOSING_CAPTURE: i32 = -5_000;
-const UNDER_PROMOTION: i32 = -10_000;
+#[allow(unused)]
+const LMP_DEPTH: usize = 4;
+
+const HASH_MOVE_SCORE: i32 = 1_000_000;
+const PV_MOVE_SCORE: i32 = 500_000;
+const QUEEN_PROMOTION: i32 = 400_000;
+const WINNING_CAPTURE: i32 = 300_000;
+const FIRST_KILLER_MOVE: i32 = 200_000;
+const SECOND_KILLER_MOVE: i32 = 100_000;
+const LOSING_CAPTURE: i32 = -100_000;
+const UNDER_PROMOTION: i32 = -200_000;
 
 pub const MAX_GAME_PLY: usize = 1024;
 
@@ -55,9 +59,48 @@ const TIME_TO_START_SEARCH: usize = 0; //initialise big TT (if not using HashMap
 pub static mut REPETITION_TABLE: [u64; MAX_GAME_PLY] = [0u64; MAX_GAME_PLY];
 pub static mut START_DEPTH: usize = 0;
 
+struct SearchInfo {
+    lmr_table: LMRTable,
+    history_table: [[i32; 64]; 12],
+    killer_moves: [[Move; MAX_PLY]; 2],
+}
+
+struct LMRTable {
+    reduction_table: [[[i32; 32]; 32]; 2],
+}
+
+impl Default for LMRTable {
+    fn default() -> Self {
+        //formula for reductions from Wiess chess engine
+        let mut reduction_table = [[[0; 32]; 32]; 2];
+        let (mut depth, mut played) = (0, 0);
+        while depth < 32 {
+            while played < 32 {
+                reduction_table[0][depth][played] =
+                    (0.33 + f64::ln(depth as f64) * f64::ln(played as f64) / 3.20) as i32;
+                //tactical move
+                reduction_table[1][depth][played] =
+                    (1.64 + f64::ln(depth as f64) * f64::ln(played as f64) / 2.80) as i32;
+                //quiet move
+                played += 1;
+            }
+            depth += 1;
+        }
+        LMRTable { reduction_table }
+    }
+}
+
+impl Default for SearchInfo {
+    fn default() -> Self {
+        Self {
+            lmr_table: LMRTable::default(),
+            history_table: [[0i32; 64]; 12],
+            killer_moves: [[NULL_MOVE; 64]; 2],
+        }
+    }
+}
+
 pub struct Searcher {
-    pub killer_moves: [[Move; MAX_PLY]; 2],
-    pub history_scores: [[i32; 64]; 12],
     pub pv_length: [usize; 64],
     pub pv: [[Move; MAX_PLY]; MAX_PLY],
     pub tt_white: HashMap<u64, TTEntry>,
@@ -66,6 +109,7 @@ pub struct Searcher {
     pub nodes: usize,
     pub end_time: Instant,
     pub moves_fully_searched: usize,
+    info: SearchInfo,
 }
 
 fn reduction_ok(tactical: bool, is_check: bool) -> bool {
@@ -139,8 +183,6 @@ unsafe fn is_drawn(position: &Board) -> bool {
 impl Searcher {
     pub fn new(end_time: Instant) -> Self {
         Searcher {
-            killer_moves: [[NULL_MOVE; MAX_PLY]; 2],
-            history_scores: [[0; 64]; 12],
             pv_length: [0usize; 64],
             pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
             tt_white: HashMap::new(), //128 MB
@@ -149,6 +191,7 @@ impl Searcher {
             nodes: 0,
             end_time,
             moves_fully_searched: 0,
+            info: SearchInfo::default(),
         }
     }
 
@@ -175,6 +218,7 @@ impl Searcher {
             };
         }
         let pv_node = beta - alpha != 1;
+        let root = self.ply == 0;
         //full window search
 
         self.pv_length[self.ply] = self.ply;
@@ -187,7 +231,11 @@ impl Searcher {
         let mut hash_flag = EntryFlag::UpperBound;
         self.nodes += 1;
 
-        if self.ply != 0 {
+        let mut best_move = NULL_MOVE; //used for TT hash -> move ordering
+                                       //this is useful in cases where it cannot return the eval of the hash lookup
+                                       //due to the bounds, but it can use the best_move field for move ordering
+
+        if !root {
             //check 50 move rule, repetition and insufficient material
             unsafe {
                 if is_drawn(position) {
@@ -205,12 +253,7 @@ impl Searcher {
             if r_alpha >= r_beta {
                 return r_alpha;
             }
-        }
 
-        let mut best_move = NULL_MOVE; //used for TT hash -> move ordering
-                                       //this is useful in cases where it cannot return the eval of the hash lookup
-                                       //due to the bounds, but it can use the best_move field for move ordering
-        if self.ply != 0 {
             let hash_lookup = match position.side_to_move {
                 //hash lookup
                 Colour::White => self.tt_white.lookup(position.hash_key, alpha, beta, depth),
@@ -224,6 +267,12 @@ impl Searcher {
             };
         }
 
+        let tt_move_capture = if best_move.is_null() {
+            false
+        } else {
+            best_move.is_capture(position)
+        };
+
         let is_check = match position.side_to_move {
             //used in both search extensions and LMR
             Colour::White => is_attacked(lsfb(position.bitboards[WK]), Colour::Black, position),
@@ -233,8 +282,8 @@ impl Searcher {
         let static_eval = evaluate(position);
 
         //reset killers for child nodes
-        self.killer_moves[0][self.ply + 1] = NULL_MOVE;
-        self.killer_moves[1][self.ply + 1] = NULL_MOVE;
+        self.info.killer_moves[0][self.ply + 1] = NULL_MOVE;
+        self.info.killer_moves[1][self.ply + 1] = NULL_MOVE;
 
         if !is_check && !pv_node {
             //Beta Pruning / Reverse Futility Pruning:
@@ -262,16 +311,19 @@ impl Searcher {
 
         if !position.is_kp_endgame()
             && !position.last_move_null
-            && depth > NULLMOVE_R
+            && static_eval >= beta
+            && depth >= NULLMOVE_MIN_DEPTH
             && !is_check
-            && self.ply > 0
+            && !root
         {
             //ok to null-move prune
             let ep_reset = make_null_move(position);
             self.ply += 1;
             //idea that if opponent cannot improve their position with 2 moves in a row
             //the first of these moves must be bad
-            let null_move_eval = -self.negamax(position, depth - NULLMOVE_R, -beta, -beta + 1);
+            let r = 2 + depth as i32 / 4 + cmp::min((static_eval - beta) / 256, 3);
+            let reduced_depth = cmp::max(depth as i32 - r, 1) as usize;
+            let null_move_eval = -self.negamax(position, reduced_depth, -beta, -beta + 1);
             //minimal window used because all that matters is whether the search result is better than beta
             undo_null_move(position, ep_reset);
             self.ply -= 1;
@@ -292,7 +344,7 @@ impl Searcher {
             self.negamax(position, depth - 2, alpha, beta);
         }
 
-        if is_check && self.ply != 0 {
+        if is_check && !root {
             depth += 1;
             //if this occurs at ply zero then next search iteration will basically be skipped
             //because of hash lookup
@@ -309,6 +361,7 @@ impl Searcher {
         child_nodes.order_moves(position, self, &best_move);
 
         let mut moves_played = 0;
+        let mut skip_quiets = false;
 
         for m in child_nodes.moves {
             if m.is_null() {
@@ -317,23 +370,59 @@ impl Searcher {
             }
 
             let tactical = m.is_tactical(position);
+            let quiet = !tactical;
             let not_mated = alpha > -INFINITY + MAX_SEARCH_DEPTH as i32;
             //must be done before making the move on the board
 
-            /*
-             SEE Pruning: if the opponent move fails to beat a depth dependent
-             SEE threshold, skip it
-            */
-            if depth as i32 <= SEE_PRUNING_DEPTH && not_mated && moves_played > 1 && !pv_node {
-                let threshold = SEE_PRUNING_MARGIN * depth as i32;
-                if !m.static_exchange_evaluation(position, threshold) {
-                    //move fails to beat SEE threshold
-                    moves_played += 1;
+            let is_killer = m == self.info.killer_moves[0][self.ply]
+                || m == self.info.killer_moves[1][self.ply];
+
+            if !root && not_mated {
+                //skip quiet moves that we do not expect much from
+                if quiet && skip_quiets && !is_killer {
+                    //this is kinda messy but you have to know whether the move was legal
+                    //to update the moves_played counter
+                    let (commit, ok) = position.try_move(m);
+                    position.undo_move(m, commit);
+                    if ok {
+                        moves_played += 1;
+                    }
                     continue;
                 }
-            }
 
-            let piece_moved = m.piece_moved(position);
+                let r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
+                    [cmp::min(depth, 31)][cmp::min(moves_played, 31)];
+                let lmr_depth = depth as i32 - 1 - r;
+
+                /*
+                 SEE Pruning: if the opponent move fails to beat a depth dependent
+                 SEE threshold, skip it
+                */
+                if lmr_depth <= SEE_PRUNING_DEPTH && moves_played > 1 && !pv_node {
+                    let margin = if tactical {
+                        SEE_NOISY_MARGIN
+                    } else {
+                        SEE_QUIET_MARGIN
+                    };
+                    let threshold = margin * depth as i32;
+                    //prune if move fails to beat SEE threshold
+                    if !m.static_exchange_evaluation(position, threshold) {
+                        //as above
+                        let (commit, ok) = position.try_move(m);
+                        position.undo_move(m, commit);
+                        if ok {
+                            moves_played += 1;
+                        }
+                        continue;
+                    }
+                }
+
+                //this can definitely be done way better
+                //by measuring whether search is improving
+                if depth <= LMP_DEPTH && moves_played > depth * depth + 2 && !is_check {
+                    skip_quiets = true;
+                }
+            }
 
             let (commit, ok) = position.try_move(m);
             //test if move is legal and make it at the same time
@@ -346,7 +435,9 @@ impl Searcher {
             }
 
             moves_played += 1;
+
             self.ply += 1;
+            //update after pruning above
 
             let eval = match moves_played == 1 {
                 //note that this is one because the variable is updates above
@@ -366,19 +457,17 @@ impl Searcher {
                         && reduction_ok(tactical, is_check)
                     {
                         true => {
-                            let mut r = 1;
+                            let mut r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
+                                [cmp::min(depth, 31)][cmp::min(moves_played, 31)];
 
                             //increase reduction for non-pv nodes
-                            if !pv_node {
-                                r += 1;
-                            }
+                            r += !pv_node as i32;
+                            //increase reduction for quiet moves where tt move is noisy
+                            r += tt_move_capture as i32;
 
-                            //increase for king moves that evade checks
-                            if is_check && piece_type(piece_moved) == KING {
-                                r += 1;
-                            }
-
-                            let reduced_depth = cmp::max(depth - r - 1, 1);
+                            let mut reduced_depth = cmp::max(depth as i32 - r - 1, 1) as usize;
+                            reduced_depth = usize::clamp(reduced_depth, 1, depth);
+                            //avoid dropping into qsearch or extending
 
                             -self.negamax(position, reduced_depth, -alpha - 1, -alpha)
                         }
@@ -423,8 +512,14 @@ impl Searcher {
                 if alpha >= beta {
                     //only write quiet moves into history table because captures
                     //will be scored separately
-                    //
-                    self.update_search_tables(position, &child_nodes, m, tactical, depth);
+                    self.update_search_tables(
+                        position,
+                        &child_nodes,
+                        m,
+                        tactical,
+                        depth,
+                        moves_played,
+                    );
                     hash_flag = EntryFlag::LowerBound;
                     break;
                 }
@@ -572,18 +667,19 @@ impl Searcher {
         cutoff_move: Move,
         tactical: bool,
         depth: usize,
+        moves_played: usize,
     ) {
         if !tactical {
             self.update_killer_moves(cutoff_move, tactical);
-            self.update_history_table(b, moves, cutoff_move, depth)
+            self.update_history_table(b, moves, cutoff_move, depth, moves_played)
         }
     }
 
     pub fn update_killer_moves(&mut self, cutoff_move: Move, tactical: bool) {
-        if !tactical && self.killer_moves[0][self.ply] != cutoff_move {
+        if !tactical && self.info.killer_moves[0][self.ply] != cutoff_move {
             //avoid saving the same killer move twice
-            self.killer_moves[1][self.ply] = self.killer_moves[0][self.ply];
-            self.killer_moves[0][self.ply] = cutoff_move;
+            self.info.killer_moves[1][self.ply] = self.info.killer_moves[0][self.ply];
+            self.info.killer_moves[0][self.ply] = cutoff_move;
         }
     }
 
@@ -593,17 +689,19 @@ impl Searcher {
         moves: &MoveList,
         cutoff_move: Move,
         depth: usize,
+        moves_played: usize,
     ) {
-        for m in moves.moves {
-            if m.is_null() {
+        //penalise all moves that have been checked and have not caused beta cutoff
+        for i in 0..moves_played {
+            if moves.moves[i].is_null() {
                 break;
             }
-            let piece = m.piece_moved(b);
-            let target = m.square_to();
-            if m == cutoff_move {
-                self.history_scores[piece][target] += (depth * depth) as i32;
+            let piece = moves.moves[i].piece_moved(b);
+            let target = moves.moves[i].square_to();
+            if moves.moves[i] == cutoff_move {
+                self.info.history_table[piece][target] += (depth * depth) as i32;
             } else {
-                self.history_scores[piece][target] -= (depth * depth) as i32;
+                self.info.history_table[piece][target] -= (depth * depth) as i32;
             }
         }
     }
@@ -623,8 +721,8 @@ impl Searcher {
         self.tt_black = HashMap::new();
 
         //reset move ordering heuristics
-        self.killer_moves = [[NULL_MOVE; MAX_PLY]; 2];
-        self.history_scores = [[0; 64]; 12];
+        self.info.killer_moves = [[NULL_MOVE; MAX_PLY]; 2];
+        self.info.history_table = [[0; 64]; 12];
     }
 }
 
@@ -863,12 +961,12 @@ impl Move {
             }
         } else if self.is_en_passant() {
             MVV_LVA[PAWN][PAWN]
-        } else if s.killer_moves[0][s.ply] == self {
+        } else if s.info.killer_moves[0][s.ply] == self {
             FIRST_KILLER_MOVE //after captures
-        } else if s.killer_moves[1][s.ply] == self {
+        } else if s.info.killer_moves[1][s.ply] == self {
             SECOND_KILLER_MOVE
         } else {
-            s.history_scores[self.piece_moved(b)][self.square_to()]
+            s.info.history_table[self.piece_moved(b)][self.square_to()]
         }
     }
 }
@@ -947,6 +1045,25 @@ pub fn move_time(time: usize, increment: usize, moves_to_go: usize, ply: usize) 
     cmp::min(time_until_flag, ideal_time)
 }
 
+impl Move {
+    pub fn uci(self) -> String {
+        let mut res = String::new();
+        res += coordinate(self.square_from()).as_str();
+        res += coordinate(self.square_to()).as_str();
+
+        if self.is_promotion() {
+            res += match self.promoted_piece() {
+                KNIGHT => "n",
+                BISHOP => "b",
+                ROOK => "r",
+                QUEEN => "q",
+                _ => unreachable!(),
+            }
+        }
+        res
+    }
+}
+
 pub fn best_move(
     position: &mut Board,
     time_left: usize,
@@ -1006,16 +1123,15 @@ pub fn best_move(
         }
 
         println!(
-            "info depth {} score cp {} nodes {} pv {}time {} nps {}",
+            "info depth {} score cp {} nodes {} pv{} time {} nps {}",
             depth,
             eval,
             s.nodes,
             {
                 let mut pv = String::new();
                 for i in 0..s.pv_length[0] {
-                    pv += coordinate(s.pv[0][i].square_from()).as_str();
-                    pv += coordinate(s.pv[0][i].square_to()).as_str();
                     pv += " ";
+                    pv += s.pv[0][i].uci().as_str();
                 }
                 pv
             },
