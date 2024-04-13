@@ -59,7 +59,13 @@ const TIME_TO_START_SEARCH: usize = 0; //initialise big TT (if not using HashMap
 pub static mut REPETITION_TABLE: [u64; MAX_GAME_PLY] = [0u64; MAX_GAME_PLY];
 pub static mut START_DEPTH: usize = 0;
 
+#[derive(Copy, Clone)]
+struct SearchStackEntry {
+    eval: i32,
+}
+
 struct SearchInfo {
+    ss: [SearchStackEntry; MAX_SEARCH_DEPTH],
     lmr_table: LMRTable,
     history_table: [[i32; 64]; 12],
     killer_moves: [[Move; MAX_PLY]; 2],
@@ -69,9 +75,15 @@ struct LMRTable {
     reduction_table: [[[i32; 32]; 32]; 2],
 }
 
+impl Default for SearchStackEntry {
+    fn default() -> Self {
+        Self { eval: -INFINITY }
+    }
+}
+
 impl Default for LMRTable {
     fn default() -> Self {
-        //formula for reductions from Wiess chess engine
+        //formula for reductions from Weiss chess engine
         let mut reduction_table = [[[0; 32]; 32]; 2];
         let (mut depth, mut played) = (0, 0);
         while depth < 32 {
@@ -93,6 +105,7 @@ impl Default for LMRTable {
 impl Default for SearchInfo {
     fn default() -> Self {
         Self {
+            ss: [SearchStackEntry::default(); MAX_SEARCH_DEPTH],
             lmr_table: LMRTable::default(),
             history_table: [[0i32; 64]; 12],
             killer_moves: [[NULL_MOVE; 64]; 2],
@@ -280,6 +293,17 @@ impl Searcher {
         };
 
         let static_eval = evaluate(position);
+        if self.ply < MAX_SEARCH_DEPTH {
+            self.info.ss[self.ply] = SearchStackEntry { eval: static_eval };
+        }
+
+        //measuring whether the search is improving (better static eval than 2 tempi ago)
+        //is useful in adjusting how we should prung/reduce. if the search is improving,
+        //we should be more cautious reducing. if not, we can reduce more
+        let improving = match self.ply {
+            2..=31 => self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval,
+            _ => false,
+        };
 
         //reset killers for child nodes
         self.info.killer_moves[0][self.ply + 1] = NULL_MOVE;
@@ -289,7 +313,9 @@ impl Searcher {
             //Beta Pruning / Reverse Futility Pruning:
             //If eval >= beta + some margin, assume that we can achieve at least beta
             if depth <= BETA_PRUNING_DEPTH
-                && static_eval - (BETA_PRUNING_MARGIN * depth) as i32 >= beta
+                && static_eval
+                    - (BETA_PRUNING_MARGIN * cmp::max(depth - improving as usize, 0)) as i32
+                    >= beta
             {
                 return static_eval;
             }
@@ -419,7 +445,11 @@ impl Searcher {
 
                 //this can definitely be done way better
                 //by measuring whether search is improving
-                if depth <= LMP_DEPTH && moves_played > depth * depth + 2 && !is_check {
+                let lmp_threshold = match improving {
+                    true => depth * depth + 2,
+                    false => depth * depth / 2,
+                };
+                if depth <= LMP_DEPTH && moves_played > lmp_threshold && !is_check {
                     skip_quiets = true;
                 }
             }
@@ -464,6 +494,8 @@ impl Searcher {
                             r += !pv_node as i32;
                             //increase reduction for quiet moves where tt move is noisy
                             r += tt_move_capture as i32;
+                            //decrease reduction if the search is improving
+                            r += !improving as i32;
 
                             let mut reduced_depth = cmp::max(depth as i32 - r - 1, 1) as usize;
                             reduced_depth = usize::clamp(reduced_depth, 1, depth);
