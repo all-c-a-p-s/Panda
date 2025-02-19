@@ -646,11 +646,15 @@ impl Searcher {
                 return beta;
             }
 
+            //TODO: THIS IS A BUG NO? - apparently not!
+
             if !c.static_exchange_evaluation(position, 0) {
                 //prune moves that fail see by threshold
                 continue;
             }
 
+            //TODO: ALSO A BUG (BISHOP - 1) - should test with on this change since I tested with
+            //both
             //prune neutral captures in bad positions (up to NxB)
             if eval + 200 <= alpha
                 && !c.static_exchange_evaluation(
@@ -823,7 +827,7 @@ pub fn see_test() {
 const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, INFINITY];
 
 impl Move {
-    fn static_exchange_evaluation(self, b: &Board, threshold: i32) -> bool {
+    pub fn static_exchange_evaluation(self, b: &Board, threshold: i32) -> bool {
         /*
          Iterative approach to SEE inspired by engine Ethereal. This is much faster
          than the recursive implementation I tried to make becuase most of the attack

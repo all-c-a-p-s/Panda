@@ -13,7 +13,7 @@ pub const QUEEN_VALUE: (i32, i32) = (925, 940);
 
 //meant to give idea that more central pawns are more valuable in mg
 #[rustfmt::skip]
-const PAWN_TABLE: [(i32, i32); 64] = [
+pub const PAWN_TABLE: [(i32, i32); 64] = [
     (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),   (0, 0),
   (11,132), (78,110), (69,103),  (91,95), (80, 90),  (95,93), (79,108),  (8,125),
   (-1, 63),  (11,53),  (13,51),  (39,43), (35, 42),  (25,48),  (11,50), (-5, 59),
@@ -25,7 +25,7 @@ const PAWN_TABLE: [(i32, i32); 64] = [
 ];
 
 #[rustfmt::skip]
-const KNIGHT_TABLE: [(i32, i32); 64] = [
+pub const KNIGHT_TABLE: [(i32, i32); 64] = [
     (-70,-35),(-51,-23),(-41,-15),(-26,-12),(-24,-12),(-37,-14),(-49,-21),(-60,-31),
     (-22,-14),(-19,-12),  (20,-8),  (22,-5),  (23,-5),  (28,-7),  (-6,-6),(-19,-13),
       (-5,-7),   (3,-1),  (17, 3),  (28, 8),  (34, 8),  (42, 5),  (30,-1),  (8,-10),
@@ -37,7 +37,7 @@ const KNIGHT_TABLE: [(i32, i32); 64] = [
 ];
 
 #[rustfmt::skip]
-const BISHOP_TABLE: [(i32, i32); 64] = [
+pub const BISHOP_TABLE: [(i32, i32); 64] = [
     (-15,-7), (-8,-10),(-18,-10), (-14,-9), (-14,-9),(-10,-10), (-8,-14), (-15,-8),
     (-15,-8), (-10,-4),  (-4,-2), (-3, -3),  (-2,-3),  (40,-6), (-10,-6), (-18,-8),
      (-5, 0),  (10, 1),  (20, 3),  (32, 3),  (30, 3),   (39,4),  (13, 1),   (1, 0),
@@ -49,7 +49,7 @@ const BISHOP_TABLE: [(i32, i32); 64] = [
 ];
 
 #[rustfmt::skip]
-const ROOK_TABLE: [(i32, i32); 64] = [
+pub const ROOK_TABLE: [(i32, i32); 64] = [
     (18, 5),  (20,5), (24,6),  (26, 6),  (29, 6),  (25, 5),  (20, 4),  (17, 3),
     (18, 8), (20, 8),(25,10),  (35,13), (44, 10),   (71,8),  (34, 6),  (17, 6),
      (0, 3),  (4, 1), (5, 4),  (20, 7),  (20, 6),  (11, 4),  (10, 1),  (-4, 3),
@@ -61,7 +61,7 @@ const ROOK_TABLE: [(i32, i32); 64] = [
 ];
 
 #[rustfmt::skip]
-const QUEEN_TABLE: [(i32, i32); 64] = [
+pub const QUEEN_TABLE: [(i32, i32); 64] = [
    (-23,-5),   (3,10), (10, 10),  (10,16), (36, 13),  (36,10),   (38,9),  (40, 3),
    (-18,-7), (-23,10), (-4, 14),   (1,20), (-3, 19),  (42,17),  (24,15),   (40,4),
    (-10,-4), (-12, 0),  (3, 10),   (4,28), (16, 25), (40, 13),  (35,10),  (42, 8),
@@ -73,7 +73,7 @@ const QUEEN_TABLE: [(i32, i32); 64] = [
 ];
 
 #[rustfmt::skip]
-const KING_TABLE: [(i32, i32); 64] = [
+pub const KING_TABLE: [(i32, i32); 64] = [
     (-40,-55), (-20,-30),(-21,-20),(-16,-20),(-35,-16), (-34,-6),(-20,-12),(-17,-49),
     (-25,-15),  (-31,12), (-34,14), (-42,15), (-41,16), (-30,22), (-30,15), (-29,-2),
      (-30, 4), (-32, 15),(-30, 14), (-39,15), (-40,15), (-37,19), (-33,15),(-30, -5),
@@ -215,7 +215,7 @@ pub const FILES: [u64; 64] = {
     table
 };
 
-const MIRROR: [usize; 64] = {
+pub const MIRROR: [usize; 64] = {
     let mut mirror = [0usize; 64];
     let mut square = 0;
     while square < 64 {
@@ -225,29 +225,100 @@ const MIRROR: [usize; 64] = {
     mirror
 };
 
-//mobility scores worse than these give negative bonus
-const BISHOP_BASE_MOBILITY: i32 = 4;
-const ROOK_BASE_MOBILITY: i32 = 2;
-const QUEEN_BASE_MOBILITY: i32 = 3;
+pub const BISHOP_PAIR: (i32, i32) = (21, 32);
+pub const ROOK_OPEN_FILE: (i32, i32) = (22, 9);
+pub const ROOK_SEMI_OPEN_FILE: (i32, i32) = (10, 6);
 
-const BISHOP_MOBILITY_UNIT: (i32, i32) = (2, 2);
-const ROOK_MOBILITY_UNIT: (i32, i32) = (1, 2);
-const QUEEN_MOBILITY_UNIT: (i32, i32) = (1, 1);
+pub const KING_SHIELD_BONUS: (i32, i32) = (6, 1);
+pub const KING_OPEN_FILE_PENALTY: (i32, i32) = (-25, -4);
+pub const KING_SEMI_OPEN_FILE_PENALTY: (i32, i32) = (-6, -1);
+pub const KING_VIRTUAL_MOBILITY: (i32, i32) = (-2, 0);
 
-const BISHOP_PAIR: (i32, i32) = (21, 32);
-const ROOK_OPEN_FILE: (i32, i32) = (22, 9);
-const ROOK_SEMI_OPEN_FILE: (i32, i32) = (10, 6);
+pub const TEMPO: i32 = 12;
 
-const KING_SHIELD_BONUS: (i32, i32) = (6, 1);
-const KING_OPEN_FILE_PENALTY: (i32, i32) = (-12, -4);
-const KING_SEMI_OPEN_FILE_PENALTY: (i32, i32) = (-6, -1);
-const KING_VIRTUAL_MOBILITY: (i32, i32) = (-2, 0);
+pub const BISHOP_MOBILITY_SCORE: [(i32, i32); 14] = [
+    (-74, -140),
+    (-35, -93),
+    (-12, -40),
+    (-3, -11),
+    (4, 1),
+    (10, 15),
+    (13, 26),
+    (14, 29),
+    (14, 37),
+    (20, 36),
+    (20, 36),
+    (39, 24),
+    (41, 35),
+    (62, 2),
+];
 
-const START_PHASE_SCORE: i32 = 12;
+pub const ROOK_MOBILITY_SCORE: [(i32, i32); 15] = [
+    (-95, -111),
+    (-42, -95),
+    (-19, -64),
+    (-9, -21),
+    (-8, 2),
+    (-9, 20),
+    (-8, 32),
+    (-3, 35),
+    (3, 39),
+    (7, 41),
+    (8, 48),
+    (14, 51),
+    (14, 55),
+    (28, 45),
+    (73, 11),
+];
+
+pub const QUEEN_MOBILITY_SCORE: [(i32, i32); 28] = [
+    (-83, -205),
+    (-190, -301),
+    (-95, -171),
+    (-35, -177),
+    (-15, -130),
+    (-7, -65),
+    (-1, -26),
+    (2, -1),
+    (6, 6),
+    (8, 23),
+    (11, 28),
+    (13, 41),
+    (15, 35),
+    (17, 43),
+    (17, 44),
+    (16, 48),
+    (18, 47),
+    (12, 49),
+    (10, 47),
+    (14, 36),
+    (19, 23),
+    (29, 6),
+    (26, -9),
+    (21, -22),
+    (8, -33),
+    (5, -59),
+    (-32, -23),
+    (-17, -38),
+];
+
+pub const KNIGHT_MOBILITY_SCORE: [(i32, i32); 9] = [
+    (-75, -83),
+    (-34, -76),
+    (-15, -27),
+    (-6, 2),
+    (4, 11),
+    (8, 23),
+    (14, 24),
+    (25, 27),
+    (30, 27),
+];
+
+pub const START_PHASE_SCORE: i32 = 12;
 //possible for promotions to in theory result in more material than this
 
 // bonus[rank][can advance]
-const PASSED_PAWN_BONUS: [[(i32, i32); 2]; 8] = [
+pub const PASSED_PAWN_BONUS: [[(i32, i32); 2]; 8] = [
     [(0, 0), (0, 0)],
     [(-30, -4), (5, 25)],
     [(-20, 6), (9, 28)],
@@ -258,8 +329,8 @@ const PASSED_PAWN_BONUS: [[(i32, i32); 2]; 8] = [
     [(0, 0), (0, 0)],
 ];
 
-const ISOLATED_PAWN_PENALTY: (i32, i32) = (-2, -16);
-const DOUBLED_PAWN_PENALTY: (i32, i32) = (-5, -22); //only given to the first pawn
+pub const ISOLATED_PAWN_PENALTY: (i32, i32) = (-2, -16);
+pub const DOUBLED_PAWN_PENALTY: (i32, i32) = (-5, -22); //only given to the first pawn
 
 pub fn game_phase_score(b: &Board) -> i32 {
     //score in starting position will be 4*1 + 2*2 + 1*2 + 1*2 = 12
@@ -371,6 +442,13 @@ fn evaluate_knights(b: &Board, phase_score: i32, colour: Colour) -> i32 {
 
     while temp_knights > 0 {
         let square = lsfb(temp_knights);
+        let attacks = N_ATTACKS[square]
+            & !b.occupancies[if colour == Colour::White {
+                WHITE
+            } else {
+                BLACK
+            }];
+        knight_eval += tapered_score(KNIGHT_MOBILITY_SCORE[count(attacks)], phase_score);
         knight_eval += tapered_score(KNIGHT_VALUE, phase_score);
         match colour {
             Colour::White => {
@@ -402,8 +480,7 @@ fn evaluate_bishops(b: &Board, phase_score: i32, colour: Colour) -> i32 {
                 Colour::White => WHITE,
                 Colour::Black => BLACK,
             }];
-        bishop_eval += (count(attacks) as i32 - BISHOP_BASE_MOBILITY)
-            * tapered_score(BISHOP_MOBILITY_UNIT, phase_score);
+        bishop_eval += tapered_score(BISHOP_MOBILITY_SCORE[count(attacks)], phase_score);
         match colour {
             Colour::White => {
                 bishop_eval += tapered_score(BISHOP_TABLE[MIRROR[square]], phase_score)
@@ -415,7 +492,7 @@ fn evaluate_bishops(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     bishop_eval
 }
 
-fn above_rank(square: usize, c: Colour) -> u64 {
+pub fn above_rank(square: usize, c: Colour) -> u64 {
     //returns all bits set above the current square
     //used to detect rooks on open/semi open files
     match c {
@@ -461,8 +538,7 @@ fn evaluate_rooks(b: &Board, phase_score: i32, colour: Colour) -> i32 {
         let attacks_up_file = attacks & above_rank(square, colour);
         let mut open_file = false;
         let mut semi_open_file = false;
-        rook_eval += (count(attacks) as i32 - ROOK_BASE_MOBILITY)
-            * tapered_score(ROOK_MOBILITY_UNIT, phase_score);
+        rook_eval += tapered_score(ROOK_MOBILITY_SCORE[count(attacks)], phase_score);
         match colour {
             Colour::White => {
                 rook_eval += tapered_score(ROOK_TABLE[MIRROR[square]], phase_score);
@@ -513,8 +589,7 @@ fn evaluate_queens(b: &Board, phase_score: i32, colour: Colour) -> i32 {
                 Colour::White => WHITE,
                 Colour::Black => BLACK,
             }];
-        queen_eval += (count(attacks) as i32 - QUEEN_BASE_MOBILITY)
-            * tapered_score(QUEEN_MOBILITY_UNIT, phase_score);
+        queen_eval += tapered_score(QUEEN_MOBILITY_SCORE[count(attacks)], phase_score);
         match colour {
             Colour::White => {
                 queen_eval += tapered_score(QUEEN_TABLE[MIRROR[square]], phase_score);
@@ -615,9 +690,10 @@ pub fn evaluate(b: &Board) -> i32 {
     eval -= evaluate_queens(b, phase_score, Colour::Black);
     eval -= evaluate_king(b, phase_score, Colour::Black);
 
-    match b.side_to_move {
-        //return from perspective of side to move
-        Colour::White => eval,
-        Colour::Black => -eval,
-    }
+    TEMPO
+        + match b.side_to_move {
+            //return from perspective of side to move
+            Colour::White => eval,
+            Colour::Black => -eval,
+        }
 }
