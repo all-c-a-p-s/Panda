@@ -14,7 +14,8 @@ const POPULATION_SIZE: i32 = 50;
 const NUM_GENERATIONS: i32 = 50;
 
 /* Simulated Annealing Parameters */
-const MAX_CONSTANT: usize = 10000;
+const MAX_ITERATIONS: usize = 10_000;
+const MAX_CONSTANT: usize = 500;
 const MAX_TEMP: f32 = 1.0;
 const K: f32 = 0.99;
 
@@ -1001,17 +1002,7 @@ unsafe fn is_drawn(position: &Board) -> bool {
     if position.fifty_move == 100 {
         return true;
     }
-    unsafe {
-        for key in REPETITION_TABLE.iter().take(position.ply - 1) {
-            //take ply - 1 because the start position (with 0 ply) is included
-            if *key == position.hash_key {
-                return true;
-                //return true on one repetition because otherwise the third
-                //repetition will not be reached because the search will stop
-                //after a tt hit on the second repetition
-            }
-        }
-    }
+
     is_insufficient_material(position)
 }
 
@@ -1097,7 +1088,10 @@ impl Individual {
 
         for (pos, sf_eval) in positions.iter().zip(evals.iter()) {
             let mut b = Board::from(pos);
-            let eval = self.quiescence_search(&mut b, -INFINITY, INFINITY);
+            let eval = match b.side_to_move {
+                Colour::White => self.quiescence_search(&mut b, -INFINITY, INFINITY),
+                Colour::Black => -self.quiescence_search(&mut b, -INFINITY, INFINITY),
+            };
 
             total_error += (sf_eval - eval).abs() as u32;
         }
@@ -1343,7 +1337,9 @@ pub fn simulated_annealing() -> Result<(), Box<dyn Error>> {
 
     let mut old = Individual::new();
     let mut constant = 0;
-    while constant < MAX_CONSTANT {
+    let mut iterations = 0;
+    while constant < MAX_CONSTANT && iterations < MAX_ITERATIONS {
+        iterations += 1;
         let (pos_sample, ev_sample) = take_sample(&positions, &evals);
         let mut new = old.mutate();
 
@@ -1356,9 +1352,11 @@ pub fn simulated_annealing() -> Result<(), Box<dyn Error>> {
 
         if delta_e < 1.0 {
             println!(
-                "Accepted cost: {} vs old cost: {}",
+                "Iteration {}: Accepted cost {} vs old cost {}. Was constant for {} iterations.",
+                iterations,
                 new.cost as f32 / pos_sample.len() as f32,
-                old.cost as f32 / pos_sample.len() as f32
+                old.cost as f32 / pos_sample.len() as f32,
+                constant
             );
             old = new;
             constant = 0;
@@ -1369,9 +1367,11 @@ pub fn simulated_annealing() -> Result<(), Box<dyn Error>> {
 
             if x <= p {
                 println!(
-                    "Accepted cost: {} vs old cost: {}",
+                    "Iteration {}: Accepted cost {} vs old cost {}. Was constant for {} iterations.",
+                    iterations,
                     new.cost as f32 / pos_sample.len() as f32,
-                    old.cost as f32 / pos_sample.len() as f32
+                    old.cost as f32 / pos_sample.len() as f32,
+                    constant
                 );
                 old = new;
                 constant = 0;
@@ -1423,7 +1423,9 @@ pub fn hill_climbing() -> Result<(), Box<dyn Error>> {
 
     let mut old = Individual::new();
     let mut constant = 0;
-    while constant < MAX_CONSTANT {
+    let mut iterations = 0;
+    while constant < MAX_CONSTANT && iterations < MAX_ITERATIONS {
+        iterations += 1;
         let (pos_sample, ev_sample) = take_sample(&positions, &evals);
         let mut new = old.mutate();
 
@@ -1432,16 +1434,21 @@ pub fn hill_climbing() -> Result<(), Box<dyn Error>> {
 
         if new.cost < old.cost {
             println!(
-                "Accepted cost: {} vs old cost: {}",
+                "Iteration {}: Accepted cost {} vs old cost {}. Was constant for {} iterations.",
+                iterations,
                 new.cost as f32 / pos_sample.len() as f32,
-                old.cost as f32 / pos_sample.len() as f32
+                old.cost as f32 / pos_sample.len() as f32,
+                constant
             );
             old = new;
             constant = 0;
+        } else {
+            constant += 1;
         }
     }
 
+    for w in old.clone().weights {
+        println!("{:?}", w);
+    }
     Ok(())
 }
-
-//TODO: pick 100000 randoms from the whole thing every time!

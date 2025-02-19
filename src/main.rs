@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let debug = false;
     let tune = true;
-    let genetic = false;
+    let genetic = true;
     let anneal = false;
 
     if debug {
