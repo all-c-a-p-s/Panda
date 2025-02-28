@@ -45,6 +45,7 @@ pub struct Commit {
     pub fifty_move_reset: u8,
     pub piece_captured: usize,
     pub hash_key: u64,
+    pub made_move: bool,
 }
 
 impl Move {
@@ -165,16 +166,17 @@ impl Board {
             fifty_move_reset: self.fifty_move,
             piece_captured: NO_PIECE,
             hash_key: self.hash_key,
+            made_move: true,
         };
 
-        self.hash_key = hash_update(self.hash_key, &m, self);
+        self.hash_key = hash_update(self.hash_key, &m, &self);
         //MUST be done before any changes made on the board
 
         let sq_from = m.square_from();
         let sq_to = m.square_to();
-        let piece = m.piece_moved(self);
-        let piece_captured = m.piece_captured(self);
-        let double_push = m.is_double_push(self);
+        let piece = m.piece_moved(&self);
+        let piece_captured = m.piece_captured(&self);
+        let double_push = m.is_double_push(&self);
         let promoted_piece = match m.is_promotion() {
             false => NO_PIECE,
             true => match self.side_to_move {
@@ -185,7 +187,7 @@ impl Board {
 
         //NOTE: piece removed from sq_from below
 
-        if m.is_capture(self) {
+        if m.is_capture(&self) {
             //remove captured piece from bitboard
             self.bitboards[piece_captured] = pop_bit(sq_to, self.bitboards[piece_captured]);
             self.pieces_array[sq_to] = piece;
@@ -299,29 +301,33 @@ impl Board {
         self.occupancies[BOTH] = self.occupancies[WHITE] | self.occupancies[BLACK];
         //update occupancies
 
-        if piece_type(piece) == PAWN || piece_captured != NO_PIECE {
+        if piece_captured != NO_PIECE || piece_type(piece) == PAWN {
             self.fifty_move = 0;
         } else {
             self.fifty_move += 1;
         }
 
-        if piece == WK {
-            //wk moved
-            self.castling &= 0b0000_1100;
-        } else if piece == BK {
-            self.castling &= 0b0000_0011;
+        if piece_type(piece) == KING {
+            if piece == WK {
+                //wk moved
+                self.castling &= 0b0000_1100;
+            } else if piece == BK {
+                self.castling &= 0b0000_0011;
+            }
         }
 
-        if piece == WR && sq_from == A1 {
-            //wr leaves a1
-            self.castling &= 0b0000_1101;
-        } else if piece == WR && sq_from == H1 {
-            self.castling &= 0b0000_1110;
-        } else if piece == BR && sq_from == A8 {
-            self.castling &= 0b0000_0111;
-        } else if piece == BR && sq_from == H8 {
-            self.castling &= 0b0000_1011;
-        } //update castling rights
+        if piece_type(piece) == ROOK {
+            if sq_from == A1 {
+                //wr leaves a1
+                self.castling &= 0b0000_1101;
+            } else if sq_from == H1 {
+                self.castling &= 0b0000_1110;
+            } else if sq_from == A8 {
+                self.castling &= 0b0000_0111;
+            } else if sq_from == H8 {
+                self.castling &= 0b0000_1011;
+            } //update castling rights
+        }
 
         self.ply += 1;
 
@@ -337,7 +343,7 @@ impl Board {
         commit
     }
 
-    pub fn undo_move(&mut self, m: Move, c: Commit) {
+    pub fn undo_move(&mut self, m: Move, c: &Commit) {
         //incremental update should be faster than copying the whole board
         self.side_to_move = match self.side_to_move {
             //NOTE: updated at the beginning of the function
@@ -454,15 +460,24 @@ impl Board {
 }
 
 pub fn is_legal(m: Move, b: &mut Board) -> bool {
-    let commit = b.make_move(m);
+    if m.piece_moved(&b) == WK || m.piece_moved(&b) == BK {
+        let commit = b.make_move(m);
 
-    let legal = match b.side_to_move {
-        // AFTER move has been made
-        Colour::White => !is_attacked(lsfb(b.bitboards[BK]), Colour::White, b),
-        Colour::Black => !is_attacked(lsfb(b.bitboards[WK]), Colour::Black, b),
-    };
-    b.undo_move(m, commit);
-    legal
+        let legal = match b.side_to_move {
+            // AFTER move has been made
+            Colour::White => !is_attacked(lsfb(b.bitboards[BK]), Colour::White, b),
+            Colour::Black => !is_attacked(lsfb(b.bitboards[WK]), Colour::Black, b),
+        };
+        b.undo_move(m, &commit);
+        return legal;
+    }
+    let pin_rays = get_pin_rays(&b);
+    for r in pin_rays {
+        if get_bit(m.square_from(), r) > 0 && get_bit(m.square_to(), r) == 0 {
+            return false;
+        }
+    }
+    true
 }
 impl Board {
     pub fn try_move(&mut self, m: Move) -> (Commit, bool) {

@@ -31,7 +31,7 @@ pub fn recognise_command(command: &str) -> CommandType {
 
 pub const STARTPOS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-pub fn parse_move(input: &str, board: Board) -> Move {
+pub fn parse_move(input: &str, board: &Board) -> Move {
     let sq_from = square(&input[0..2]);
     let sq_to = square(&input[2..4]);
     let piece = board.pieces_array[sq_from];
@@ -96,7 +96,7 @@ pub fn parse_position(command: &str, b: &mut Board) {
             if words.len() != 2 {
                 for w in words.iter().skip(3) {
                     //parse moves
-                    let m = parse_move(w, *b);
+                    let m = parse_move(w, b);
                     b.make_move(m);
                     unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
                 }
@@ -114,7 +114,7 @@ pub fn parse_position(command: &str, b: &mut Board) {
         }
         "moves" => {
             for w in words.iter().skip(2) {
-                let m = parse_move(w, *b);
+                let m = parse_move(w, b);
                 b.make_move(m);
                 unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
             }
@@ -146,7 +146,7 @@ pub fn parse_special_go(command: &str, b: &mut Board, s: &mut Searcher) -> MoveD
                         break;
                     }
                     //parse moves
-                    let m = parse_move(words[i], *b);
+                    let m = parse_move(words[i], b);
                     b.make_move(m);
                     unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
                 }
@@ -174,7 +174,7 @@ pub fn parse_special_go(command: &str, b: &mut Board, s: &mut Searcher) -> MoveD
                     end_of_moves = i;
                     break;
                 }
-                let m = parse_move(words[i], *b);
+                let m = parse_move(words[i], b);
                 b.make_move(m);
                 unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
             }

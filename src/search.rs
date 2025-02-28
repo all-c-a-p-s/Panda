@@ -179,6 +179,7 @@ unsafe fn is_drawn(position: &Board) -> bool {
     if position.fifty_move == 100 {
         return true;
     }
+    #[allow(static_mut_refs)]
     unsafe {
         for key in REPETITION_TABLE.iter().take(position.ply - 1) {
             //take ply - 1 because the start position (with 0 ply) is included
@@ -267,6 +268,10 @@ impl Searcher {
                 return r_alpha;
             }
 
+            //TODO: investigate this - I assume atm we're completely ignoring the evals of all TT hits of lower
+            //depth but I think we can do better than this. For instance by accepting the eval if
+            //depth is similar and we are likely to have to re-search otherwise
+
             let hash_lookup = match position.side_to_move {
                 //hash lookup
                 Colour::White => self.tt_white.lookup(position.hash_key, alpha, beta, depth),
@@ -296,14 +301,20 @@ impl Searcher {
         if self.ply < MAX_SEARCH_DEPTH {
             self.info.ss[self.ply] = SearchStackEntry { eval: static_eval };
         }
+        //TODO: write this to TT if we don't overwrite
+        //or get it from the TT
 
         //measuring whether the search is improving (better static eval than 2 tempi ago)
-        //is useful in adjusting how we should prung/reduce. if the search is improving,
+        //is useful in adjusting how we should prune/reduce. if the search is improving,
         //we should be more cautious reducing. if not, we can reduce more
-        let improving = match self.ply {
+        let mut improving = match self.ply {
             2..=31 => self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval,
             _ => false,
         };
+
+        if is_check {
+            improving = false; //can't rely on static eval saying we're improving if its check
+        }
 
         //reset killers for child nodes
         self.info.killer_moves[0][self.ply + 1] = NULL_MOVE;
@@ -335,6 +346,10 @@ impl Searcher {
             }
         }
 
+        /*
+         * Null move pruning: if we cannot improve our position with 2 moves in a row,
+         * then the first of these movees is probably bad (exception is zugzwang)
+         * */
         if !position.is_kp_endgame()
             && !position.last_move_null
             && static_eval >= beta
@@ -342,11 +357,8 @@ impl Searcher {
             && !is_check
             && !root
         {
-            //ok to null-move prune
             let ep_reset = make_null_move(position);
             self.ply += 1;
-            //idea that if opponent cannot improve their position with 2 moves in a row
-            //the first of these moves must be bad
             let r = 2 + depth as i32 / 4 + cmp::min((static_eval - beta) / 256, 3);
             let reduced_depth = cmp::max(depth as i32 - r, 1) as usize;
             let null_move_eval = -self.negamax(position, reduced_depth, -beta, -beta + 1);
@@ -408,7 +420,7 @@ impl Searcher {
                     //this is kinda messy but you have to know whether the move was legal
                     //to update the moves_played counter
                     let (commit, ok) = position.try_move(m);
-                    position.undo_move(m, commit);
+                    position.undo_move(m, &commit);
                     if ok {
                         moves_played += 1;
                     }
@@ -435,7 +447,7 @@ impl Searcher {
                     if !m.static_exchange_evaluation(position, threshold) {
                         //as above
                         let (commit, ok) = position.try_move(m);
-                        position.undo_move(m, commit);
+                        position.undo_move(m, &commit);
                         if ok {
                             moves_played += 1;
                         }
@@ -443,8 +455,6 @@ impl Searcher {
                     }
                 }
 
-                //this can definitely be done way better
-                //by measuring whether search is improving
                 let lmp_threshold = match improving {
                     true => depth * depth + 2,
                     false => depth * depth / 2,
@@ -460,7 +470,7 @@ impl Searcher {
             //then unmaking it and making it again for the search
 
             if !ok {
-                position.undo_move(m, commit);
+                position.undo_move(m, &commit);
                 continue;
             }
 
@@ -519,7 +529,7 @@ impl Searcher {
                 }
             };
 
-            position.undo_move(m, commit);
+            position.undo_move(m, &commit);
             self.ply -= 1;
 
             if Instant::now() > self.end_time && self.ply == 0 {
@@ -597,6 +607,14 @@ impl Searcher {
             }
         }
 
+        if Instant::now() > self.end_time && self.ply != 0 {
+            return match self.ply % 2 {
+                0 => -INFINITY,
+                1 => INFINITY,
+                _ => unreachable!(),
+            };
+        }
+
         let mut hash_flag = EntryFlag::UpperBound;
 
         let hash_lookup = match position.side_to_move {
@@ -668,14 +686,14 @@ impl Searcher {
             let (commit, ok) = position.try_move(c);
 
             if !ok {
-                position.undo_move(c, commit);
+                position.undo_move(c, &commit);
                 continue;
             }
 
             self.ply += 1;
 
             let eval = -self.quiescence_search(position, -beta, -alpha);
-            position.undo_move(c, commit);
+            position.undo_move(c, &commit);
             self.ply -= 1;
             if eval > alpha {
                 alpha = eval;

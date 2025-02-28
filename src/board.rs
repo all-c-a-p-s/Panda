@@ -1,6 +1,6 @@
 use crate::helper::*;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub struct Board {
     pub bitboards: [u64; 12],
     pub pieces_array: [usize; 64], //used to speed up move generation
@@ -154,7 +154,7 @@ impl Board {
         new_board
     }
 
-    pub fn print_board(self) {
+    pub fn print_board(&self) {
         let mut squares = String::new();
         for rank in 0..8 {
             for file in 0..8 {
@@ -230,7 +230,7 @@ impl Board {
         }
     }
 
-    pub fn is_kp_endgame(self) -> bool {
+    pub fn is_kp_endgame(&self) -> bool {
         //used to avoid null move pruning in king and pawn endgames
         //where zugzwang is very common
         self.occupancies[BOTH]

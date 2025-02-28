@@ -508,7 +508,8 @@ pub fn get_smallest_attack(b: &mut Board, square: usize) -> Move {
 }
 
 /* I don't think checking all edge cases separately is actually faster
- but code to detect pins might be useful in the future
+but code to detect pins might be useful in the future */
+
 pub fn get_pin_rays(b: &Board) -> [u64; 8] {
     let mut res = [0u64; 8];
     match b.side_to_move {
@@ -537,14 +538,15 @@ pub fn get_pin_rays(b: &Board) -> [u64; 8] {
             }
             //generate rays for enemy slider attacks
 
-            let mut pinned_by_bishop = bishop_rays & enemy_bishop_rays;
-            let mut pinned_by_rook = rook_rays & enemy_rook_rays;
-            //find pinned pieces
+            let mut pinned_by_bishop = bishop_rays & enemy_bishop_rays; //<- error here!
+            let mut pinned_by_rook = rook_rays & enemy_rook_rays; //<- error here!
+                                                                  //find pinned pieces
 
             while pinned_by_bishop > 0 {
                 let pinned_square = lsfb(pinned_by_bishop);
-                let ray = get_bishop_attacks(king_square, pop_bit(pinned_square, b.occupancies[BOTH]))
-                    & get_bishop_attacks(pinned_square, b.occupancies[BOTH]);
+                let ray = (get_bishop_attacks(king_square, 0)
+                    & get_bishop_attacks(pinned_square, 0))
+                    | set_bit(pinned_square, 0);
                 //ray corresponding to each pinned piece
                 res[ray_count] = ray;
                 ray_count += 1;
@@ -553,8 +555,8 @@ pub fn get_pin_rays(b: &Board) -> [u64; 8] {
 
             while pinned_by_rook > 0 {
                 let pinned_square = lsfb(pinned_by_rook);
-                let ray = get_rook_attacks(king_square, pop_bit(pinned_square, b.occupancies[BOTH]))
-                    & get_rook_attacks(pinned_square, b.occupancies[BOTH]);
+                let ray = (get_rook_attacks(king_square, 0) & get_rook_attacks(pinned_square, 0))
+                    | set_bit(pinned_square, 0);
                 res[ray_count] = ray;
                 ray_count += 1;
                 pinned_by_rook = pop_bit(pinned_square, pinned_by_rook);
@@ -583,13 +585,14 @@ pub fn get_pin_rays(b: &Board) -> [u64; 8] {
                 enemy_rooks = pop_bit(square, enemy_rooks);
             }
 
-            let mut pinned_by_bishop = bishop_rays & enemy_bishop_rays;
-            let mut pinned_by_rook = rook_rays & enemy_rook_rays;
+            let mut pinned_by_bishop = bishop_rays & enemy_bishop_rays; //<- error here!
+            let mut pinned_by_rook = rook_rays & enemy_rook_rays; //<- error here!
 
             while pinned_by_bishop > 0 {
                 let pinned_square = lsfb(pinned_by_bishop);
-                let ray = get_bishop_attacks(king_square, pop_bit(pinned_square, b.occupancies[BOTH]))
-                    & get_bishop_attacks(pinned_square, b.occupancies[BOTH]);
+                let ray = (get_bishop_attacks(king_square, 0)
+                    & get_bishop_attacks(pinned_square, 0))
+                    | set_bit(pinned_square, 0);
                 res[ray_count] = ray;
                 ray_count += 1;
                 pinned_by_bishop = pop_bit(pinned_square, pinned_by_bishop);
@@ -597,8 +600,8 @@ pub fn get_pin_rays(b: &Board) -> [u64; 8] {
 
             while pinned_by_rook > 0 {
                 let pinned_square = lsfb(pinned_by_rook);
-                let ray = get_rook_attacks(king_square, pop_bit(pinned_square, b.occupancies[BOTH]))
-                    & get_rook_attacks(pinned_square, b.occupancies[BOTH]);
+                let ray = (get_rook_attacks(king_square, 0) & get_rook_attacks(pinned_square, 0))
+                    | set_bit(pinned_square, 0);
                 res[ray_count] = ray;
                 ray_count += 1;
                 pinned_by_rook = pop_bit(pinned_square, pinned_by_rook);
@@ -608,9 +611,40 @@ pub fn get_pin_rays(b: &Board) -> [u64; 8] {
     res
 }
 
+//taken from Viridithas
+const fn in_between(sq1: usize, sq2: usize) -> u64 {
+    const M1: u64 = 0xFFFF_FFFF_FFFF_FFFF;
+    const A2A7: u64 = 0x0001_0101_0101_0100;
+    const B2G7: u64 = 0x0040_2010_0804_0200;
+    const H1B7: u64 = 0x0002_0408_1020_4080;
+
+    let btwn = (M1 << sq1) ^ (M1 << sq2);
+    let file = ((sq2 & 7).wrapping_add((sq1 & 7).wrapping_neg())) as u64;
+    let rank = (((sq2 | 7).wrapping_sub(sq1)) >> 3) as u64;
+    let mut line = ((file & 7).wrapping_sub(1)) & A2A7;
+    line += 2 * ((rank & 7).wrapping_sub(1) >> 58);
+    line += ((rank.wrapping_sub(file) & 15).wrapping_sub(1)) & B2G7;
+    line += ((rank.wrapping_add(file) & 15).wrapping_sub(1)) & H1B7;
+    line = line.wrapping_mul(btwn & btwn.wrapping_neg());
+    line & btwn
+}
+pub static RAY_BETWEEN: [[u64; 64]; 64] = {
+    let mut res = [[0u64; 64]; 64];
+    let mut from = A1;
+    while from < 64 {
+        let mut to = A1;
+        while to < 64 {
+            res[from][to] = in_between(from, to);
+            to += 1;
+        }
+        from += 1;
+    }
+    res
+};
+
 pub fn check_en_passant(m: Move, b: &Board) -> bool {
     //checks en passant edge case where en passant reveals check on the king
-    match m.piece_moved() {
+    match m.piece_moved(&b) {
         0 => {
             let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[BOTH]);
             relevant_blockers = pop_bit(m.square_to() - 8, relevant_blockers);
@@ -639,7 +673,7 @@ pub fn legal_non_check_evasion(m: Move, b: &Board) -> bool {
         }
     }
 
-    if m.piece_moved() == 5 {
+    if m.piece_moved(&b) == 5 {
         //check that king isn't moving into check
         let mut black_attacks = 0u64;
         for i in 6..12 {
@@ -662,7 +696,7 @@ pub fn legal_non_check_evasion(m: Move, b: &Board) -> bool {
             }
         }
         return (m.square_to() as u64) & black_attacks == 0;
-    } else if m.piece_moved() == 11 {
+    } else if m.piece_moved(&b) == 11 {
         let mut white_attacks = 0u64;
         for i in 0..6 {
             let mut piece_bb = b.bitboards[i];
@@ -690,4 +724,3 @@ pub fn legal_non_check_evasion(m: Move, b: &Board) -> bool {
     }
     true
 }
-*/

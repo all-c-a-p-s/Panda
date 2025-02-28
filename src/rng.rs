@@ -28,3 +28,25 @@ pub fn magic_candidate() -> u64 {
     // aim to generate random number with very few non-zero bits
     random_u64() & random_u64() & random_u64()
 }
+
+pub struct XorShiftU64 {
+    pub state: u64,
+}
+
+const SEED: u64 = 0xF8D1C463A579BE02;
+
+//need a rng that I can call in a const fn
+impl XorShiftU64 {
+    pub const fn new() -> Self {
+        Self { state: SEED }
+    }
+
+    pub const fn next(&mut self) -> u64 {
+        let mut x = self.state;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.state = x;
+        x
+    }
+}

@@ -1,44 +1,52 @@
+use crate::rng::XorShiftU64;
 use crate::*;
-use lazy_static::lazy_static;
 
 use crate::helper::*;
-use crate::rng::random_hash_u64;
 
-lazy_static! {
-    pub static ref PIECE_KEYS: [[u64; 12]; 64] = {
-        let mut res: [[u64; 12]; 64] = [[0u64; 12]; 64];
-        let mut square = 0;
-        while square < 64 {
-            let mut piece = 0;
-            while piece < 12 {
-                res[square][piece] = random_hash_u64();
-                piece += 1;
+macro_rules! cfor {
+    ($init: stmt; $cond: expr; $step: expr; $body: block) => {
+        {
+            $init
+            #[allow(while_true)]
+            while $cond {
+                $body;
+
+                $step;
             }
-            square += 1;
         }
-        res
-    };
-    static ref EP_KEYS: [u64; 64] = {
-        let mut res: [u64; 64] = [0u64; 64];
-        let mut square = 0;
-        while square < 64 {
-            res[square] = random_hash_u64();
-            square += 1;
-        }
-        res
-    };
-    static ref CASTLING_KEYS: [u64; 16] =  {
-        let mut res: [u64; 16] = [0u64; 16];
-        let mut combination = 0; //castling encoded by 4 binary bits -> 16 combinations
-        while combination < 16 {
-            res[combination] = random_hash_u64();
-            combination += 1;
-        }
-        res
-    };
-
-    static ref BLACK_TO_MOVE: u64 = random_hash_u64();
+    }
 }
+
+#[allow(unused_mut)]
+const fn init_hash_keys() -> ([[u64; 12]; 64], [u64; 64], [u64; 16], u64) {
+    let mut rng = XorShiftU64::new();
+    let mut piece_keys = [[0; 12]; 64];
+
+    cfor!(let mut sq = 0; sq < 64; sq += 1; {
+        cfor!(let mut i = 0; i < 12; i += 1; {
+            let r = rng.next();
+            piece_keys[sq][i] = r;
+        });
+    });
+    let mut ep_keys = [0; 64];
+    cfor!(let mut sq = 0; sq < 64; sq += 1; {
+        let r = rng.next();
+        ep_keys[sq] = r;
+    });
+    let mut castling_keys = [0; 16];
+    cfor!(let mut i = 0; i < 16; i += 1; {
+        let r = rng.next();
+        castling_keys[i] = r;
+    });
+    let key = rng.next();
+    let btm = key;
+    (piece_keys, ep_keys, castling_keys, btm)
+}
+
+pub static PIECE_KEYS: [[u64; 12]; 64] = init_hash_keys().0;
+pub static EP_KEYS: [u64; 64] = init_hash_keys().1;
+pub static CASTLING_KEYS: [u64; 16] = init_hash_keys().2;
+pub const BLACK_TO_MOVE: u64 = init_hash_keys().3;
 
 pub fn hash(b: &Board) -> u64 {
     let mut hash_key: u64 = 0;
@@ -57,7 +65,7 @@ pub fn hash(b: &Board) -> u64 {
     hash_key ^= CASTLING_KEYS[b.castling as usize];
 
     if b.side_to_move == Colour::Black {
-        hash_key ^= *BLACK_TO_MOVE;
+        hash_key ^= BLACK_TO_MOVE;
     }
 
     hash_key
@@ -69,7 +77,7 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
 
     let sq_to = m.square_to();
     let sq_from = m.square_from();
-    let piece = m.piece_moved(b);
+    let piece = m.piece_moved(&b);
 
     res ^= PIECE_KEYS[sq_from][piece];
     res ^= PIECE_KEYS[sq_to][piece];
@@ -172,7 +180,7 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
         res ^= PIECE_KEYS[sq_to][promoted_piece];
     }
 
-    if m.is_double_push(b) {
+    if m.is_double_push(&b) {
         match piece {
             WP => res ^= EP_KEYS[sq_to - 8],
             BP => res ^= EP_KEYS[sq_to + 8],
@@ -180,7 +188,7 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
         }
     }
 
-    res ^= *BLACK_TO_MOVE;
+    res ^= BLACK_TO_MOVE;
     res
 }
 
@@ -211,7 +219,7 @@ pub fn hash_update_test(depth: usize, b: &mut Board) -> usize {
             }
 
             added = hash_update_test(depth - 1, b);
-            b.undo_move(moves.moves[i], commit);
+            b.undo_move(moves.moves[i], &commit);
         }
         total += added;
     }

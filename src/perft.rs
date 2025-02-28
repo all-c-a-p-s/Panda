@@ -18,11 +18,11 @@ pub fn perft(depth: usize, b: &mut Board) -> usize {
 
         let (commit, ok) = b.try_move(moves.moves[i]);
         if !ok {
-            b.undo_move(moves.moves[i], commit);
+            b.undo_move(moves.moves[i], &commit);
             continue;
         }
         total += perft(depth - 1, b);
-        b.undo_move(moves.moves[i], commit);
+        b.undo_move(moves.moves[i], &commit);
 
         /* uncomment for perft debug info
         if depth == PERFT_DEPTH {

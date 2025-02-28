@@ -1,7 +1,9 @@
+use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use polars::prelude::*;
 use rand::Rng;
 use rayon::prelude::*;
+use rusqlite::Connection;
 use std::error::Error;
 
 use crate::eval::*;
@@ -11,8 +13,8 @@ use crate::*;
 /* Genetic Algorithm Parameters */
 const POSITIONS_TO_USE: usize = 100_000;
 const START_MUTATION_RATE: i32 = 100;
-const MUTATION_RATE: i32 = 50; //out of 1000
-const POPULATION_SIZE: i32 = 40;
+const MUTATION_RATE: i32 = 20; //out of 1000
+const POPULATION_SIZE: i32 = 100;
 const NUM_GENERATIONS: i32 = 50;
 
 /* Simulated Annealing Parameters */
@@ -23,7 +25,7 @@ const K: f32 = 0.99;
 
 //need to tune parameters at a time because otherwise too many chromosomes
 //for ga to be effective
-pub const INDICES_TO_TUNE: &'static [usize] = &[17];
+pub const INDICES_TO_TUNE: &'static [usize] = &[10];
 
 pub const PAWN_VALUE_IDX: usize = 0;
 pub const KNIGHT_VALUE_IDX: usize = 1;
@@ -58,217 +60,90 @@ fn init_weights() -> Vec<Vec<(i32, i32)>> {
 
     vec![
         // PAWN_VALUE_IDX = 0
-        vec![(102, 153)],
+        vec![(145, 170)],
         // KNIGHT_VALUE_IDX = 1
-        vec![(471, 508)],
+        vec![(538, 515)],
         // BISHOP_VALUE_IDX = 2
-        vec![(511, 517)],
+        vec![(585, 543)],
         // ROOK_VALUE_IDX = 3
-        vec![(662, 828)],
+        vec![(713, 879)],
         // QUEEN_VALUE_IDX = 4
         vec![(1380, 1649)],
         // PAWN_TABLE_IDX = 5
 
-        vec![
-            (18, 18),  (26, 23),  (-3, -4),  (-14, -16),  (24, 22),  (14, 14),  (-22, -24),  (-3, -1),  
-            (190, 210),  (15, 24),  (191, 212),  (166, 175),  (64, 72),  (61, 56),  (124, 132),  (239, 249),  
-            (37, 64),  (44, 66),  (38, 45),  (36, 38),  (53, 46),  (55, 59),  (19, 23),  (52, 54),  
-            (10, 15),  (7, 16),  (14, 13),  (16, 7),  (29, 12),  (38, 22),  (20, 25),  (17, 20),  
-            (-6, -1),  (-7, -2),  (1, 3),  (10, -1),  (17, -6),  (19, 8),  (13, 12),  (1, -1),  
-            (-18, -12),  (-5, -6),  (-9, -10),  (-11, -1),  (0, -2),  (9, 11),  (10, 11),  (4, 2),  
-            (-10, -11),  (-20, -1),  (-26, -12),  (-8, -4),  (0, 4),  (6, 14),  (10, 5),  (-7, -4),  
-            (-4, -4),  (-19, -19),  (-17, -18),  (-5, -4),  (-15, -19),  (-3, -7),  (23, 27),  (-1, -1),  
-        ],
+        vec![(26, 22), (26, 27), (-2, -3), (-11, -11), (20, 28), (15, 18), (-27, -22), (-5, -7), (197, 205), (16, 24), (163, 186), (195, 167), (77, 88), (80, 79), (97, 138), (52, 228), (30, 64), (40, 66), (42, 53), (39, 34), (68, 46), (102, 90), (21, 24)
+, (52, 57), (12, 12), (3, 9), (4, 8), (30, 7), (51, 12), (28, 22), (20, 22), (9, 20), (-15, -7), (-16, -2), (1, -1), (30,
+ 14), (23, -6), (16, 8), (-1, 6), (-8, -2), (-12, -12), (-20, -6), (-10, -8), (-4, -1), (11, 12), (6, 6), (21, 8), (5, 2)
+, (-17, -10), (-23, -1), (-33, -12), (-19, -20), (-13, -1), (5, 12), (24, 5), (-9, -12), (0, -4), (-18, -20), (-21, -22),
+ (-5, -5), (-17, -20), (-2, -4), (23, 24), (-7, -7)],
         // KNIGHT_TABLE_IDX = 6
-        vec![
-            (-20, -20),  (-93, -75),  (-13, -11),  (-32, -30),  (-23, -22),  (-15, -12),  (-37, -40),  (-33, -25),  
-            (-25, -30),  (6, 5),  (21, 23),  (18, 23),  (25, 26),  (10, 5),  (-1, 1),  (-14, -16),  
-            (10, 12),  (11, 12),  (28, 25),  (66, 32),  (11, 12),  (-10, -9),  (57, 51),  (-3, -2),  
-            (8, 7),  (-8, -6),  (5, 7),  (34, 33),  (5, 5),  (22, 25),  (13, 13),  (-10, -8),  
-            (-12, -12),  (-7, -4),  (11, 11),  (11, 16),  (22, 26),  (15, 15),  (1, 5),  (-8, -8),  
-            (-27, -26),  (-9, -7),  (-7, -7),  (8, 7),  (9, 6),  (4, -1),  (1, -8),  (1, 2),  
-            (-42, -33),  (-19, -20),  (-23, -25),  (8, 6),  (-2, -2),  (-17, -13),  (-17, -17),  (-21, -20),  
-            (-15, -14),  (-14, -14),  (-10, -11),  (-16, -14),  (-6, -6),  (-14, -13),  (-12, -11),  (0, 0),  
-        ],
+        vec![(-43, -47), (-106, -84), (-10, -11), (-32, -33), (-25, -24), (-13, -11), (-40, -40), (-43, -52), (-26, -22), (4, 4), (33
+, 25), (25, 23), (58, 40), (13, 13), (1, 3), (-11, -10), (11, 10), (13, 11), (28, 29), (116, 32), (21, 21), (-6, -5), (72
+, 49), (-3, -1), (4, 3), (-7, -6), (11, 12), (61, 68), (18, 18), (35, 30), (2, 13), (-9, -6), (-17, -18), (-5, -6), (13, 
+11), (3, 16), (21, 20), (17, 16), (-2, 0), (-10, -8), (-57, -26), (-10, -12), (-3, -7), (8, 8), (10, 10), (9, -1), (5, 6)
+, (-27, -28), (-57, -43), (-22, -22), (-23, -23), (5, 3), (4, 1), (-11, -11), (-19, -20), (-21, -20), (-18, -20), (-19, -23), (-10, -10), (-16, -15), (-14, -11), (-14, -13), (-30, -34), (2, 3)],
         // BISHOP_TABLE_IDX = 7
-        vec![
-            (-24, -23),  (-10, -9),  (-11, -11),  (-24, -24),  (26, 23),  (4, 3),  (1, 3),  (-1, -3),  
-            (10, 10),  (4, -2),  (1, 1),  (-2, 0),  (1, -1),  (6, 7),  (-9, -8),  (-29, -26),  
-            (3, 4),  (-14, -11),  (-2, 7),  (6, 4),  (27, 31),  (88, 72),  (-2, -5),  (-4, -6),  
-            (3, 5),  (-6, -3),  (8, 11),  (23, 31),  (18, 17),  (-2, -1),  (-11, -7),  (-6, -6),  
-            (-6, -4),  (-4, -6),  (-11, -10),  (22, 21),  (10, 7),  (-12, -10),  (-20, -15),  (10, 8),  
-            (-8, -5),  (1, 4),  (2, 2),  (-1, -3),  (-6, -1),  (0, 2),  (-1, -1),  (2, 1),  
-            (1, 0),  (-5, -6),  (10, 5),  (-18, 1),  (0, 1),  (-4, -6),  (11, 9),  (7, 9),  
-            (-7, -7),  (-3, -7),  (-11, -13),  (-1, 0),  (-7, -9),  (-16, -11),  (-13, -10),  (-14, -12),  
-        ],
+        vec![(-29, -29), (-12, -12), (-10, -14), (-21, -24), (25, 26), (2, 2), (5, 4), (-1, 0), (5, 6), (0, 2), (2, 1), (-2, -1), (3,
+ 0), (7, 7), (-1, 1), (-20, -26), (3, 5), (-9, -10), (-1, 7), (12, 10), (29, 24), (120, 72), (2, 2), (4, 6), (3, 2), (-10
+, -3), (7, 11), (27, 28), (24, 27), (0, 1), (-11, -7), (-11, -9), (-12, -14), (-3, -6), (-16, -17), (26, 30), (10, 11), (
+-6, -7), (-18, -19), (6, 7), (-12, -10), (8, 9), (0, 2), (2, 4), (-3, -1), (3, 4), (3, 0), (3, 2), (5, 6), (7, -6), (16, 
+5), (-20, 1), (-3, -3), (-2, 0), (25, 9), (4, 6), (-6, -7), (-1, -2), (-20, -21), (-3, -3), (-9, -7), (-40, -11), (-12, -
+9), (-15, -14)],
         // ROOK_TABLE_IDX = 8
-        vec![(1, 4), (6, 8), (17, 17), (31, 24), (31, 27), (-34, -18), (22, 20), (12, 11), (5, 9), (0, 1), (1, 2), (24, 20), (11, 10)
-, (8, 5), (32, 33), (6, 3), (7, 9), (23, 27), (-8, -6), (4, 8), (26, 27), (19, 21), (39, 27), (27, 27), (-5, -3), (-1, -2
-), (-6, -2), (2, 4), (2, -2), (17, 15), (17, 19), (15, 15), (-11, -13), (-12, -10), (5, 5), (4, 3), (-13, -11), (-13, -8)
-, (5, 6), (-17, -22), (-3, -3), (-11, -10), (-18, -14), (-15, -12), (-6, -7), (-17, -15), (-10, -9), (-17, -19), (-11, -12), (4, 2), (-2, -4), (-5, -10), (-1, -1), (1, -1), (-25, -23), (-14, -14), (-10, -10), (0, -1), (7, 1), (10, -3), (2, 2)
-, (-4, -6), (2, 4), (-18, -19)],
+        vec![(0, 4), (13, 9), (19, 18), (30, 34), (30, 30), (-34, -18), (22, 24), (14, 15), (9, 9), (-2, 2), (5, 5), (24, 25), (11, 15), (17, 17), (38, 28), (4, 6), (14, 14), (23, 24), (-7, -6), (9, 10), (31, 36), (23, 28), (47, 39), (27, 27), (-1, 0), (
+1, -1), (-1, -2), (4, 4), (2, 0), (17, 17), (17, 18), (17, 18), (-8, -6), (-15, -11), (5, 6), (3, 3), (-16, -11), (-14, -
+11), (3, 3), (-16, -17), (-6, -7), (-13, -15), (-17, -16), (-15, -13), (-6, -8), (-17, -17), (-7, -8), (-21, -14), (-16, 
+-16), (-1, 2), (-1, -1), (-4, -5), (-2, -1), (0, -1), (-21, -21), (-22, -19), (-22, -19), (-9, -9), (6, 1), (22, -3), (16
+, 2), (-4, -5), (-1, 0), (-37, -19)],
         // QUEEN_TABLE_IDX = 9
-        vec![(-4, -6), (4, 3), (-2, 0), (18, 18), (15, 16), (9, 11), (25, 25), (10, 8), (1, 0), (5, 6), (31, 27), (15, 16), (33, 38),
- (64, 70), (17, 20), (6, 6), (1, 1), (0, 2), (4, 10), (-6, -3), (60, 69), (65, 60), (91, 94), (12, 13), (-13, -11), (-7, 
--4), (19, 20), (19, 55), (33, 35), (25, 28), (11, 17), (28, 25), (-15, -12), (-10, -17), (0, 0), (10, 17), (2, 3), (0, 0)
-, (13, 20), (7, 7), (11, 5), (-3, -6), (7, 7), (-8, -6), (-7, -7), (6, 8), (15, 17), (-11, -16), (-20, -17), (-5, -10), (
-0, -4), (9, 4), (5, 3), (8, 7), (-10, -9), (4, 4), (9, 8), (-12, -12), (-9, -8), (8, 7), (-6, -10), (-20, -21), (-4, -6),
- (-37, -35)],
+        vec![(-3, -4), (6, 3), (-5, 0), (25, 29), (12, 18), (12, 12), (28, 26), (12, 8), (2, 4), (-5, -4), (26, 28), (15, 11), (30, 26), (166, 132), (23, 27), (22, 25), (0, 0), (2, -2), (7, 10), (-4, -3), (79, 88), (138, 156), (188, 169), (63, 71), (-13,
+ -11), (-12, -8), (20, 20), (13, 55), (25, 37), (29, 35), (11, 9), (27, 30), (-20, -18), (-10, -11), (-6, 0), (1, 17), (3
+, 2), (-2, -1), (10, 16), (9, 9), (5, 2), (-2, -7), (-1, 0), (-7, -5), (-5, -6), (-5, 8), (13, 10), (-8, -5), (-26, -29),
+ (-4, -5), (9, -4), (17, 4), (8, 4), (5, 2), (-11, -12), (4, 2), (7, 8), (-15, -13), (-12, -12), (6, 5), (-1, -2), (-24, 
+-23), (-5, -4), (-48, -46)],
         // KING_TABLE_IDX = 10
-        vec![(-61, -68), (-40, -41), (3, 0), (-6, -4), (-1, 0), (0, -2), (-15, -16), (-56, -64), (-14, -19), (-15, -15), (9, 10), (-9
-, -10), (6, 5), (11, 13), (-42, -27), (-6, -7), (-48, -37), (-28, -21), (-19, -14), (-16, -13), (-6, -4), (11, 13), (21, 
-20), (-17, -6), (-8, -5), (-13, -10), (-21, -14), (9, 17), (51, 49), (22, 22), (-2, -3), (-37, -33), (-27, -26), (-7, -5)
-, (-7, -1), (0, 7), (-2, 0), (-1, 1), (2, 2), (-20, -19), (-5, -5), (7, 5), (-6, -6), (-7, -5), (-14, -11), (6, 4), (-14,
- -22), (-28, -33), (-2, -7), (-3, -4), (-10, -11), (-15, -13), (-20, -17), (-24, -17), (-10, -10), (-25, -28), (-9, -11),
- (6, -6), (1, -1), (-42, -26), (-8, -21), (-35, -29), (-1, -10), (-20, -27)],
+        vec![(-55, -61), (-37, -41), (3, 0), (-6, -4), (-1, -2), (0, 1), (-17, -21), (-56, -64), (-14, -19), (-14, -15), (8, 10), (-9
+, -10), (6, 8), (9, 14), (-38, -27), (-5, -7), (-48, -49), (-28, -21), (-19, -14), (-14, -13), (-4, -4), (11, 13), (17, 24), (-17, -15), (-11, -8), (-12, -13), (-21, -14), (9, 17), (57, 64), (22, 22), (-2, -3), (-37, -39), (-27, -26), (-7, -8
+), (-7, -1), (2, 7), (-2, 0), (-1, 1), (3, 2), (-23, -25), (-6, -7), (3, 4), (-5, -6), (-7, -5), (-17, -11), (3, 4), (-15
+, -18), (-35, -41), (-2, -7), (-2, -4), (-12, -13), (-27, -13), (-36, -17), (-36, -17), (-17, -17), (-25, -29), (-14, -11
+), (6, -6), (5, 3), (-76, -26), (-9, -21), (-91, -32), (1, -10), (-17, -27)],
         // BISHOP_PAIR_IDX = 11
-        vec![(21, 27)],
+        vec![(37, 43)],
         // ROOK_OPEN_FILE_IDX = 12
-        vec![(8, 13)],
+        vec![(11, 13)],
         // ROOK_SEMI_OPEN_FILE_IDX = 13
-        vec![(3, 10)],
+        vec![(14, 11)],
         // KING_SHIELD_BONUS_IDX = 14
-        vec![(5, 1)],
+        vec![(6, 6)],
         // KING_OPEN_FILE_PENALTY_IDX = 15
-        vec![(-4, -6)],
+        vec![(-1, 1)],
         // KING_SEMI_OPEN_FILE_PENALTY_IDX = 16
-        vec![(-6, -4)],
+        vec![(-6, -6)],
         // KING_VIRTUAL_MOBILITY_IDX = 17
-        vec![
-            (0, 0),
-            (0, 2),
-            (2, 0),
-            (4, 2),
-            (-16, 35),
-            (-16, 30),
-            (-23, 29),
-            (-30, 38),
-            (-40, 41),
-            (-49, 43),
-            (-55, 40),
-            (-73, 43),
-            (-76, 43),
-            (-92, 44),
-            (-103, 46),
-            (-93, 41),
-            (-116, 41),
-            (-124, 37),
-            (-126, 34),
-            (-112, 29),
-            (-121, 28),
-            (-142, 26),
-            (-149, 23),
-            (-128, 9),
-            (-148, -8),
-            (-134, -26),
-            (-130, -32),
-            (-135, -34),
-        ],
+        vec![(5, 3), (0, -2), (-1, 0), (-7, 0), (-18, -13), (-15, 30), (-16, 29), (-23, 38), (-33, 41), (-45, 43), (-44, 40), (-68, 43), (-56, 43), (-70, 44), (-86, 46), (-94, 41), (-101, 41), (-75, 37), (-91, 34), (-79, 29), (-114, 28), (-93, 26), (-129
+, 23), (-77, 9), (-114, -8), (-124, -26), (-145, -32), (-108, -34)],
         // BISHOP_MOBILITY_SCORE_IDX = 18
-        vec![
-            (-31, -35),
-            (-24, -30),
-            (-7, -19),
-            (-3, -6),
-            (1, -3),
-            (8, 10),
-            (14, 11),
-            (17, 20),
-            (15, 26),
-            (18, 34),
-            (25, 23),
-            (18, 20),
-            (26, 30),
-            (2, 1),
-        ],
+        vec![(-37, -41), (-27, -27), (-13, -19), (-12, -14), (-3, -4), (3, 5), (15, 19), (13, 20), (13, 26), (16, 34), (19, 27), (28,
+ 32), (27, 24), (3, 3)],
         // ROOK_MOBILITY_SCORE_IDX = 19
-        vec![
-            (-33, -31),
-            (-24, -25),
-            (-18, -18),
-            (-11, -23),
-            (-13, -10),
-            (2, -1),
-            (4, 0),
-            (11, 10),
-            (16, 21),
-            (22, 32),
-            (34, 33),
-            (26, 41),
-            (43, 36),
-            (44, 43),
-            (29, 36),
-        ],
+        vec![(-40, -42), (-22, -22), (-19, -22), (-9, -14), (-10, -9), (0, 1), (6, 4), (15, 16), (27, 20), (30, 33), (38, 39), (39, 39), (46, 47), (56, 63), (44, 51)],
         // QUEEN_MOBILITY_SCORE_IDX = 20
-        vec![
-            (-34, -46),
-            (-44, -40),
-            (-31, -38),
-            (-25, -43),
-            (-23, -22),
-            (-21, -29),
-            (-14, -13),
-            (-11, -13),
-            (-8, -18),
-            (-11, -10),
-            (-5, -2),
-            (3, 3),
-            (3, 4),
-            (1, 2),
-            (3, 10),
-            (11, 11),
-            (11, 15),
-            (4, 15),
-            (25, 23),
-            (-4, 2),
-            (15, 24),
-            (-2, -1),
-            (2, 4),
-            (-1, -2),
-            (-57, -55),
-            (-21, -25),
-            (1, -1),
-            (-65, -69),
-        ],
+        vec![(-33, -46), (-25, -27), (-26, -22), (-24, -43), (-22, -26), (-15, -29), (-15, -14), (-10, -14), (-11, -9), (-6, -7), (-6
+, -9), (-5, -4), (-4, -1), (-1, -2), (1, 10), (7, 5), (7, 15), (1, 15), (12, 15), (2, 2), (15, 19), (3, 2), (2, 3), (-2, 
+1), (-33, -27), (-18, -17), (-1, -1), (-56, -57)],
         // KNIGHT_MOBILITY_SCORE_IDX = 21
-        vec![
-            (-99, -114),
-            (-28, -24),
-            (-10, -10),
-            (-1, -5),
-            (6, 6),
-            (8, 8),
-            (12, 17),
-            (22, 26),
-            (27, 22),
-        ],
+        vec![(-62, -49), (-20, -18), (-4, -10), (3, -5), (13, 6), (12, 12), (14, 19), (24, 27), (28, 28)],
         // PASSED_PAWN_BONUS_IDX = 22
-        vec![
-            (24, 23),
-            (-5, -7),
-            (-1, -7),
-            (5, 6),
-            (-3, -6),
-            (11, 10),
-            (8, 9),
-            (20, 47),
-            (32, 29),
-            (52, 69),
-            (37, 43),
-            (88, 123),
-            (23, 29),
-            (110, 122),
-            (8, 5),
-            (-14, -4),
-        ],
+        vec![(18, 17), (0, 0), (-9, -1), (2, 6), (1, 0), (3, 14), (4, 9), (12, 47), (29, 34), (57, 69), (69, 58), (107, 137), (26, 29
+), (197, 331), (8, 9), (-12, -11)],
         // ISOLATED_PAWN_PENALTY_IDX = 23
-        vec![(-25, -21)],
+        vec![(-31, -24)],
         // DOUBLED_PAWN_PENALTY_IDX = 24
-        vec![(-4, -6)],
-        //TEMPO
-        vec![(34, 14)],
-        //ROOK_ON_SEVENTH
-        vec![(5, 35)],
+        vec![(-10, -12)],
+        //TEMPO_IDX + 25
+        vec![(27, 14)],
+        //ROOK_ON_SEVENTH_IDX = 26
+        vec![(41, 34)],
     ]
 }
 
@@ -738,12 +613,12 @@ impl Individual {
             let (commit, ok) = position.try_move(c);
 
             if !ok {
-                position.undo_move(c, commit);
+                position.undo_move(c, &commit);
                 continue;
             }
 
             let eval = -self.quiescence_search(position, -beta, -alpha);
-            position.undo_move(c, commit);
+            position.undo_move(c, &commit);
             if eval > alpha {
                 alpha = eval;
             }
@@ -853,6 +728,7 @@ impl Individual {
         x.mutate(false)
     }
 
+    #[allow(unused)]
     fn combine_chunks(&self, other: &Self) -> Self {
         let mut x = Self {
             cost: 0,
@@ -892,38 +768,62 @@ fn take_sample<'a>(positions: &'a Vec<&'a str>, evals: &Vec<i32>) -> (Vec<&'a st
     (pos_sample, ev_sample)
 }
 
-pub fn genetic_algorithm() -> Result<(), Box<dyn Error>> {
-    let file_path = "/Users/seba/rs/Panda/data/chessData.csv";
+fn load_data(db_path: &str) -> Result<(Vec<String>, Vec<i32>), Box<dyn std::error::Error>> {
+    println!("{} Loading data from .db file", "INFO:".green().bold(),);
+    let start = Instant::now();
 
-    // Read the CSV file into a DataFrame
-    let df = CsvReadOptions::default()
-        .with_has_header(true)
-        .try_into_reader_with_file_path(Some(file_path.into()))?
-        .finish()?;
+    let conn = Connection::open(db_path)?;
 
-    let str_column = df.get_columns()[0]
-        .str()?
-        .into_no_null_iter()
-        .collect::<Vec<_>>();
-    let i32_column = df.get_columns()[1]
-        .str()?
-        .into_no_null_iter()
-        .collect::<Vec<_>>();
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM evaluations", [], |row| row.get(0))?;
 
-    let mut positions = Vec::new();
-    let mut evals = Vec::new();
+    let mut fens = Vec::with_capacity(count as usize);
+    let mut evals = Vec::with_capacity(count as usize);
 
-    for (string_value, i32_value) in str_column.iter().zip(i32_column.iter()) {
-        match String::from(*i32_value).parse::<i32>() {
-            Ok(x) => {
-                positions.push(*string_value);
-                evals.push(x);
-            }
-            Err(_) => continue, //skip mate evals
+    let mut stmt = conn.prepare("SELECT fen, eval FROM evaluations")?;
+    let mut rows = stmt.query([])?;
+
+    let bar = ProgressBar::new(count as u64);
+    bar.set_style(
+        ProgressStyle::with_template(
+            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        )
+        .unwrap()
+        .progress_chars("##-"),
+    );
+
+    while let Some(row) = rows.next()? {
+        let fen: String = row.get(0)?;
+        let eval: f64 = row.get(1)?;
+
+        if eval.abs() > 50.0 {
+            //skip mate evals
+            continue;
         }
+
+        fens.push(fen);
+        evals.push((eval * 100.0) as i32);
+
+        bar.inc(1);
     }
 
-    println!("Successfully parsed data ✅ \n");
+    bar.finish();
+
+    let duration = start.elapsed();
+    println!(
+        "{} Loaded {} positions in {:.2?}\n",
+        "INFO:".green().bold(),
+        count,
+        duration
+    );
+
+    Ok((fens, evals))
+}
+
+pub fn genetic_algorithm() -> Result<(), Box<dyn Error>> {
+    let (positions, evals) =
+        load_data("/Users/seba/rs/Panda/data/2021-07-31-lichess-evaluations-37MM.db")?;
+
+    let positions = positions.iter().map(|x| x.as_str()).collect();
 
     let start = Individual::new();
 
@@ -933,7 +833,12 @@ pub fn genetic_algorithm() -> Result<(), Box<dyn Error>> {
     }
 
     for gen in 0..NUM_GENERATIONS {
-        println!("Starting generation {} of {}! 🚀", gen + 1, NUM_GENERATIONS);
+        println!(
+            "{} Starting generation {} of {}! 🚀",
+            "INFO:".green().bold(),
+            gen + 1,
+            NUM_GENERATIONS
+        );
         let (pos_sample, ev_sample) = take_sample(&positions, &evals);
         let mut new_population = population.clone();
         //use elitism to avoid "throwing away" a good solution
@@ -947,26 +852,28 @@ pub fn genetic_algorithm() -> Result<(), Box<dyn Error>> {
 
             let n3 = rng.gen_range(0..POPULATION_SIZE);
             let child3 = x.combine(&population[n3 as usize]);
+            /*
 
-            let n4 = rng.gen_range(0..POPULATION_SIZE);
-            let child4 = x.combine_chunks(&population[n4 as usize]);
+                        let n4 = rng.gen_range(0..POPULATION_SIZE);
+                        let child4 = x.combine_chunks(&population[n4 as usize]);
 
-            let n5 = rng.gen_range(0..POPULATION_SIZE);
-            let child5 = x.combine_chunks(&population[n5 as usize]);
+                        let n5 = rng.gen_range(0..POPULATION_SIZE);
+                        let child5 = x.combine_chunks(&population[n5 as usize]);
 
-            let n6 = rng.gen_range(0..POPULATION_SIZE);
-            let child6 = x.combine_chunks(&population[n6 as usize]);
+                        let n6 = rng.gen_range(0..POPULATION_SIZE);
+                        let child6 = x.combine_chunks(&population[n6 as usize]);
 
+            */
             let child7 = x.mutate(false);
             let child8 = x.mutate(false);
             let child9 = x.mutate(false);
 
             new_population.extend(vec![
-                child1, child2, child3, child4, child5, child6, child7, child8, child9,
+                child1, child2, child3, /*child4, child5, child6,*/ child7, child8, child9,
             ]);
         }
 
-        let bar = ProgressBar::new(POPULATION_SIZE as u64 * 10);
+        let bar = ProgressBar::new(POPULATION_SIZE as u64 * 7);
         bar.set_style(
             ProgressStyle::with_template(
                 "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
@@ -984,7 +891,8 @@ pub fn genetic_algorithm() -> Result<(), Box<dyn Error>> {
         population = new_population[..POPULATION_SIZE as usize].to_vec();
 
         println!(
-            "Generation {} of {}: average cost {}! 🌟 \n",
+            "{} Generation {} of {}: average cost {}! \n",
+            "INFO:".green().bold(),
             gen + 1,
             NUM_GENERATIONS,
             (population[0].cost as f32 / pos_sample.len() as f32)
@@ -1066,7 +974,8 @@ pub fn simulated_annealing() -> Result<(), Box<dyn Error>> {
 
         if delta_e < 1.0 {
             println!(
-                "INFO: Iteration {}: Accepted cost {} vs old cost {}",
+                "{} Iteration {}: Accepted cost {} vs old cost {}",
+                "INFO:".green().bold(),
                 iterations,
                 new.cost as f32 / pos_sample.len() as f32,
                 old.cost as f32 / pos_sample.len() as f32,
@@ -1080,7 +989,8 @@ pub fn simulated_annealing() -> Result<(), Box<dyn Error>> {
 
             if x <= p {
                 println!(
-                    "INFO: Iteration {}: Accepted cost {} vs old cost {}",
+                    "{} Iteration {}: Accepted cost {} vs old cost {}",
+                    "INFO:".green().bold(),
                     iterations,
                     new.cost as f32 / pos_sample.len() as f32,
                     old.cost as f32 / pos_sample.len() as f32,
@@ -1157,7 +1067,8 @@ pub fn hill_climbing() -> Result<(), Box<dyn Error>> {
 
         if new.cost < old.cost {
             println!(
-                "INFO: Iteration {}: Accepted cost {} vs old cost {}",
+                "{} Iteration {}: Accepted cost {} vs old cost {}",
+                "INFO:".green().bold(),
                 iterations,
                 new.cost as f32 / pos_sample.len() as f32,
                 old.cost as f32 / pos_sample.len() as f32,
