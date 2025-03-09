@@ -38,6 +38,7 @@ pub struct Move {
     //    pub score: i32, < storing an i32 in move struct slows down performance significantly
 }
 
+#[derive(Default)]
 pub struct Commit {
     //resets for irreversible fields of Board struct
     pub castling_reset: u8,
@@ -362,6 +363,7 @@ impl Board {
                 _ => panic!("impossible n'est pas français"),
             },
         }; //not m.piece_moved(&self) because board has been mutated
+
         if m.is_promotion() {
             let promoted_piece = self.pieces_array[sq_to];
             self.bitboards[promoted_piece] = pop_bit(sq_to, self.bitboards[promoted_piece]);
@@ -480,14 +482,23 @@ pub fn is_legal(m: Move, b: &mut Board) -> bool {
     true
 }
 impl Board {
+    /*pub fn try_move(&mut self, m: Move, pin_rays: &[u64]) -> (Commit, bool) {
+        let mut commit = Commit::default();
+        let mut ok = false;
+        if self.is_check() {
+            commit = self.make_move(m);
+            ok = !self.is_still_check();
+        } else if legal_non_check_evasion(m, &self, pin_rays) {
+            commit = self.make_move(m);
+            ok = true;
+        }
+
+        (commit, ok)
+    }*/
+
     pub fn try_move(&mut self, m: Move) -> (Commit, bool) {
         let commit = self.make_move(m);
-        let ok = match self.side_to_move {
-            // AFTER move has been made
-            Colour::White => !is_attacked(lsfb(self.bitboards[BK]), Colour::White, self),
-            Colour::Black => !is_attacked(lsfb(self.bitboards[WK]), Colour::Black, self),
-        };
-
+        let ok = !self.is_still_check();
         (commit, ok)
     }
 }

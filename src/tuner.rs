@@ -32,28 +32,29 @@ pub const KNIGHT_VALUE_IDX: usize = 1;
 pub const BISHOP_VALUE_IDX: usize = 2;
 pub const ROOK_VALUE_IDX: usize = 3;
 pub const QUEEN_VALUE_IDX: usize = 4;
-pub const PAWN_TABLE_IDX: usize = 5;
-pub const KNIGHT_TABLE_IDX: usize = 6;
-pub const BISHOP_TABLE_IDX: usize = 7;
-pub const ROOK_TABLE_IDX: usize = 8;
-pub const QUEEN_TABLE_IDX: usize = 9;
-pub const KING_TABLE_IDX: usize = 10;
-pub const BISHOP_PAIR_IDX: usize = 11;
-pub const ROOK_OPEN_FILE_IDX: usize = 12;
-pub const ROOK_SEMI_OPEN_FILE_IDX: usize = 13;
-pub const KING_SHIELD_BONUS_IDX: usize = 14;
-pub const KING_OPEN_FILE_PENALTY_IDX: usize = 15;
-pub const KING_SEMI_OPEN_FILE_PENALTY_IDX: usize = 16;
-pub const KING_VIRTUAL_MOBILITY_IDX: usize = 17;
-pub const BISHOP_MOBILITY_SCORE_IDX: usize = 18;
-pub const ROOK_MOBILITY_SCORE_IDX: usize = 19;
-pub const QUEEN_MOBILITY_SCORE_IDX: usize = 20;
-pub const KNIGHT_MOBILITY_SCORE_IDX: usize = 21;
-pub const PASSED_PAWN_BONUS_IDX: usize = 22;
-pub const ISOLATED_PAWN_PENALTY_IDX: usize = 23;
-pub const DOUBLED_PAWN_PENALTY_IDX: usize = 24;
-pub const TEMPO_WEIGHT_IDX: usize = 25;
-pub const ROOK_ON_SEVENTH_IDX: usize = 26;
+pub const PAWN_SAME_SIDE_TABLE_IDX: usize = 5;
+pub const PAWN_OTHER_SIDE_TABLE_IDX: usize = 6;
+pub const KNIGHT_TABLE_IDX: usize = 7;
+pub const BISHOP_TABLE_IDX: usize = 8;
+pub const ROOK_TABLE_IDX: usize = 9;
+pub const QUEEN_TABLE_IDX: usize = 10;
+pub const KING_TABLE_IDX: usize = 11;
+pub const BISHOP_PAIR_IDX: usize = 12;
+pub const ROOK_OPEN_FILE_IDX: usize = 13;
+pub const ROOK_SEMI_OPEN_FILE_IDX: usize = 14;
+pub const KING_SHIELD_BONUS_IDX: usize = 15;
+pub const KING_OPEN_FILE_PENALTY_IDX: usize = 16;
+pub const KING_SEMI_OPEN_FILE_PENALTY_IDX: usize = 17;
+pub const KING_VIRTUAL_MOBILITY_IDX: usize = 18;
+pub const BISHOP_MOBILITY_SCORE_IDX: usize = 19;
+pub const ROOK_MOBILITY_SCORE_IDX: usize = 20;
+pub const QUEEN_MOBILITY_SCORE_IDX: usize = 21;
+pub const KNIGHT_MOBILITY_SCORE_IDX: usize = 22;
+pub const PASSED_PAWN_BONUS_IDX: usize = 23;
+pub const ISOLATED_PAWN_PENALTY_IDX: usize = 24;
+pub const DOUBLED_PAWN_PENALTY_IDX: usize = 25;
+pub const TEMPO_WEIGHT_IDX: usize = 26;
+pub const ROOK_ON_SEVENTH_IDX: usize = 27;
 
 #[rustfmt::skip]
 fn init_weights() -> Vec<Vec<(i32, i32)>> {
@@ -69,26 +70,51 @@ fn init_weights() -> Vec<Vec<(i32, i32)>> {
         vec![(713, 879)],
         // QUEEN_VALUE_IDX = 4
         vec![(1380, 1649)],
-        // PAWN_TABLE_IDX = 5
+        // PAWN_SAME_SIDE_TABLE_IDX = 5
+vec![
+    (30, 30), (38, 48), (0, 2), (-10, -13), (10, 8), (18, 21), (-29, -38), (-10, -10),
+    (219, 254), (22, 22), (152, 257), (168, 187), (93, 100), (214, 244), (73, 138), (44, 228),
+    (22, 64), (65, 64), (40, 35), (34, 33), (46, 51), (127, 87), (44, 51), (62, 63),
+    (22, 23), (1, 3), (8, 6), (17, 16), (53, 12), (34, 25), (31, 35), (13, 15),
+    (-9, -8), (-24, -2), (-2, -1), (12, 14), (26, -6), (25, 8), (9, 10), (-4, -3),
+    (-4, -2), (-19, -6), (-8, -2), (-31, -9), (16, 14), (13, 16), (40, 8), (17, 2),
+    (-5, -6), (1, 2), (4, 3), (-15, -14), (-8, -8), (14, 14), (41, 5), (2, -12),
+    (0, 2), (-26, -23), (-21, -24), (-5, -7), (-21, -18), (0, -4), (19, 16), (-3, -4),
+],
 
-        vec![(26, 22), (26, 27), (-2, -3), (-11, -11), (20, 28), (15, 18), (-27, -22), (-5, -7), (197, 205), (16, 24), (163, 186), (195, 167), (77, 88), (80, 79), (97, 138), (52, 228), (30, 64), (40, 66), (42, 53), (39, 34), (68, 46), (102, 90), (21, 24)
-, (52, 57), (12, 12), (3, 9), (4, 8), (30, 7), (51, 12), (28, 22), (20, 22), (9, 20), (-15, -7), (-16, -2), (1, -1), (30,
- 14), (23, -6), (16, 8), (-1, 6), (-8, -2), (-12, -12), (-20, -6), (-10, -8), (-4, -1), (11, 12), (6, 6), (21, 8), (5, 2)
-, (-17, -10), (-23, -1), (-33, -12), (-19, -20), (-13, -1), (5, 12), (24, 5), (-9, -12), (0, -4), (-18, -20), (-21, -22),
- (-5, -5), (-17, -20), (-2, -4), (23, 24), (-7, -7)],
+// PAWN_OTHER_SIDE_TABLE_IDX = 6
+vec![
+    (27, 24), (32, 31), (-3, -4), (-10, -9), (21, 21), (16, 16), (-34, -29), (-8, -6),
+    (172, 185), (15, 24), (152, 173), (177, 167), (66, 68), (80, 79), (84, 75), (49, 60),
+    (26, 64), (42, 35), (42, 35), (44, 38), (62, 52), (75, 84), (26, 24), (46, 38),
+    (12, 9), (3, 5), (6, 6), (32, 7), (47, 12), (26, 22), (19, 21), (8, 8),
+    (-24, -7), (-25, -2), (2, 0), (32, 14), (30, 25), (18, 18), (-3, -4), (-4, -6),
+    (-15, -15), (-28, -6), (-7, -9), (-2, -1), (8, 11), (15, 14), (8, 13), (2, 3),
+    (-23, -10), (-28, -1), (-33, -12), (-20, -22), (-15, -14), (-3, -1), (-2, 3), (-14, -8),
+    (4, 2), (-26, -24), (-12, -22), (-3, -5), (-14, -18), (-1, -4), (19, 19), (-6, -6),
+],
         // KNIGHT_TABLE_IDX = 6
-        vec![(-43, -47), (-106, -84), (-10, -11), (-32, -33), (-25, -24), (-13, -11), (-40, -40), (-43, -52), (-26, -22), (4, 4), (33
-, 25), (25, 23), (58, 40), (13, 13), (1, 3), (-11, -10), (11, 10), (13, 11), (28, 29), (116, 32), (21, 21), (-6, -5), (72
-, 49), (-3, -1), (4, 3), (-7, -6), (11, 12), (61, 68), (18, 18), (35, 30), (2, 13), (-9, -6), (-17, -18), (-5, -6), (13, 
-11), (3, 16), (21, 20), (17, 16), (-2, 0), (-10, -8), (-57, -26), (-10, -12), (-3, -7), (8, 8), (10, 10), (9, -1), (5, 6)
-, (-27, -28), (-57, -43), (-22, -22), (-23, -23), (5, 3), (4, 1), (-11, -11), (-19, -20), (-21, -20), (-18, -20), (-19, -23), (-10, -10), (-16, -15), (-14, -11), (-14, -13), (-30, -34), (2, 3)],
+        vec![
+    (-43, -47), (-106, -84), (-10, -11), (-32, -33), (-25, -24), (-13, -11), (-40, -40), (-43, -52),
+    (-26, -22), (4, 4), (33, 25), (25, 23), (58, 40), (13, 13), (1, 3), (-11, -10),
+    (11, 10), (13, 11), (28, 29), (116, 32), (21, 21), (-6, -5), (72, 49), (-3, -1),
+    (4, 3), (-7, -6), (11, 12), (61, 68), (18, 18), (35, 30), (2, 13), (-9, -6),
+    (-17, -18), (-5, -6), (13, 11), (3, 16), (21, 20), (17, 16), (-2, 0), (-10, -8),
+    (-57, -26), (-10, -12), (-3, -7), (8, 8), (10, 10), (9, -1), (5, 6), (-27, -28),
+    (-57, -43), (-22, -22), (-23, -23), (5, 3), (4, 1), (-11, -11), (-19, -20), (-21, -20),
+    (-18, -20), (-19, -23), (-10, -10), (-16, -15), (-14, -11), (-14, -13), (-30, -34), (2, 3),
+],
         // BISHOP_TABLE_IDX = 7
-        vec![(-29, -29), (-12, -12), (-10, -14), (-21, -24), (25, 26), (2, 2), (5, 4), (-1, 0), (5, 6), (0, 2), (2, 1), (-2, -1), (3,
- 0), (7, 7), (-1, 1), (-20, -26), (3, 5), (-9, -10), (-1, 7), (12, 10), (29, 24), (120, 72), (2, 2), (4, 6), (3, 2), (-10
-, -3), (7, 11), (27, 28), (24, 27), (0, 1), (-11, -7), (-11, -9), (-12, -14), (-3, -6), (-16, -17), (26, 30), (10, 11), (
--6, -7), (-18, -19), (6, 7), (-12, -10), (8, 9), (0, 2), (2, 4), (-3, -1), (3, 4), (3, 0), (3, 2), (5, 6), (7, -6), (16, 
-5), (-20, 1), (-3, -3), (-2, 0), (25, 9), (4, 6), (-6, -7), (-1, -2), (-20, -21), (-3, -3), (-9, -7), (-40, -11), (-12, -
-9), (-15, -14)],
+        vec![
+    (-29, -29), (-12, -12), (-10, -14), (-21, -24), (25, 26), (2, 2), (5, 4), (-1, 0),
+    (5, 6), (0, 2), (2, 1), (-2, -1), (3, 0), (7, 7), (-1, 1), (-20, -26),
+    (3, 5), (-9, -10), (-1, 7), (12, 10), (29, 24), (120, 72), (2, 2), (4, 6),
+    (3, 2), (-10, -3), (7, 11), (27, 28), (24, 27), (0, 1), (-11, -7), (-11, -9),
+    (-12, -14), (-3, -6), (-16, -17), (26, 30), (10, 11), (-6, -7), (-18, -19), (6, 7),
+    (-12, -10), (8, 9), (0, 2), (2, 4), (-3, -1), (3, 4), (3, 0), (3, 2),
+    (5, 6), (7, -6), (16, 5), (-20, 1), (-3, -3), (-2, 0), (25, 9), (4, 6),
+    (-6, -7), (-1, -2), (-20, -21), (-3, -3), (-9, -7), (-40, -11), (-12, -9), (-15, -14),
+],
         // ROOK_TABLE_IDX = 8
         vec![(0, 4), (13, 9), (19, 18), (30, 34), (30, 30), (-34, -18), (22, 24), (14, 15), (9, 9), (-2, 2), (5, 5), (24, 25), (11, 15), (17, 17), (38, 28), (4, 6), (14, 14), (23, 24), (-7, -6), (9, 10), (31, 36), (23, 28), (47, 39), (27, 27), (-1, 0), (
 1, -1), (-1, -2), (4, 4), (2, 0), (17, 17), (17, 18), (17, 18), (-8, -6), (-15, -11), (5, 6), (3, 3), (-16, -11), (-14, -
@@ -192,8 +218,23 @@ fn evaluate_pawns(
         Colour::White => b.bitboards[WP],
         Colour::Black => b.bitboards[BP],
     };
+
+    let king_kside = lsfb(match colour {
+        Colour::White => b.bitboards[WK],
+        Colour::Black => b.bitboards[BK],
+    }) % 8
+        > 3;
+
     while temp_pawns > 0 {
         let square = lsfb(temp_pawns);
+        let is_kside = square % 8 > 3;
+
+        #[allow(non_snake_case)]
+        let PAWN_TABLE_IDX = if is_kside == king_kside {
+            PAWN_SAME_SIDE_TABLE_IDX
+        } else {
+            PAWN_OTHER_SIDE_TABLE_IDX
+        };
         pawn_eval += tapered_score(weights[PAWN_VALUE_IDX][0], phase_score);
 
         match colour {
@@ -577,8 +618,11 @@ impl Individual {
 
         alpha = std::cmp::max(alpha, eval);
 
-        let mut captures = MoveList::gen_captures(position);
+        let mut captures = MoveList::gen_captures(position); //in tuner I don't think we care
+                                                             //whether or not its check
         captures.order_moves(position, &Searcher::new(Instant::now()), &NULL_MOVE);
+
+        //let pin_rays = movegen::get_pin_rays(&position);
 
         for c in captures.moves {
             if c.is_null() {
@@ -610,9 +654,12 @@ impl Individual {
                 continue;
             }
 
-            let (commit, ok) = position.try_move(c);
+            let (commit, ok) = position.try_move(c /*, &pin_rays*/);
 
             if !ok {
+                if !commit.made_move {
+                    continue;
+                }
                 position.undo_move(c, &commit);
                 continue;
             }

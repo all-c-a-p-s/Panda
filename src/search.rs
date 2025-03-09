@@ -291,11 +291,7 @@ impl Searcher {
             best_move.is_capture(position)
         };
 
-        let is_check = match position.side_to_move {
-            //used in both search extensions and LMR
-            Colour::White => is_attacked(lsfb(position.bitboards[WK]), Colour::Black, position),
-            Colour::Black => is_attacked(lsfb(position.bitboards[BK]), Colour::White, position),
-        };
+        let is_check = position.is_check();
 
         let static_eval = evaluate(position);
         if self.ply < MAX_SEARCH_DEPTH {
@@ -398,6 +394,8 @@ impl Searcher {
         let mut child_nodes = MoveList::gen_moves(position);
         child_nodes.order_moves(position, self, &best_move);
 
+        //let pin_rays = get_pin_rays(&position);
+
         let mut moves_played = 0;
         let mut skip_quiets = false;
 
@@ -419,7 +417,7 @@ impl Searcher {
                 if quiet && skip_quiets && !is_killer {
                     //this is kinda messy but you have to know whether the move was legal
                     //to update the moves_played counter
-                    let (commit, ok) = position.try_move(m);
+                    let (commit, ok) = position.try_move(m /*, &pin_rays*/);
                     position.undo_move(m, &commit);
                     if ok {
                         moves_played += 1;
@@ -446,7 +444,7 @@ impl Searcher {
                     //prune if move fails to beat SEE threshold
                     if !m.static_exchange_evaluation(position, threshold) {
                         //as above
-                        let (commit, ok) = position.try_move(m);
+                        let (commit, ok) = position.try_move(m /*, &pin_rays*/);
                         position.undo_move(m, &commit);
                         if ok {
                             moves_played += 1;
@@ -464,12 +462,15 @@ impl Searcher {
                 }
             }
 
-            let (commit, ok) = position.try_move(m);
+            let (commit, ok) = position.try_move(m /*, &pin_rays*/);
             //test if move is legal and make it at the same time
             //this obv faster that making the move to check if it is legal
             //then unmaking it and making it again for the search
 
             if !ok {
+                if !commit.made_move {
+                    continue;
+                }
                 position.undo_move(m, &commit);
                 continue;
             }
@@ -646,9 +647,17 @@ impl Searcher {
 
         alpha = cmp::max(alpha, eval);
 
-        let mut captures = MoveList::gen_captures(position);
+        let mut captures = if position.is_check() {
+            //try generating all moves in the case that we're in check because it's unsound to rely
+            //on static eval + if could be mate
+            MoveList::gen_moves(position)
+        } else {
+            MoveList::gen_captures(position)
+        };
 
         captures.order_moves(position, self, &best_move);
+        //let pin_rays = get_pin_rays(&position);
+
         for c in captures.moves {
             if c.is_null() {
                 //no more pseudo-legal moves
@@ -683,9 +692,12 @@ impl Searcher {
                 continue;
             }
 
-            let (commit, ok) = position.try_move(c);
+            let (commit, ok) = position.try_move(c /*, &pin_rays*/);
 
             if !ok {
+                if !commit.made_move {
+                    continue;
+                }
                 position.undo_move(c, &commit);
                 continue;
             }

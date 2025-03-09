@@ -11,13 +11,21 @@ pub fn perft(depth: usize, b: &mut Board) -> usize {
 
     let mut total = 0;
     let moves = MoveList::gen_moves(b);
+
+    //let pin_rays = movegen::get_pin_rays(&b);
+
     for i in 0..MAX_MOVES {
         if moves.moves[i].is_null() {
             break;
         }
 
-        let (commit, ok) = b.try_move(moves.moves[i]);
+        let (commit, ok) = b.try_move(moves.moves[i] /*, &pin_rays*/);
         if !ok {
+            /*
+                        if !commit.made_move {
+                            continue;
+                        }
+            */
             b.undo_move(moves.moves[i], &commit);
             continue;
         }

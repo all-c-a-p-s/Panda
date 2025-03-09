@@ -1,4 +1,5 @@
 use crate::helper::*;
+use crate::movegen::is_attacked;
 
 #[derive(Debug)]
 pub struct Board {
@@ -18,6 +19,15 @@ pub struct Board {
 pub enum Colour {
     White,
     Black,
+}
+
+impl Colour {
+    pub fn opponent(&self) -> Self {
+        match self {
+            Colour::White => Colour::Black,
+            Colour::Black => Colour::White,
+        }
+    }
 }
 
 pub fn ascii_to_piece_index(ascii: char) -> usize {
@@ -236,5 +246,22 @@ impl Board {
         self.occupancies[BOTH]
             ^ (self.bitboards[WP] | self.bitboards[WK] | self.bitboards[BP] | self.bitboards[BK])
             == 0
+    }
+
+    pub fn is_check(&self) -> bool {
+        match self.side_to_move {
+            //used in both search extensions and LMR
+            Colour::White => is_attacked(lsfb(self.bitboards[WK]), Colour::Black, self),
+            Colour::Black => is_attacked(lsfb(self.bitboards[BK]), Colour::White, self),
+        }
+    }
+
+    //check if a move leaves us in check
+    pub fn is_still_check(&self) -> bool {
+        match self.side_to_move {
+            //used in both search extensions and LMR
+            Colour::White => is_attacked(lsfb(self.bitboards[BK]), Colour::White, self),
+            Colour::Black => is_attacked(lsfb(self.bitboards[WK]), Colour::Black, self),
+        }
     }
 }

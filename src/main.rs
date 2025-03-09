@@ -45,14 +45,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let genetic = true;
     let anneal = false;
 
-    //we're not evading checks!
-
     if profile {
         full_perft();
     } else if debug {
         let mut pos = Board::from(STARTPOS);
         let start = Instant::now();
-        let n = perft(7, &mut pos);
+        let n = perft(6, &mut pos);
         println!("\ntotal: {}, {:?}", n, start.elapsed());
         //full_hash_test();
         /*
