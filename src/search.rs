@@ -34,7 +34,7 @@ const SEE_PRUNING_DEPTH: i32 = 4;
 const SEE_QUIET_MARGIN: i32 = 100;
 const SEE_NOISY_MARGIN: i32 = 70;
 #[allow(unused)]
-const SEE_QSEARCH_MARGIN: i32 = 130;
+const SEE_QSEARCH_MARGIN: i32 = 1;
 //TODO: test using static margin or just zero
 //in SEE pruning in QSearch
 
@@ -673,20 +673,15 @@ impl Searcher {
                 return beta;
             }
 
-            //TODO: THIS IS A BUG NO? - apparently not!
-
-            if !c.static_exchange_evaluation(position, 0) {
+            if !c.static_exchange_evaluation(position, SEE_QSEARCH_MARGIN) {
                 //prune moves that fail see by threshold
                 continue;
             }
 
-            //TODO: ALSO A BUG (BISHOP - 1) - should test with on this change since I tested with
-            //both
-            //prune neutral captures in bad positions (up to NxB)
             if eval + 200 <= alpha
                 && !c.static_exchange_evaluation(
                     position,
-                    SEE_VALUES[KNIGHT] - SEE_VALUES[BISHOP - 1],
+                    SEE_VALUES[KNIGHT] - SEE_VALUES[BISHOP] - 1,
                 )
             {
                 continue;
@@ -695,9 +690,9 @@ impl Searcher {
             let (commit, ok) = position.try_move(c /*, &pin_rays*/);
 
             if !ok {
-                if !commit.made_move {
+                /*               if !commit.made_move {
                     continue;
-                }
+                }*/
                 position.undo_move(c, &commit);
                 continue;
             }
@@ -1165,11 +1160,13 @@ pub fn best_move(
     let mut beta = INFINITY;
     let mut depth = 1;
 
+    let mut delta = ASPIRATION_WINDOW;
+
     let rt_table_reset = unsafe { REPETITION_TABLE };
 
     while depth < MAX_SEARCH_DEPTH {
         unsafe { START_DEPTH = depth };
-        eval = s.negamax(position, depth, alpha, beta);
+        eval = s.negamax(position, std::cmp::max(depth, 1), alpha, beta);
         if s.moves_fully_searched == 0 {
             //search cancelled before even pv was searched
             eval = previous_eval;
@@ -1212,7 +1209,7 @@ pub fn best_move(
             }
         );
 
-        if start.elapsed() * 2 > move_duration {
+        if start.elapsed() > move_duration {
             /*
              more than half of time used -> no point starting another search as its likely
              that zero moves will be searched fully.
@@ -1224,16 +1221,25 @@ pub fn best_move(
         s.moves_fully_searched = 0;
         unsafe { REPETITION_TABLE = rt_table_reset };
 
-        if eval <= alpha || eval >= beta {
+        if eval <= alpha {
             //fell outside window -> re-search with same depth
-            alpha = -INFINITY;
-            beta = INFINITY;
+            alpha = std::cmp::max(alpha - delta, -INFINITY);
+
+            beta = (alpha + beta) / 2;
+            delta += delta / 2;
             continue; //continue without incrementing depth
+        } else if eval >= beta {
+            beta = std::cmp::min(beta + delta, INFINITY);
+            delta += delta / 2;
+            continue;
         }
 
+        delta = ASPIRATION_WINDOW;
+
         //set up search for next iteration
-        alpha = eval - ASPIRATION_WINDOW;
-        beta = eval + ASPIRATION_WINDOW;
+        alpha = eval - delta;
+        beta = eval + delta;
+
         depth += 1;
     }
 

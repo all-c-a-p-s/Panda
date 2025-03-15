@@ -5,7 +5,11 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+debug = true
+
 [dependencies]
+colored = "3.0.0"
 indicatif = "0.17.11"
 lazy_static = "1.4.0"
 polars = "0.46.0"
@@ -13,3 +17,4 @@ rand = "0.8.5"
 rand_chacha = "0.3.1"
 rand_xoshiro = "0.6.0"
 rayon = "1.10.0"
+rusqlite = "0.33.0"
