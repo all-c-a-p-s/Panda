@@ -1,6 +1,5 @@
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
-use polars::prelude::*;
 use rand::Rng;
 use rayon::prelude::*;
 use rusqlite::Connection;
@@ -25,7 +24,7 @@ const K: f32 = 0.99;
 
 //need to tune parameters at a time because otherwise too many chromosomes
 //for ga to be effective
-pub const INDICES_TO_TUNE: &'static [usize] = &[10];
+pub const INDICES_TO_TUNE: &'static [usize] = &[5];
 
 pub const PAWN_VALUE_IDX: usize = 0;
 pub const KNIGHT_VALUE_IDX: usize = 1;
@@ -56,34 +55,40 @@ pub const DOUBLED_PAWN_PENALTY_IDX: usize = 25;
 pub const TEMPO_WEIGHT_IDX: usize = 26;
 pub const ROOK_ON_SEVENTH_IDX: usize = 27;
 
+pub enum TuneType {
+    Genetic,
+    Anneal,
+    HillClimb,
+}
+
 #[rustfmt::skip]
 fn init_weights() -> Vec<Vec<(i32, i32)>> {
 
     vec![
         // PAWN_VALUE_IDX = 0
-        vec![(145, 170)],
+        vec![(142, 168)],
         // KNIGHT_VALUE_IDX = 1
-        vec![(538, 515)],
+        vec![(519, 547)],
         // BISHOP_VALUE_IDX = 2
-        vec![(585, 543)],
+        vec![(567, 589)],
         // ROOK_VALUE_IDX = 3
-        vec![(713, 879)],
+        vec![(726, 885)],
         // QUEEN_VALUE_IDX = 4
-        vec![(1380, 1649)],
+        vec![(1391, 1646)],
         // PAWN_SAME_SIDE_TABLE_IDX = 5
-vec![
-    (30, 30), (38, 48), (0, 2), (-10, -13), (10, 8), (18, 21), (-29, -38), (-10, -10),
-    (219, 254), (22, 22), (152, 257), (168, 187), (93, 100), (214, 244), (73, 138), (44, 228),
-    (22, 64), (65, 64), (40, 35), (34, 33), (46, 51), (127, 87), (44, 51), (62, 63),
-    (22, 23), (1, 3), (8, 6), (17, 16), (53, 12), (34, 25), (31, 35), (13, 15),
-    (-9, -8), (-24, -2), (-2, -1), (12, 14), (26, -6), (25, 8), (9, 10), (-4, -3),
-    (-4, -2), (-19, -6), (-8, -2), (-31, -9), (16, 14), (13, 16), (40, 8), (17, 2),
-    (-5, -6), (1, 2), (4, 3), (-15, -14), (-8, -8), (14, 14), (41, 5), (2, -12),
-    (0, 2), (-26, -23), (-21, -24), (-5, -7), (-21, -18), (0, -4), (19, 16), (-3, -4),
+        vec![
+    (25, 30), (40, 37), (-4, -5), (-11, -9), (0, -4), (12, 10), (-24, -25), (-12, -14),
+    (205, 157), (16, 13), (199, 238), (184, 170), (63, 80), (144, 171), (72, 79), (43, 47),
+    (27, 16), (43, 48), (16, 20), (41, 53), (68, 53), (99, 104), (67, 74), (56, 50),
+    (26, 32), (2, 3), (11, 11), (8, 8), (55, 12), (24, 24), (33, 30), (14, 16),
+    (-14, -9), (-24, -2), (3, 5), (3, 7), (25, 22), (25, 22), (6, 10), (-5, -2),
+    (1, 3), (-16, -6), (-5, -4), (-41, -27), (20, 18), (11, 10), (36, 8), (9, 6),
+    (3, 4), (2, 1), (4, 2), (-39, -37), (-11, -12), (16, 16), (39, 5), (-2, -8),
+    (0, 1), (-38, -30), (-24, -26), (3, 1), (-8, -10), (2, -1), (6, 5), (-4, -4),
 ],
 
 // PAWN_OTHER_SIDE_TABLE_IDX = 6
-vec![
+        vec![
     (27, 24), (32, 31), (-3, -4), (-10, -9), (21, 21), (16, 16), (-34, -29), (-8, -6),
     (172, 185), (15, 24), (152, 173), (177, 167), (66, 68), (80, 79), (84, 75), (49, 60),
     (26, 64), (42, 35), (42, 35), (44, 38), (62, 52), (75, 84), (26, 24), (46, 38),
@@ -93,7 +98,7 @@ vec![
     (-23, -10), (-28, -1), (-33, -12), (-20, -22), (-15, -14), (-3, -1), (-2, 3), (-14, -8),
     (4, 2), (-26, -24), (-12, -22), (-3, -5), (-14, -18), (-1, -4), (19, 19), (-6, -6),
 ],
-        // KNIGHT_TABLE_IDX = 6
+        // KNIGHT_TABLE_IDX = 7
         vec![
     (-43, -47), (-106, -84), (-10, -11), (-32, -33), (-25, -24), (-13, -11), (-40, -40), (-43, -52),
     (-26, -22), (4, 4), (33, 25), (25, 23), (58, 40), (13, 13), (1, 3), (-11, -10),
@@ -104,7 +109,7 @@ vec![
     (-57, -43), (-22, -22), (-23, -23), (5, 3), (4, 1), (-11, -11), (-19, -20), (-21, -20),
     (-18, -20), (-19, -23), (-10, -10), (-16, -15), (-14, -11), (-14, -13), (-30, -34), (2, 3),
 ],
-        // BISHOP_TABLE_IDX = 7
+        // BISHOP_TABLE_IDX = 8
         vec![
     (-29, -29), (-12, -12), (-10, -14), (-21, -24), (25, 26), (2, 2), (5, 4), (-1, 0),
     (5, 6), (0, 2), (2, 1), (-2, -1), (3, 0), (7, 7), (-1, 1), (-20, -26),
@@ -115,62 +120,95 @@ vec![
     (5, 6), (7, -6), (16, 5), (-20, 1), (-3, -3), (-2, 0), (25, 9), (4, 6),
     (-6, -7), (-1, -2), (-20, -21), (-3, -3), (-9, -7), (-40, -11), (-12, -9), (-15, -14),
 ],
-        // ROOK_TABLE_IDX = 8
-        vec![(0, 4), (13, 9), (19, 18), (30, 34), (30, 30), (-34, -18), (22, 24), (14, 15), (9, 9), (-2, 2), (5, 5), (24, 25), (11, 15), (17, 17), (38, 28), (4, 6), (14, 14), (23, 24), (-7, -6), (9, 10), (31, 36), (23, 28), (47, 39), (27, 27), (-1, 0), (
-1, -1), (-1, -2), (4, 4), (2, 0), (17, 17), (17, 18), (17, 18), (-8, -6), (-15, -11), (5, 6), (3, 3), (-16, -11), (-14, -
-11), (3, 3), (-16, -17), (-6, -7), (-13, -15), (-17, -16), (-15, -13), (-6, -8), (-17, -17), (-7, -8), (-21, -14), (-16, 
--16), (-1, 2), (-1, -1), (-4, -5), (-2, -1), (0, -1), (-21, -21), (-22, -19), (-22, -19), (-9, -9), (6, 1), (22, -3), (16
-, 2), (-4, -5), (-1, 0), (-37, -19)],
-        // QUEEN_TABLE_IDX = 9
-        vec![(-3, -4), (6, 3), (-5, 0), (25, 29), (12, 18), (12, 12), (28, 26), (12, 8), (2, 4), (-5, -4), (26, 28), (15, 11), (30, 26), (166, 132), (23, 27), (22, 25), (0, 0), (2, -2), (7, 10), (-4, -3), (79, 88), (138, 156), (188, 169), (63, 71), (-13,
- -11), (-12, -8), (20, 20), (13, 55), (25, 37), (29, 35), (11, 9), (27, 30), (-20, -18), (-10, -11), (-6, 0), (1, 17), (3
-, 2), (-2, -1), (10, 16), (9, 9), (5, 2), (-2, -7), (-1, 0), (-7, -5), (-5, -6), (-5, 8), (13, 10), (-8, -5), (-26, -29),
- (-4, -5), (9, -4), (17, 4), (8, 4), (5, 2), (-11, -12), (4, 2), (7, 8), (-15, -13), (-12, -12), (6, 5), (-1, -2), (-24, 
--23), (-5, -4), (-48, -46)],
-        // KING_TABLE_IDX = 10
-        vec![(-55, -61), (-37, -41), (3, 0), (-6, -4), (-1, -2), (0, 1), (-17, -21), (-56, -64), (-14, -19), (-14, -15), (8, 10), (-9
-, -10), (6, 8), (9, 14), (-38, -27), (-5, -7), (-48, -49), (-28, -21), (-19, -14), (-14, -13), (-4, -4), (11, 13), (17, 24), (-17, -15), (-11, -8), (-12, -13), (-21, -14), (9, 17), (57, 64), (22, 22), (-2, -3), (-37, -39), (-27, -26), (-7, -8
-), (-7, -1), (2, 7), (-2, 0), (-1, 1), (3, 2), (-23, -25), (-6, -7), (3, 4), (-5, -6), (-7, -5), (-17, -11), (3, 4), (-15
-, -18), (-35, -41), (-2, -7), (-2, -4), (-12, -13), (-27, -13), (-36, -17), (-36, -17), (-17, -17), (-25, -29), (-14, -11
-), (6, -6), (5, 3), (-76, -26), (-9, -21), (-91, -32), (1, -10), (-17, -27)],
-        // BISHOP_PAIR_IDX = 11
+        // ROOK_TABLE_IDX = 9
+        vec![
+    (0, -4), (13, 13), (22, 18), (29, 33), (33, 30), (-18, -14), (22, 27), (14, 15),
+    (9, 9), (-3, 2), (6, 8), (24, 21), (10, 14), (20, 19), (39, 28), (4, 6),
+    (13, 16), (24, 21), (-5, -6), (9, 11), (31, 32), (26, 28), (52, 39), (37, 34),
+    (1, 3), (1, 3), (0, 1), (6, 6), (4, 0), (17, 17), (17, 18), (20, 22),
+    (-10, -12), (-13, -11), (4, 2), (3, 5), (-16, -14), (-17, -11), (4, 3), (-16, -16),
+    (-7, -7), (-14, -11), (-17, -16), (-15, -13), (-7, -8), (-13, -17), (-5, -4), (-15, -14),
+    (-24, -22), (-5, -5), (-2, -2), (-5, -4), (-2, -2), (-2, -2), (-22, -21), (-23, -25),
+    (-23, -22), (-12, -10), (6, 1), (24, -3), (16, 2), (-4, -3), (-2, 1), (-37, -19),
+],
+        // QUEEN_TABLE_IDX = 10
+        vec![
+    (-1, -2), (8, 7), (-4, 0), (25, 27), (12, 18), (14, 14), (28, 30), (14, 11),
+    (2, 4), (-7, -6), (22, 28), (15, 16), (29, 34), (171, 188), (23, 27), (34, 33),
+    (1, 2), (2, -2), (7, 10), (4, 3), (91, 88), (138, 163), (188, 170), (82, 81),
+    (-12, -11), (-11, -8), (13, 20), (10, 55), (20, 37), (29, 35), (14, 13), (24, 25),
+    (-19, -18), (-11, -11), (-7, 0), (1, 17), (2, 5), (-2, -1), (9, 16), (10, 11),
+    (7, 2), (-3, -5), (-1, 0), (-6, -5), (-4, -3), (-5, 8), (11, 8), (-6, -8),
+    (-27, -27), (-5, -5), (9, -4), (17, 4), (8, 7), (7, 2), (-14, -14), (4, 4),
+    (6, 5), (-15, -13), (-12, -14), (6, 5), (0, -2), (-28, -33), (-7, -4), (-43, -46),
+],
+        // KING_TABLE_IDX = 11
+        vec![
+    (-50, -61), (-41, -41), (3, 0), (-2, -4), (0, -2), (0, 2), (-17, -16), (-54, -64),
+    (-14, -19), (-12, -10), (10, 10), (-9, -7), (6, 7), (8, 14), (-34, -36), (-5, -7),
+    (-48, -49), (-22, -18), (-19, -14), (-14, -13), (-5, -2), (13, 13), (19, 24), (-17, -16),
+    (-11, -14), (-8, -9), (-20, -14), (12, 17), (51, 64), (22, 27), (-3, -3), (-35, -39),
+    (-30, -26), (-2, -7), (-7, -1), (2, 7), (-2, 0), (-1, 0), (3, 2), (-33, -33),
+    (-6, -8), (1, 1), (-5, -4), (-7, -5), (-18, -11), (3, 0), (-21, -17), (-41, -47),
+    (2, -7), (-6, -4), (-12, -14), (-34, -13), (-56, -17), (-47, -17), (-17, -21), (-26, -29),
+    (-14, -14), (12, -6), (10, 3), (-76, -26), (-9, -21), (-85, -32), (2, -10), (-10, -27),
+],
+        // BISHOP_PAIR_IDX = 12
         vec![(37, 43)],
-        // ROOK_OPEN_FILE_IDX = 12
+        // ROOK_OPEN_FILE_IDX = 13
         vec![(11, 13)],
-        // ROOK_SEMI_OPEN_FILE_IDX = 13
+        // ROOK_SEMI_OPEN_FILE_IDX = 14
         vec![(14, 11)],
-        // KING_SHIELD_BONUS_IDX = 14
+        // KING_SHIELD_BONUS_IDX = 15
         vec![(6, 6)],
-        // KING_OPEN_FILE_PENALTY_IDX = 15
+        // KING_OPEN_FILE_PENALTY_IDX = 16
         vec![(-1, 1)],
-        // KING_SEMI_OPEN_FILE_PENALTY_IDX = 16
+        // KING_SEMI_OPEN_FILE_PENALTY_IDX = 17
         vec![(-6, -6)],
-        // KING_VIRTUAL_MOBILITY_IDX = 17
-        vec![(5, 3), (0, -2), (-1, 0), (-7, 0), (-18, -13), (-15, 30), (-16, 29), (-23, 38), (-33, 41), (-45, 43), (-44, 40), (-68, 43), (-56, 43), (-70, 44), (-86, 46), (-94, 41), (-101, 41), (-75, 37), (-91, 34), (-79, 29), (-114, 28), (-93, 26), (-129
-, 23), (-77, 9), (-114, -8), (-124, -26), (-145, -32), (-108, -34)],
-        // BISHOP_MOBILITY_SCORE_IDX = 18
+
+        // KING_VIRTUAL_MOBILITY_IDX = 18
+        vec![(12, 11), (0, -2), (-1, -5), (-9, -11), (-15, -20), (-12, -11), (-12, -12), (-16, -18), (-22, -21), (-27, -25), (-33
+, -35), (-37, -31), (-36, -33), (-33, -31), (-53, -42), (-56, -61), (-55, -48), (-62, -45), (-34, -34), (-43, -40), (-40,
+ -44), (-20, -29), (-52, -61), (-30, -33), (-52, -47), (-57, -50), (-114, -105), (-62, -64)],
+        // BISHOP_MOBILITY_SCORE_IDX = 19
         vec![(-37, -41), (-27, -27), (-13, -19), (-12, -14), (-3, -4), (3, 5), (15, 19), (13, 20), (13, 26), (16, 34), (19, 27), (28,
  32), (27, 24), (3, 3)],
-        // ROOK_MOBILITY_SCORE_IDX = 19
+        // ROOK_MOBILITY_SCORE_IDX = 20
         vec![(-40, -42), (-22, -22), (-19, -22), (-9, -14), (-10, -9), (0, 1), (6, 4), (15, 16), (27, 20), (30, 33), (38, 39), (39, 39), (46, 47), (56, 63), (44, 51)],
-        // QUEEN_MOBILITY_SCORE_IDX = 20
+        // QUEEN_MOBILITY_SCORE_IDX = 21
         vec![(-33, -46), (-25, -27), (-26, -22), (-24, -43), (-22, -26), (-15, -29), (-15, -14), (-10, -14), (-11, -9), (-6, -7), (-6
 , -9), (-5, -4), (-4, -1), (-1, -2), (1, 10), (7, 5), (7, 15), (1, 15), (12, 15), (2, 2), (15, 19), (3, 2), (2, 3), (-2, 
 1), (-33, -27), (-18, -17), (-1, -1), (-56, -57)],
-        // KNIGHT_MOBILITY_SCORE_IDX = 21
+        // KNIGHT_MOBILITY_SCORE_IDX = 22
         vec![(-62, -49), (-20, -18), (-4, -10), (3, -5), (13, 6), (12, 12), (14, 19), (24, 27), (28, 28)],
-        // PASSED_PAWN_BONUS_IDX = 22
+        // PASSED_PAWN_BONUS_IDX = 23
         vec![(18, 17), (0, 0), (-9, -1), (2, 6), (1, 0), (3, 14), (4, 9), (12, 47), (29, 34), (57, 69), (69, 58), (107, 137), (26, 29
 ), (197, 331), (8, 9), (-12, -11)],
-        // ISOLATED_PAWN_PENALTY_IDX = 23
+        // ISOLATED_PAWN_PENALTY_IDX = 24
         vec![(-31, -24)],
-        // DOUBLED_PAWN_PENALTY_IDX = 24
+        // DOUBLED_PAWN_PENALTY_IDX = 25
         vec![(-10, -12)],
-        //TEMPO_IDX + 25
+        //TEMPO_IDX = 26
         vec![(27, 14)],
-        //ROOK_ON_SEVENTH_IDX = 26
+        //ROOK_ON_SEVENTH_IDX = 27
         vec![(41, 34)],
     ]
+}
+
+fn pretty_print(v: &Vec<(i32, i32)>) {
+    //used to print chessboard weights
+    println!("vec![");
+
+    for start in (0..64).step_by(8) {
+        let slice = &v[start..start + 8];
+        let fmt = format!("{:?}", slice)
+            .chars()
+            .filter(|x| *x != '[' && *x != ']')
+            .collect::<String>();
+        println!("    {}", fmt + ",");
+    }
+
+    println!("],");
 }
 
 pub fn game_phase_score(b: &Board) -> i32 {
@@ -881,7 +919,7 @@ pub fn genetic_algorithm() -> Result<(), Box<dyn Error>> {
 
     for gen in 0..NUM_GENERATIONS {
         println!(
-            "{} Starting generation {} of {}! 🚀",
+            "{} Starting generation {} of {}!",
             "INFO:".green().bold(),
             gen + 1,
             NUM_GENERATIONS
@@ -946,8 +984,15 @@ pub fn genetic_algorithm() -> Result<(), Box<dyn Error>> {
         );
     }
 
-    for w in population[0].clone().weights {
-        println!("{:?}", w);
+    println!("RESULTS OF TUNING ARE: ");
+    println!("======================\n");
+    for i in INDICES_TO_TUNE {
+        if population[0].weights[*i].len() == 64 {
+            pretty_print(&population[0].weights[*i]);
+        } else {
+            println!("vec!{:?}", population[0].weights[*i]);
+        }
+        println!();
     }
 
     Ok(())
@@ -962,37 +1007,12 @@ fn acceptance_probability(delta_e: f32, temp: f32) -> f32 {
 pub fn simulated_annealing() -> Result<(), Box<dyn Error>> {
     let mut temp: f32 = MAX_TEMP;
 
-    let file_path = "/Users/seba/rs/Panda/data/chessData.csv";
+    let (positions, evals) =
+        load_data("/Users/seba/rs/Panda/data/2021-07-31-lichess-evaluations-37MM.db")?;
 
-    // Read the CSV file into a DataFrame
-    let df = CsvReadOptions::default()
-        .with_has_header(true)
-        .try_into_reader_with_file_path(Some(file_path.into()))?
-        .finish()?;
+    let positions = positions.iter().map(|x| x.as_str()).collect();
 
-    let str_column = df.get_columns()[0]
-        .str()?
-        .into_no_null_iter()
-        .collect::<Vec<_>>();
-    let i32_column = df.get_columns()[1]
-        .str()?
-        .into_no_null_iter()
-        .collect::<Vec<_>>();
-
-    let mut positions = Vec::new();
-    let mut evals = Vec::new();
-
-    for (string_value, i32_value) in str_column.iter().zip(i32_column.iter()) {
-        match String::from(*i32_value).parse::<i32>() {
-            Ok(x) => {
-                positions.push(*string_value);
-                evals.push(x);
-            }
-            Err(_) => continue, //skip mate evals
-        }
-    }
-
-    println!("Successfully parsed data ✅ \n");
+    println!("Successfully parsed data\n");
 
     let bar = ProgressBar::new(MAX_ITERATIONS as u64);
     bar.set_style(
@@ -1011,6 +1031,10 @@ pub fn simulated_annealing() -> Result<(), Box<dyn Error>> {
         iterations += 1;
         let (pos_sample, ev_sample) = take_sample(&positions, &evals);
         let mut new = old.mutate(false);
+
+        if new == old {
+            continue;
+        }
 
         old.get_cost(&pos_sample, &ev_sample)?;
         new.get_cost(&pos_sample, &ev_sample)?;
@@ -1052,44 +1076,27 @@ pub fn simulated_annealing() -> Result<(), Box<dyn Error>> {
     }
     bar.finish();
 
-    for w in old.weights {
-        println!("{:?}", w);
+    println!("RESULTS OF TUNING ARE: ");
+    println!("======================\n");
+    for i in INDICES_TO_TUNE {
+        if old.weights[*i].len() == 64 {
+            pretty_print(&old.weights[*i]);
+        } else {
+            println!("vec!{:?}", old.weights[*i]);
+        }
+        println!();
     }
+
     Ok(())
 }
 
 pub fn hill_climbing() -> Result<(), Box<dyn Error>> {
-    let file_path = "/Users/seba/rs/Panda/data/chessData.csv";
+    let (positions, evals) =
+        load_data("/Users/seba/rs/Panda/data/2021-07-31-lichess-evaluations-37MM.db")?;
 
-    // Read the CSV file into a DataFrame
-    let df = CsvReadOptions::default()
-        .with_has_header(true)
-        .try_into_reader_with_file_path(Some(file_path.into()))?
-        .finish()?;
+    let positions = positions.iter().map(|x| x.as_str()).collect();
 
-    let str_column = df.get_columns()[0]
-        .str()?
-        .into_no_null_iter()
-        .collect::<Vec<_>>();
-    let i32_column = df.get_columns()[1]
-        .str()?
-        .into_no_null_iter()
-        .collect::<Vec<_>>();
-
-    let mut positions = Vec::new();
-    let mut evals = Vec::new();
-
-    for (string_value, i32_value) in str_column.iter().zip(i32_column.iter()) {
-        match String::from(*i32_value).parse::<i32>() {
-            Ok(x) => {
-                positions.push(*string_value);
-                evals.push(x);
-            }
-            Err(_) => continue, //skip mate evals
-        }
-    }
-
-    println!("Successfully parsed data ✅ \n");
+    println!("Successfully parsed data\n");
 
     let bar = ProgressBar::new(MAX_ITERATIONS as u64);
     bar.set_style(
@@ -1108,6 +1115,10 @@ pub fn hill_climbing() -> Result<(), Box<dyn Error>> {
         iterations += 1;
         let (pos_sample, ev_sample) = take_sample(&positions, &evals);
         let mut new = old.mutate(false);
+
+        if new == old {
+            continue;
+        }
 
         old.get_cost(&pos_sample, &ev_sample)?;
         new.get_cost(&pos_sample, &ev_sample)?;
@@ -1129,8 +1140,16 @@ pub fn hill_climbing() -> Result<(), Box<dyn Error>> {
 
     bar.finish();
 
-    for w in old.clone().weights {
-        println!("{:?}", w);
+    println!("RESULTS OF TUNING ARE: ");
+    println!("======================\n");
+    for i in INDICES_TO_TUNE {
+        if old.weights[*i].len() == 64 {
+            pretty_print(&old.weights[*i]);
+        } else {
+            println!("vec!{:?}", old.weights[*i]);
+        }
+        println!();
     }
+
     Ok(())
 }

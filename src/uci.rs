@@ -8,6 +8,7 @@ pub enum CommandType {
     UciNewGame, //can basically ignore
     IsReady,
     Position,
+    Perft,
     Go,
     Stop,
     Quit,
@@ -21,7 +22,17 @@ pub fn recognise_command(command: &str) -> CommandType {
         "ucinewgame" => CommandType::UciNewGame,
         "isready" => CommandType::IsReady,
         "position" => CommandType::Position,
-        "go" => CommandType::Go,
+        "go" => {
+            if words.len() == 0 {
+                panic!("invalid uci command");
+            }
+
+            if words[1] == "perft" {
+                CommandType::Perft
+            } else {
+                CommandType::Go
+            }
+        }
         "stop" => CommandType::Stop,
         "quit" => CommandType::Quit,
         "d" => CommandType::D,
@@ -64,8 +75,8 @@ pub fn parse_uci(command: &str) {
     match command {
         "uci" => {
             println!("uciok");
-            //println!("id name Panda 1.0");
-            //println!("id author Sebastiano Rebonato-Scott");
+            println!("id name Panda 1.0");
+            println!("id author Sebastiano Rebonato-Scott");
         }
         _ => panic!("invalid uci command"),
     }
@@ -258,6 +269,33 @@ pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveDa
     best_move(position, engine_time, engine_inc, moves_to_go, movetime, s)
 }
 
+fn parse_perft(command: &str, position: &mut Board) {
+    let words = command.split_whitespace().collect::<Vec<&str>>();
+    if words.len() != 3 {
+        eprintln!("invalid perft command: expected command of form go perft <depth>");
+        return;
+    }
+
+    if let Ok(x) = words[2].parse::<usize>() {
+        let start = Instant::now();
+        let nodes = perft(x, position, Some(x));
+        let time = start.elapsed().as_millis() as usize;
+
+        let nps = if time == 0 {
+            nodes * 1000
+        } else {
+            (nodes / time) * 1000
+        };
+
+        println!(
+            "\ninfo depth {} nodes {} time {} nps {}",
+            x, nodes, time, nps
+        );
+    } else {
+        eprintln!("expected integer depth in perft command (go perft <depth>)")
+    }
+}
+
 pub fn uci_loop() {
     let mut board = Board::from(STARTPOS);
     let mut s = Searcher::new(Instant::now());
@@ -304,6 +342,7 @@ pub fn uci_loop() {
                         }
                 });
             }
+            CommandType::Perft => parse_perft(buffer.as_str(), &mut board),
             CommandType::UciNewGame => board = Board::from(STARTPOS),
             _ => {}
         }
