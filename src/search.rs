@@ -292,90 +292,91 @@ impl Searcher {
             };
         }
 
+        //TODO: store static/low-depth evals in TT
+
         let tt_move_capture = if best_move.is_null() {
             false
         } else {
             best_move.is_capture(position)
         };
 
-        let is_check = position.is_check();
-
-        //TODO: -INFINITY IF WE'RE IN CHECK
-        let static_eval = evaluate(position);
-        if self.ply < MAX_SEARCH_DEPTH {
-            self.info.ss[self.ply] = SearchStackEntry { eval: static_eval };
-        }
-        //TODO: write this to TT if we don't overwrite
-        //or get it from the TT
-
-        //measuring whether the search is improving (better static eval than 2 tempi ago)
-        //is useful in adjusting how we should prune/reduce. if the search is improving,
-        //we should be more cautious reducing. if not, we can reduce more
-        let mut improving = match self.ply {
-            2..=31 => self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval,
-            _ => false,
-        };
-
-        if is_check {
-            improving = false; //can't rely on static eval saying we're improving if its check
-        }
-
         //reset killers for child nodes
         self.info.killer_moves[0][self.ply + 1] = NULL_MOVE;
         self.info.killer_moves[1][self.ply + 1] = NULL_MOVE;
 
-        //Static pruning: here we attempt to show that the position does not require any further
-        //search
-        if !is_check && !pv_node {
-            //Beta Pruning / Reverse Futility Pruning:
-            //If eval >= beta + some margin, assume that we can achieve at least beta
-            if depth <= BETA_PRUNING_DEPTH
-                && static_eval
-                    - (BETA_PRUNING_MARGIN * cmp::max(depth - improving as usize, 0)) as i32
-                    >= beta
-            {
-                return static_eval;
-            }
+        let is_check = position.is_check();
+        let mut improving = false;
 
-            //eval is so bad that even a huge margin fails to raise alpha
-            if depth <= ALPHA_PRUNING_DEPTH && static_eval + ALPHA_PRUNING_MARGIN <= alpha {
-                return static_eval;
+        if !is_check {
+            let static_eval = evaluate(position);
+            if self.ply < MAX_SEARCH_DEPTH {
+                self.info.ss[self.ply] = SearchStackEntry { eval: static_eval };
             }
+            //TODO: write this to TT if we don't overwrite
+            //or get it from the TT
 
-            //eval is very low so only realistic way to increase it is with captures
-            //we only need to qsearch to evaluate the position
-            if depth <= MAX_RAZOR_DEPTH && static_eval + RAZORING_MARGIN * (depth as i32) <= alpha {
-                let score = self.quiescence_search(position, alpha, beta);
-                if score > alpha {
-                    return score;
+            //measuring whether the search is improving (better static eval than 2 tempi ago)
+            //is useful in adjusting how we should prune/reduce. if the search is improving,
+            //we should be more cautious reducing. if not, we can reduce more
+            improving = match self.ply {
+                2..=31 => self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval,
+                _ => false,
+            };
+
+            //Static pruning: here we attempt to show that the position does not require any further
+            //search
+            if !pv_node {
+                //Beta Pruning / Reverse Futility Pruning:
+                //If eval >= beta + some margin, assume that we can achieve at least beta
+                if depth <= BETA_PRUNING_DEPTH
+                    && static_eval
+                        - (BETA_PRUNING_MARGIN * cmp::max(depth - improving as usize, 0)) as i32
+                        >= beta
+                {
+                    return static_eval;
                 }
-            }
 
-            /*
-             * Null move pruning: if we cannot improve our position with 2 moves in a row,
-             * then the first of these movees is probably bad (exception is zugzwang)
-             * the third condition is a technique I found in various strong engines
-             * (SF, Obsidian etc.)
-             * */
-            if !position.is_kp_endgame()
-                && !position.last_move_null
-                && static_eval >= beta + 200 - 20 * (depth as i32)
-                && !root
-            {
-                let ep_reset = make_null_move(position);
-                self.ply += 1;
-                let r = 2 + depth as i32 / 4 + cmp::min((static_eval - beta) / 256, 3);
-                let reduced_depth = cmp::max(depth as i32 - r, 1) as usize;
-                let null_move_eval = -self.negamax(position, reduced_depth, -beta, -beta + 1);
-                //minimal window used because all that matters is whether the search result is better than beta
-                undo_null_move(position, ep_reset);
-                self.ply -= 1;
-                if null_move_eval >= beta {
-                    return beta;
+                //eval is so bad that even a huge margin fails to raise alpha
+                if depth <= ALPHA_PRUNING_DEPTH && static_eval + ALPHA_PRUNING_MARGIN <= alpha {
+                    return static_eval;
+                }
+
+                //eval is very low so only realistic way to increase it is with captures
+                //we only need to qsearch to evaluate the position
+                if depth <= MAX_RAZOR_DEPTH
+                    && static_eval + RAZORING_MARGIN * (depth as i32) <= alpha
+                {
+                    let score = self.quiescence_search(position, alpha, beta);
+                    if score > alpha {
+                        return score;
+                    }
+                }
+
+                /*
+                 * Null move pruning: if we cannot improve our position with 2 moves in a row,
+                 * then the first of these movees is probably bad (exception is zugzwang)
+                 * the third condition is a technique I found in various strong engines
+                 * (SF, Obsidian etc.)
+                 * */
+                if !position.is_kp_endgame()
+                    && !position.last_move_null
+                    && static_eval >= beta + 200 - 20 * (depth as i32)
+                    && !root
+                {
+                    let ep_reset = make_null_move(position);
+                    self.ply += 1;
+                    let r = 2 + depth as i32 / 4 + cmp::min((static_eval - beta) / 256, 3);
+                    let reduced_depth = cmp::max(depth as i32 - r, 1) as usize;
+                    let null_move_eval = -self.negamax(position, reduced_depth, -beta, -beta + 1);
+                    //minimal window used because all that matters is whether the search result is better than beta
+                    undo_null_move(position, ep_reset);
+                    self.ply -= 1;
+                    if null_move_eval >= beta {
+                        return beta;
+                    }
                 }
             }
         }
-
         /*
          Internal Iterative Deepening:
          pv node and no tt hit -> move ordering will be terrible
@@ -388,11 +389,15 @@ impl Searcher {
             self.negamax(position, depth - 2, alpha, beta);
         }
 
-        if is_check && !root {
-            depth += 1;
-            //if this occurs at ply zero then next search iteration will basically be skipped
-            //because of hash lookup
-        }
+        //TODO: singularity extension
+        let extension = (is_check && !root) as usize;
+        depth += extension;
+        /*
+        Some engines have this after the Early Pruning stage, but I think it makes more sense to
+        have it here: if we know we are in a situation which would warrant extending then we
+        should consider that information when deciding whether or not to prune. Of course the way
+        to actually know will be to run a test...
+        */
 
         /*
          Generate pseudo-legal moves here because this should be faster in cases where
@@ -404,9 +409,9 @@ impl Searcher {
         let mut child_nodes = MoveList::gen_moves(position);
         child_nodes.order_moves(position, self, &best_move);
 
-        //let pin_rays = get_pin_rays(&position);
-
-        let mut moves_played = 0;
+        let (mut moves_played, mut moves_seen) = (0, 0);
+        //the former of these is for legal moves we actually search
+        //the latter for pseudo-legal moves we consider
         let mut skip_quiets = false;
 
         for m in child_nodes.moves {
@@ -414,6 +419,10 @@ impl Searcher {
                 //no pseudolegal moves left in move list
                 break;
             }
+
+            //from what I can see strong engines update this before checking whether or not the
+            //move is legal
+            moves_seen += 1;
 
             let tactical = m.is_tactical(position);
             let quiet = !tactical;
@@ -423,29 +432,20 @@ impl Searcher {
             let is_killer = m == self.info.killer_moves[0][self.ply]
                 || m == self.info.killer_moves[1][self.ply];
 
-            //TODO: go through this very carefully!
+            //Early Pruning: try to prune moves before we search them properly
+            //by showing that they're not worth investigating
             if !root && not_mated {
                 if quiet && skip_quiets && !is_killer {
-                    //this is kinda messy but you have to know whether the move was legal
-                    //to update the moves_played counter
-                    let (commit, ok) = position.try_move(m /*, &pin_rays*/);
-                    position.undo_move(m, &commit);
-                    if ok {
-                        moves_played += 1;
-                    }
                     continue;
                 }
-
                 let r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
-                    [cmp::min(depth, 31)][cmp::min(moves_played, 31)];
-                let lmr_depth = depth as i32 - 1 - r;
+                    [cmp::min(depth, 31)][cmp::min(moves_seen, 31)]
+                    + (!improving) as i32;
+                let lmr_depth = std::cmp::max(depth as i32 - 1 - r, 0);
 
-                /*
-                 SEE Pruning: if a move fails SEE by a depth-dependent threshold,
-                 prune it
-                */
-
-                if lmr_depth <= SEE_PRUNING_DEPTH && moves_played > 1 && !pv_node {
+                //SEE Pruning: if a move fails SEE by a depth-dependent threshold,
+                //prune it
+                if lmr_depth <= SEE_PRUNING_DEPTH && moves_seen > 1 && !pv_node {
                     let margin = if tactical {
                         SEE_NOISY_MARGIN
                     } else {
@@ -454,91 +454,83 @@ impl Searcher {
                     let threshold = margin * depth as i32;
                     //prune if move fails to beat SEE threshold
                     if !m.static_exchange_evaluation(position, threshold) {
-                        //as above
-                        let (commit, ok) = position.try_move(m /*, &pin_rays*/);
-                        position.undo_move(m, &commit);
-                        if ok {
-                            moves_played += 1;
-                        }
                         continue;
                     }
                 }
 
+                //Late Move Pruning: after a certain point start skipping all quiets after the current
+                //move. The threshold I'm currently using comes from Weiss
                 let lmp_threshold = match improving {
                     true => depth * depth + 2,
                     false => depth * depth / 2,
                 };
-                if depth <= LMP_DEPTH && moves_played > lmp_threshold && !is_check {
+                if depth <= LMP_DEPTH && moves_seen > lmp_threshold && !is_check {
                     skip_quiets = true;
                 }
             }
 
-            let (commit, ok) = position.try_move(m /*, &pin_rays*/);
+            let (commit, ok) = position.try_move(m);
             //test if move is legal and make it at the same time
             //this obv faster that making the move to check if it is legal
             //then unmaking it and making it again for the search
 
             if !ok {
-                if !commit.made_move {
-                    continue;
-                }
                 position.undo_move(m, &commit);
                 continue;
             }
 
             moves_played += 1;
-
             self.ply += 1;
             //update after pruning above
 
-            let eval = match moves_played == 1 {
+            let eval = if moves_played == 1 {
                 //note that this is one because the variable is updates above
-                true => -self.negamax(position, depth - 1, -beta, -alpha),
+                -self.negamax(position, depth - 1, -beta, -alpha)
                 //normal search on pv move (no moves searched yet)
-                false => {
-                    /*
-                     non-pv move -> search with reduced window
-                     this assumes that our move ordering is good enough
-                     that we will be able to prove that these moves are bad
-                     often enough that it outweighs the cost of re-searching
-                     then if we are unable to prove so
-                    */
-                    let mut reduction_eval = match moves_played > FULL_DEPTH_MOVES
-                        && depth >= REDUCTION_LIMIT
-                        && not_mated
-                        && reduction_ok(tactical, is_check)
-                    {
-                        true => {
-                            let mut r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
-                                [cmp::min(depth, 31)][cmp::min(moves_played, 31)];
+            } else {
+                /*
+                 non-pv move -> search with reduced window
+                 this assumes that our move ordering is good enough
+                 that we will be able to prove that these moves are bad
+                 often enough that it outweighs the cost of re-searching
+                 then if we are unable to prove so
+                */
 
-                            //increase reduction for non-pv nodes
-                            r += !pv_node as i32;
-                            //increase reduction for quiet moves where tt move is noisy
-                            r += tt_move_capture as i32;
-                            //decrease reduction if the search is improving
-                            r += !improving as i32;
+                //TODO: test changing FULL_DEPTH_MOVES
+                let mut reduction_eval = if moves_played > FULL_DEPTH_MOVES
+                    && depth >= REDUCTION_LIMIT
+                    && not_mated
+                    && reduction_ok(tactical, is_check)
+                {
+                    let mut r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
+                        [cmp::min(depth, 31)][cmp::min(moves_played, 31)];
 
-                            let mut reduced_depth = cmp::max(depth as i32 - r - 1, 1) as usize;
-                            reduced_depth = usize::clamp(reduced_depth, 1, depth);
-                            //avoid dropping into qsearch or extending
+                    //increase reduction for non-pv nodes
+                    r += !pv_node as i32;
+                    //increase reduction for quiet moves where tt move is noisy
+                    r += tt_move_capture as i32;
+                    //decrease reduction if the search is improving
+                    r += !improving as i32;
 
-                            -self.negamax(position, reduced_depth, -alpha - 1, -alpha)
-                        }
-                        false => alpha + 1, //hack to make sure always > alpha so always searched properly
-                    };
-                    if reduction_eval > alpha {
-                        //failed to prove that move is bad -> re-search with same depth but reduced
-                        //window
-                        reduction_eval = -self.negamax(position, depth - 1, -alpha - 1, -alpha);
-                    }
+                    let mut reduced_depth = cmp::max(depth as i32 - r - 1, 1) as usize;
+                    reduced_depth = usize::clamp(reduced_depth, 1, depth);
+                    //avoid dropping into qsearch or extending
 
-                    if reduction_eval > alpha && reduction_eval < beta {
-                        //move actually inside PV window -> search at full depth
-                        reduction_eval = -self.negamax(position, depth - 1, -beta, -alpha);
-                    }
-                    reduction_eval
+                    -self.negamax(position, reduced_depth, -alpha - 1, -alpha)
+                } else {
+                    alpha + 1
+                };
+                if reduction_eval > alpha {
+                    //failed to prove that move is bad -> re-search with same depth but reduced
+                    //window
+                    reduction_eval = -self.negamax(position, depth - 1, -alpha - 1, -alpha);
                 }
+
+                if reduction_eval > alpha && reduction_eval < beta {
+                    //move actually inside PV window -> search at full depth
+                    reduction_eval = -self.negamax(position, depth - 1, -beta, -alpha);
+                }
+                reduction_eval
             };
 
             position.undo_move(m, &commit);
@@ -562,6 +554,14 @@ impl Searcher {
             if eval > alpha {
                 alpha = eval;
 
+                let next_ply = self.ply + 1;
+                self.pv[self.ply][self.ply] = m;
+                for j in next_ply..self.pv_length[next_ply] {
+                    self.pv[self.ply][j] = self.pv[next_ply][j];
+                    //copy from next row in pv table
+                }
+                self.pv_length[self.ply] = self.pv_length[next_ply];
+
                 //search failed high
                 if alpha >= beta {
                     //only write quiet moves into history table because captures
@@ -583,14 +583,6 @@ impl Searcher {
                 //NOTE: it is important that this is not above the beta cutoff
                 //becuse not all moves have necessarily been searched to cause
                 //the cutoff (one refutation)
-
-                let next_ply = self.ply + 1;
-                self.pv[self.ply][self.ply] = m;
-                for j in next_ply..self.pv_length[next_ply] {
-                    self.pv[self.ply][j] = self.pv[next_ply][j];
-                    //copy from next row in pv table
-                }
-                self.pv_length[self.ply] = self.pv_length[next_ply];
             }
         }
 
@@ -667,7 +659,6 @@ impl Searcher {
         };
 
         captures.order_moves(position, self, &best_move);
-        //let pin_rays = get_pin_rays(&position);
 
         for c in captures.moves {
             if c.is_null() {
@@ -698,12 +689,9 @@ impl Searcher {
                 continue;
             }
 
-            let (commit, ok) = position.try_move(c /*, &pin_rays*/);
+            let (commit, ok) = position.try_move(c);
 
             if !ok {
-                /*               if !commit.made_move {
-                    continue;
-                }*/
                 position.undo_move(c, &commit);
                 continue;
             }
@@ -1090,27 +1078,21 @@ pub struct MoveData {
 pub fn move_time(time: usize, increment: usize, moves_to_go: usize, ply: usize) -> usize {
     let time_until_flag = time - TIME_TO_MOVE;
 
-    let ideal_time = match moves_to_go {
-        0 => {
-            (match ply {
-                0..=10 => time_until_flag / 45,
-                11..=16 => time_until_flag / 25,
-                _ => time_until_flag / 20,
-            } + increment
-                + TIME_TO_START_SEARCH)
-        }
-        _ => {
-            (match ply {
-                0..=10 => (time_until_flag) as f32 / 40.0,
-                11..=16 => (time_until_flag) as f32 / (moves_to_go as f32),
-                _ => {
-                    (time_until_flag) as f32
-                        / cmp::max((moves_to_go as f32 / 2.0) as usize, 1) as f32
-                }
-            }) as usize
-                + TIME_TO_START_SEARCH
-                + increment
-        }
+    let ideal_time = if moves_to_go == 0 {
+        (match ply {
+            0..=10 => time_until_flag / 45,
+            11..=16 => time_until_flag / 25,
+            _ => time_until_flag / 20,
+        } + increment
+            + TIME_TO_START_SEARCH)
+    } else {
+        (match ply {
+            0..=10 => (time_until_flag) as f32 / 40.0,
+            11..=16 => (time_until_flag) as f32 / (moves_to_go as f32),
+            _ => (time_until_flag) as f32 / cmp::max((moves_to_go as f32 / 2.0) as usize, 1) as f32,
+        }) as usize
+            + TIME_TO_START_SEARCH
+            + increment
     };
 
     //prevent that high increment > time left breaks this
@@ -1136,6 +1118,7 @@ impl Move {
     }
 }
 
+//TODO: refactor: aspiration_window() needs to be its own function
 pub fn best_move(
     position: &mut Board,
     time_left: usize,
