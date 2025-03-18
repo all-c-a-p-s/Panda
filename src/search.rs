@@ -18,7 +18,12 @@ pub const MAX_SEARCH_DEPTH: usize = 32;
 pub const REDUCTION_LIMIT: usize = 3;
 // can't reduce search to below 3 - 2 = 1 ply
 const FULL_DEPTH_MOVES: usize = 4;
+
+#[allow(dead_code)]
 const NULLMOVE_MAX_DEPTH: usize = 6;
+#[allow(dead_code)]
+const NULLMOVE_MIN_DEPTH: usize = 3;
+
 const ASPIRATION_WINDOW: i32 = 40;
 
 const RAZORING_MARGIN: i32 = 300;
@@ -237,6 +242,8 @@ impl Searcher {
 
         self.pv_length[self.ply] = self.ply;
 
+        //TODO: try check extention before qsearch
+
         if depth == 0 {
             //qsearch on leaf nodes
             return self.quiescence_search(position, alpha, beta);
@@ -293,6 +300,7 @@ impl Searcher {
 
         let is_check = position.is_check();
 
+        //TODO: -INFINITY IF WE'RE IN CHECK
         let static_eval = evaluate(position);
         if self.ply < MAX_SEARCH_DEPTH {
             self.info.ss[self.ply] = SearchStackEntry { eval: static_eval };
@@ -316,6 +324,8 @@ impl Searcher {
         self.info.killer_moves[0][self.ply + 1] = NULL_MOVE;
         self.info.killer_moves[1][self.ply + 1] = NULL_MOVE;
 
+        //Static pruning: here we attempt to show that the position does not require any further
+        //search
         if !is_check && !pv_node {
             //Beta Pruning / Reverse Futility Pruning:
             //If eval >= beta + some margin, assume that we can achieve at least beta
@@ -340,29 +350,29 @@ impl Searcher {
                     return score;
                 }
             }
-        }
 
-        /*
-         * Null move pruning: if we cannot improve our position with 2 moves in a row,
-         * then the first of these movees is probably bad (exception is zugzwang)
-         * */
-        if !position.is_kp_endgame()
-            && !position.last_move_null
-            && static_eval >= beta
-            && depth <= NULLMOVE_MAX_DEPTH
-            && !is_check
-            && !root
-        {
-            let ep_reset = make_null_move(position);
-            self.ply += 1;
-            let r = 2 + depth as i32 / 4 + cmp::min((static_eval - beta) / 256, 3);
-            let reduced_depth = cmp::max(depth as i32 - r, 1) as usize;
-            let null_move_eval = -self.negamax(position, reduced_depth, -beta, -beta + 1);
-            //minimal window used because all that matters is whether the search result is better than beta
-            undo_null_move(position, ep_reset);
-            self.ply -= 1;
-            if null_move_eval >= beta {
-                return beta;
+            /*
+             * Null move pruning: if we cannot improve our position with 2 moves in a row,
+             * then the first of these movees is probably bad (exception is zugzwang)
+             * the third condition is a technique I found in various strong engines
+             * (SF, Obsidian etc.)
+             * */
+            if !position.is_kp_endgame()
+                && !position.last_move_null
+                && static_eval >= beta + 200 - 20 * (depth as i32)
+                && !root
+            {
+                let ep_reset = make_null_move(position);
+                self.ply += 1;
+                let r = 2 + depth as i32 / 4 + cmp::min((static_eval - beta) / 256, 3);
+                let reduced_depth = cmp::max(depth as i32 - r, 1) as usize;
+                let null_move_eval = -self.negamax(position, reduced_depth, -beta, -beta + 1);
+                //minimal window used because all that matters is whether the search result is better than beta
+                undo_null_move(position, ep_reset);
+                self.ply -= 1;
+                if null_move_eval >= beta {
+                    return beta;
+                }
             }
         }
 
@@ -413,6 +423,7 @@ impl Searcher {
             let is_killer = m == self.info.killer_moves[0][self.ply]
                 || m == self.info.killer_moves[1][self.ply];
 
+            //TODO: go through this very carefully!
             if !root && not_mated {
                 if quiet && skip_quiets && !is_killer {
                     //this is kinda messy but you have to know whether the move was legal
