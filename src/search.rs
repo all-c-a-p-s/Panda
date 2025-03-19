@@ -15,9 +15,9 @@ use std::time::{Duration, Instant};
 pub const INFINITY: i32 = 1_000_000_000;
 pub const MAX_PLY: usize = 64;
 pub const MAX_SEARCH_DEPTH: usize = 32;
-pub const REDUCTION_LIMIT: usize = 3;
-// can't reduce search to below 3 - 2 = 1 ply
-const FULL_DEPTH_MOVES: usize = 4;
+pub const REDUCTION_LIMIT: usize = 2;
+
+const FULL_DEPTH_MOVES: usize = 1;
 
 #[allow(dead_code)]
 const NULLMOVE_MAX_DEPTH: usize = 6;
@@ -90,18 +90,15 @@ impl Default for LMRTable {
     fn default() -> Self {
         //formula for reductions from Weiss chess engine
         let mut reduction_table = [[[0; 32]; 32]; 2];
-        let (mut depth, mut played) = (0, 0);
-        while depth < 32 {
-            while played < 32 {
+        for depth in 0..32 {
+            for played in 0..32 {
                 reduction_table[0][depth][played] =
                     (0.33 + f64::ln(depth as f64) * f64::ln(played as f64) / 3.20) as i32;
                 //tactical move
                 reduction_table[1][depth][played] =
                     (1.64 + f64::ln(depth as f64) * f64::ln(played as f64) / 2.80) as i32;
                 //quiet move
-                played += 1;
             }
-            depth += 1;
         }
         LMRTable { reduction_table }
     }
@@ -220,6 +217,7 @@ impl Searcher {
         mut depth: usize,
         mut alpha: i32,
         beta: i32,
+        cutnode: bool,
     ) -> i32 {
         /*
          return a score that can never be >= alpha if the search is cancelled
@@ -293,7 +291,7 @@ impl Searcher {
         }
 
         //TODO: store static/low-depth evals in TT
-
+        let tt_move = !best_move.is_null();
         let tt_move_capture = if best_move.is_null() {
             false
         } else {
@@ -367,7 +365,8 @@ impl Searcher {
                     self.ply += 1;
                     let r = 2 + depth as i32 / 4 + cmp::min((static_eval - beta) / 256, 3);
                     let reduced_depth = cmp::max(depth as i32 - r, 1) as usize;
-                    let null_move_eval = -self.negamax(position, reduced_depth, -beta, -beta + 1);
+                    let null_move_eval =
+                        -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
                     //minimal window used because all that matters is whether the search result is better than beta
                     undo_null_move(position, ep_reset);
                     self.ply -= 1;
@@ -384,9 +383,10 @@ impl Searcher {
          by fixing history tables and pv move
          according to wiki this should make little difference on average
          but should make the search more consistent
+         TODO: experiment with IIR instead of IID
         */
         if pv_node && depth > 3 && best_move.is_null() {
-            self.negamax(position, depth - 2, alpha, beta);
+            self.negamax(position, depth - 2, alpha, beta, !cutnode);
         }
 
         //TODO: singularity extension
@@ -485,7 +485,7 @@ impl Searcher {
 
             let eval = if moves_played == 1 {
                 //note that this is one because the variable is updates above
-                -self.negamax(position, depth - 1, -beta, -alpha)
+                -self.negamax(position, depth - 1, -beta, -alpha, false)
                 //normal search on pv move (no moves searched yet)
             } else {
                 /*
@@ -496,39 +496,41 @@ impl Searcher {
                  then if we are unable to prove so
                 */
 
-                //TODO: test changing FULL_DEPTH_MOVES
-                let mut reduction_eval = if moves_played > FULL_DEPTH_MOVES
+                let mut r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
+                    [cmp::min(depth, 31)][cmp::min(moves_played, 31)];
+
+                let mut reduction_eval = if moves_played
+                    > (FULL_DEPTH_MOVES + pv_node as usize + !tt_move as usize + root as usize)
                     && depth >= REDUCTION_LIMIT
-                    && not_mated
                     && reduction_ok(tactical, is_check)
                 {
-                    let mut r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
-                        [cmp::min(depth, 31)][cmp::min(moves_played, 31)];
-
-                    //increase reduction for non-pv nodes
-                    r += !pv_node as i32;
+                    //decrease reduction for pv-nodes
+                    r -= pv_node as i32;
                     //increase reduction for quiet moves where tt move is noisy
                     r += tt_move_capture as i32;
-                    //decrease reduction if the search is improving
+                    //reduce more in nodes where search isn't improving
                     r += !improving as i32;
+                    //reduce more in cutnodes
+                    r += cutnode as i32;
 
                     let mut reduced_depth = cmp::max(depth as i32 - r - 1, 1) as usize;
                     reduced_depth = usize::clamp(reduced_depth, 1, depth);
                     //avoid dropping into qsearch or extending
 
-                    -self.negamax(position, reduced_depth, -alpha - 1, -alpha)
+                    -self.negamax(position, reduced_depth, -alpha - 1, -alpha, true)
                 } else {
                     alpha + 1
                 };
                 if reduction_eval > alpha {
                     //failed to prove that move is bad -> re-search with same depth but reduced
                     //window
-                    reduction_eval = -self.negamax(position, depth - 1, -alpha - 1, -alpha);
+                    reduction_eval =
+                        -self.negamax(position, depth - 1, -alpha - 1, -alpha, !cutnode);
                 }
 
                 if reduction_eval > alpha && reduction_eval < beta {
                     //move actually inside PV window -> search at full depth
-                    reduction_eval = -self.negamax(position, depth - 1, -beta, -alpha);
+                    reduction_eval = -self.negamax(position, depth - 1, -beta, -alpha, false);
                 }
                 reduction_eval
             };
@@ -1160,7 +1162,7 @@ pub fn best_move(
 
     while depth < MAX_SEARCH_DEPTH {
         unsafe { START_DEPTH = depth };
-        eval = s.negamax(position, std::cmp::max(depth, 1), alpha, beta);
+        eval = s.negamax(position, std::cmp::max(depth, 1), alpha, beta, false);
         if s.moves_fully_searched == 0 {
             //search cancelled before even pv was searched
             eval = previous_eval;
