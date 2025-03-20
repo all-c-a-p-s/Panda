@@ -55,7 +55,7 @@ I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lich
 - faster perft results (big room for improvement here)
 - tune thresholds in search function
 - endgame tablebases
-- NNUE (defo can't do this one until I have more time in the summer)
+- NNUE
 
 ## Usage:
 - [Download Rust](https://www.rust-lang.org/)
