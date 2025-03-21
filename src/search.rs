@@ -19,6 +19,8 @@ pub const REDUCTION_LIMIT: usize = 2;
 
 const FULL_DEPTH_MOVES: usize = 1;
 
+const SINGULARITY_DE_MARGIN: i32 = 40;
+
 #[allow(dead_code)]
 const NULLMOVE_MAX_DEPTH: usize = 6;
 #[allow(dead_code)]
@@ -40,8 +42,6 @@ const SEE_QUIET_MARGIN: i32 = 100;
 const SEE_NOISY_MARGIN: i32 = 70;
 #[allow(unused)]
 const SEE_QSEARCH_MARGIN: i32 = 1;
-//TODO: test using static margin or just zero
-//in SEE pruning in QSearch
 
 #[allow(unused)]
 const LMP_DEPTH: usize = 5;
@@ -74,6 +74,7 @@ struct SearchInfo {
     lmr_table: LMRTable,
     history_table: [[i32; 64]; 12],
     killer_moves: [[Move; MAX_PLY]; 2],
+    excluded: Option<Move>,
 }
 
 struct LMRTable {
@@ -111,6 +112,7 @@ impl Default for SearchInfo {
             lmr_table: LMRTable::default(),
             history_table: [[0i32; 64]; 12],
             killer_moves: [[NULL_MOVE; 64]; 2],
+            excluded: None,
         }
     }
 }
@@ -124,6 +126,7 @@ pub struct Searcher {
     pub nodes: usize,
     pub end_time: Instant,
     pub moves_fully_searched: usize,
+    pub do_pruning: bool,
     info: SearchInfo,
 }
 
@@ -207,14 +210,60 @@ impl Searcher {
             nodes: 0,
             end_time,
             moves_fully_searched: 0,
+            do_pruning: true,
             info: SearchInfo::default(),
         }
+    }
+
+    //The purpose of the singularity() function is to prove that a move is better than alternatives by
+    //a significant margin. If this is true, we should extend it since it is more important. This
+    //function determines how much we should extend by.
+
+    fn singularity(
+        &mut self,
+        position: &mut Board,
+        best_move: Move,
+        commit: &Commit,
+        tt_score: i32,
+        depth: usize,
+        pv_node: bool,
+        _alpha: i32,
+        beta: i32,
+        cutnode: bool,
+    ) -> Option<i32> {
+        position.undo_move(best_move, commit);
+        self.ply -= 1;
+        //undo move already made on board
+        let threshold = std::cmp::max(tt_score - (depth as i32 * 2 + 20), -INFINITY);
+
+        self.info.excluded = Some(best_move);
+
+        let excluded_eval = self.negamax(position, depth / 2, threshold, threshold - 1, cutnode);
+
+        self.info.excluded = None;
+
+        let extension = if !pv_node && excluded_eval < threshold - SINGULARITY_DE_MARGIN {
+            Some(2)
+        } else if excluded_eval < threshold {
+            Some(1)
+        } else if threshold >= beta {
+            //MultiCut: more than one move will be able to beat beta
+            //here we return None to indicate that the search should terminate
+            //and return beta
+            None
+        } else if tt_score >= beta {
+            Some(-1)
+        } else {
+            Some(0)
+        };
+
+        extension
     }
 
     pub fn negamax(
         &mut self,
         position: &mut Board,
-        mut depth: usize,
+        depth: usize,
         mut alpha: i32,
         beta: i32,
         cutnode: bool,
@@ -240,8 +289,6 @@ impl Searcher {
 
         self.pv_length[self.ply] = self.ply;
 
-        //TODO: try check extention before qsearch
-
         if depth == 0 {
             //qsearch on leaf nodes
             return self.quiescence_search(position, alpha, beta);
@@ -250,11 +297,15 @@ impl Searcher {
         let mut hash_flag = EntryFlag::UpperBound;
         self.nodes += 1;
 
+        //NOTE: tt_score is only used in singular search, in which case we know that there is
+        //definitely a hash result, so this value of 0 is never actually read
+        let (mut tt_depth, mut tt_bound, mut tt_score) = (0, EntryFlag::Missing, 0);
         let mut best_move = NULL_MOVE; //used for TT hash -> move ordering
                                        //this is useful in cases where it cannot return the eval of the hash lookup
                                        //due to the bounds, but it can use the best_move field for move ordering
 
-        if !root {
+        //don't probe TB in singular search
+        if !root && self.info.excluded.is_none() {
             //check 50 move rule, repetition and insufficient material
             unsafe {
                 if is_drawn(position) {
@@ -279,14 +330,22 @@ impl Searcher {
 
             let hash_lookup = match position.side_to_move {
                 //hash lookup
-                Colour::White => self.tt_white.lookup(position.hash_key, alpha, beta, depth),
-                Colour::Black => self.tt_black.lookup(position.hash_key, alpha, beta, depth),
+                Colour::White => {
+                    self.tt_white
+                        .lookup(position.hash_key, alpha, beta, depth, &mut tt_score)
+                }
+                Colour::Black => {
+                    self.tt_black
+                        .lookup(position.hash_key, alpha, beta, depth, &mut tt_score)
+                }
             };
 
             if let Some(k) = hash_lookup.eval {
                 return k;
             } else if !hash_lookup.best_move.is_null() {
                 best_move = hash_lookup.best_move;
+                tt_depth = hash_lookup.depth;
+                tt_bound = hash_lookup.flag;
             };
         }
 
@@ -305,7 +364,8 @@ impl Searcher {
         let is_check = position.is_check();
         let mut improving = false;
 
-        if !is_check {
+        //avoid static pruning when in check or in singular search
+        if !is_check && self.info.excluded.is_none() && self.do_pruning {
             let static_eval = evaluate(position);
             if self.ply < MAX_SEARCH_DEPTH {
                 self.info.ss[self.ply] = SearchStackEntry { eval: static_eval };
@@ -389,15 +449,7 @@ impl Searcher {
             self.negamax(position, depth - 2, alpha, beta, !cutnode);
         }
 
-        //TODO: singularity extension
-        let extension = (is_check && !root) as usize;
-        depth += extension;
-        /*
-        Some engines have this after the Early Pruning stage, but I think it makes more sense to
-        have it here: if we know we are in a situation which would warrant extending then we
-        should consider that information when deciding whether or not to prune. Of course the way
-        to actually know will be to run a test...
-        */
+        //depth += (is_check && !root) as usize;
 
         /*
          Generate pseudo-legal moves here because this should be faster in cases where
@@ -418,6 +470,10 @@ impl Searcher {
             if m.is_null() {
                 //no pseudolegal moves left in move list
                 break;
+            } else if let Some(n) = self.info.excluded {
+                if n == m {
+                    continue;
+                }
             }
 
             //from what I can see strong engines update this before checking whether or not the
@@ -434,7 +490,7 @@ impl Searcher {
 
             //Early Pruning: try to prune moves before we search them properly
             //by showing that they're not worth investigating
-            if !root && not_mated {
+            if !root && not_mated && self.do_pruning {
                 if quiet && skip_quiets && !is_killer {
                     continue;
                 }
@@ -483,9 +539,41 @@ impl Searcher {
             self.ply += 1;
             //update after pruning above
 
+            //A singular move is a move which seems to be forced or at least much stronger than
+            //others. We should therefore extend to investigate it further.
+            let maybe_singular = !root
+                && depth >= 8
+                && self.info.excluded.is_none()
+                && m == best_move
+                && tt_depth >= depth - 3
+                && tt_bound != EntryFlag::UpperBound;
+
+            let extension = if maybe_singular {
+                self.singularity(
+                    position, best_move, &commit, tt_score, depth, pv_node, alpha, beta, cutnode,
+                )
+            } else {
+                Some((is_check && !root) as i32)
+            };
+
+            if extension.is_none() {
+                //MultiCut case from singularity() function
+                return tt_score - (depth as i32 * 2);
+            } else if maybe_singular {
+                position.try_move(best_move);
+                self.ply += 1;
+                //we unmade the move while calling the singularity() function
+            }
+
+            let new_depth = i32::clamp(
+                depth as i32 + extension.unwrap() - 1,
+                0,
+                MAX_SEARCH_DEPTH as i32,
+            ) as usize;
+
             let eval = if moves_played == 1 {
-                //note that this is one because the variable is updates above
-                -self.negamax(position, depth - 1, -beta, -alpha, false)
+                //note that this is one because the variable is updated above
+                -self.negamax(position, new_depth, -beta, -alpha, false)
                 //normal search on pv move (no moves searched yet)
             } else {
                 /*
@@ -513,8 +601,8 @@ impl Searcher {
                     //reduce more in cutnodes
                     r += cutnode as i32;
 
-                    let mut reduced_depth = cmp::max(depth as i32 - r - 1, 1) as usize;
-                    reduced_depth = usize::clamp(reduced_depth, 1, depth);
+                    let mut reduced_depth = cmp::max(new_depth as i32 - r, 1) as usize;
+                    reduced_depth = usize::clamp(reduced_depth, 1, new_depth);
                     //avoid dropping into qsearch or extending
 
                     -self.negamax(position, reduced_depth, -alpha - 1, -alpha, true)
@@ -525,12 +613,12 @@ impl Searcher {
                     //failed to prove that move is bad -> re-search with same depth but reduced
                     //window
                     reduction_eval =
-                        -self.negamax(position, depth - 1, -alpha - 1, -alpha, !cutnode);
+                        -self.negamax(position, new_depth, -alpha - 1, -alpha, !cutnode);
                 }
 
                 if reduction_eval > alpha && reduction_eval < beta {
                     //move actually inside PV window -> search at full depth
-                    reduction_eval = -self.negamax(position, depth - 1, -beta, -alpha, false);
+                    reduction_eval = -self.negamax(position, new_depth, -beta, -alpha, false);
                 }
                 reduction_eval
             };
@@ -623,12 +711,19 @@ impl Searcher {
 
         let mut hash_flag = EntryFlag::UpperBound;
 
+        let mut _tt_score = 0;
+
         let hash_lookup = match position.side_to_move {
             //hash lookup
-            Colour::White => self.tt_white.lookup(position.hash_key, alpha, beta, 0),
-            Colour::Black => self.tt_black.lookup(position.hash_key, alpha, beta, 0),
-            //lookups with depth zero because any TT entry will necessarily
-            //have had a quiescence search done so we will always take it
+            Colour::White => {
+                self.tt_white
+                    .lookup(position.hash_key, alpha, beta, 0, &mut _tt_score)
+            }
+            Colour::Black => {
+                self.tt_black
+                    .lookup(position.hash_key, alpha, beta, 0, &mut _tt_score)
+            } //lookups with depth zero because any TT entry will necessarily
+              //have had a quiescence search done so we will always take it
         };
 
         let mut best_move = NULL_MOVE;
@@ -1128,6 +1223,7 @@ pub fn best_move(
     moves_to_go: usize,
     movetime: usize,
     s: &mut Searcher,
+    show_thinking: bool,
 ) -> MoveData {
     let start = Instant::now();
     let move_duration = match movetime {
@@ -1181,29 +1277,31 @@ pub fn best_move(
             previous_pv_length = s.pv_length;
         }
 
-        println!(
-            "info depth {} score cp {} nodes {} pv{} time {} nps {}",
-            depth,
-            eval,
-            s.nodes,
-            {
-                let mut pv = String::new();
-                for i in 0..s.pv_length[0] {
-                    pv += " ";
-                    pv += s.pv[0][i].uci().as_str();
+        if show_thinking {
+            println!(
+                "info depth {} score cp {} nodes {} pv{} time {} nps {}",
+                depth,
+                eval,
+                s.nodes,
+                {
+                    let mut pv = String::new();
+                    for i in 0..s.pv_length[0] {
+                        pv += " ";
+                        pv += s.pv[0][i].uci().as_str();
+                    }
+                    pv
+                },
+                start.elapsed().as_millis(),
+                {
+                    let micros = start.elapsed().as_micros() as f64;
+                    if micros == 0.0 {
+                        0
+                    } else {
+                        ((s.nodes as f64 / micros) * 1_000_000.0) as u64
+                    }
                 }
-                pv
-            },
-            start.elapsed().as_millis(),
-            {
-                let micros = start.elapsed().as_micros() as f64;
-                if micros == 0.0 {
-                    0
-                } else {
-                    ((s.nodes as f64 / micros) * 1_000_000.0) as u64
-                }
-            }
-        );
+            );
+        }
 
         if start.elapsed() > move_duration {
             /*

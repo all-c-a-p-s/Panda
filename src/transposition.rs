@@ -1,7 +1,7 @@
 use crate::{Move, NULL_MOVE};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EntryFlag {
     Missing,
     Exact,
@@ -27,6 +27,8 @@ pub struct TranspositionTable {
 pub struct LookupResult {
     pub eval: Option<i32>,
     pub best_move: Move,
+    pub depth: usize,
+    pub flag: EntryFlag,
 }
 
 /*
@@ -71,7 +73,14 @@ impl TTEntry {
 }
 
 pub trait TT {
-    fn lookup(&self, key: u64, alpha: i32, beta: i32, depth: usize) -> LookupResult;
+    fn lookup(
+        &self,
+        key: u64,
+        alpha: i32,
+        beta: i32,
+        depth: usize,
+        search_tt_score: &mut i32,
+    ) -> LookupResult;
     fn write(&mut self, hash: u64, entry: TTEntry);
 }
 
@@ -109,10 +118,16 @@ impl TranspositionTable {
 }
 
 impl TT for TranspositionTable {
-    fn lookup(&self, hash_key: u64, alpha: i32, beta: i32, depth: usize) -> LookupResult {
-        let mut best_move = NULL_MOVE;
+    fn lookup(
+        &self,
+        hash_key: u64,
+        alpha: i32,
+        beta: i32,
+        depth: usize,
+        search_tt_score: &mut i32,
+    ) -> LookupResult {
         if let Some(entry) = self.get(hash_key) {
-            best_move = entry.best_move;
+            *search_tt_score = entry.eval;
             if entry.depth >= depth {
                 match entry.flag {
                     EntryFlag::LowerBound => {
@@ -121,6 +136,8 @@ impl TT for TranspositionTable {
                             return LookupResult {
                                 eval: Some(entry.eval),
                                 best_move: entry.best_move,
+                                depth: entry.depth,
+                                flag: EntryFlag::LowerBound,
                             };
                         }
                     }
@@ -130,14 +147,17 @@ impl TT for TranspositionTable {
                             return LookupResult {
                                 eval: Some(entry.eval),
                                 best_move: entry.best_move,
+                                depth: entry.depth,
+                                flag: EntryFlag::UpperBound,
                             };
                         }
                     }
                     EntryFlag::Exact => {
-                        //don't update best move because this always returns an eval
                         return LookupResult {
                             eval: Some(entry.eval),
                             best_move: entry.best_move,
+                            depth: entry.depth,
+                            flag: EntryFlag::Exact,
                         };
                     }
                     //pv entry
@@ -145,11 +165,27 @@ impl TT for TranspositionTable {
                     //as above, the get() function will return none
                     //if the entry is missing
                 }
+
+                return LookupResult {
+                    eval: None,
+                    best_move: entry.best_move,
+                    depth: entry.depth,
+                    flag: entry.flag,
+                };
+            } else {
+                return LookupResult {
+                    eval: None,
+                    best_move: entry.best_move,
+                    depth: entry.depth,
+                    flag: entry.flag,
+                };
             }
         }
         LookupResult {
             eval: None,
-            best_move,
+            best_move: NULL_MOVE,
+            depth: 0,
+            flag: EntryFlag::Missing,
         }
     }
 
@@ -160,10 +196,16 @@ impl TT for TranspositionTable {
 }
 
 impl TT for HashMap<u64, TTEntry> {
-    fn lookup(&self, key: u64, alpha: i32, beta: i32, depth: usize) -> LookupResult {
-        let mut best_move = NULL_MOVE;
+    fn lookup(
+        &self,
+        key: u64,
+        alpha: i32,
+        beta: i32,
+        depth: usize,
+        search_tt_score: &mut i32,
+    ) -> LookupResult {
         if let Some(entry) = self.get(&key) {
-            best_move = entry.best_move;
+            *search_tt_score = entry.eval;
             if entry.depth >= depth {
                 match entry.flag {
                     EntryFlag::LowerBound => {
@@ -172,6 +214,8 @@ impl TT for HashMap<u64, TTEntry> {
                             return LookupResult {
                                 eval: Some(entry.eval),
                                 best_move: entry.best_move,
+                                depth: entry.depth,
+                                flag: EntryFlag::LowerBound,
                             };
                         }
                     }
@@ -181,14 +225,17 @@ impl TT for HashMap<u64, TTEntry> {
                             return LookupResult {
                                 eval: Some(entry.eval),
                                 best_move: entry.best_move,
+                                depth: entry.depth,
+                                flag: EntryFlag::UpperBound,
                             };
                         }
                     }
                     EntryFlag::Exact => {
-                        //don't return best move because this always returns an eval
                         return LookupResult {
                             eval: Some(entry.eval),
                             best_move: entry.best_move,
+                            depth: entry.depth,
+                            flag: EntryFlag::Exact,
                         };
                     }
                     //pv entry
@@ -196,19 +243,32 @@ impl TT for HashMap<u64, TTEntry> {
                     //as above, the get() function will return none
                     //if the entry is missing
                 }
+
+                //even if we can't return an evaluation we should still return the best move
+                //for the purpose of move-ordering
+                return LookupResult {
+                    eval: None,
+                    best_move: entry.best_move,
+                    depth: entry.depth,
+                    flag: entry.flag,
+                };
             } else {
                 //return best move even in the case that we cannot rely on the evaluation for the
                 //purpose of move ordering
                 return LookupResult {
                     eval: None,
                     best_move: entry.best_move,
+                    depth: entry.depth,
+                    flag: EntryFlag::Missing,
                 };
             }
         }
 
         LookupResult {
             eval: None,
-            best_move,
+            best_move: NULL_MOVE,
+            depth: 0,
+            flag: EntryFlag::Missing,
         }
     }
 

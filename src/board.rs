@@ -1,7 +1,7 @@
 use crate::helper::*;
 use crate::movegen::is_attacked;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Board {
     pub bitboards: [u64; 12],
     pub pieces_array: [usize; 64], //used to speed up move generation
@@ -263,5 +263,91 @@ impl Board {
             Colour::White => is_attacked(lsfb(self.bitboards[BK]), Colour::White, self),
             Colour::Black => is_attacked(lsfb(self.bitboards[WK]), Colour::Black, self),
         }
+    }
+
+    pub fn fen(&self) -> String {
+        let mut fen = String::new();
+        let mut empty_count = 0;
+
+        for rank in (0..8).rev() {
+            for file in 0..8 {
+                let i = rank * 8 + file;
+                let pc = self.pieces_array[i];
+
+                if i % 8 == 0 && i != 56 {
+                    if empty_count != 0 {
+                        fen += format!("{}", empty_count).as_str();
+                        empty_count = 0;
+                    }
+                    fen += "/";
+                }
+                if pc == NO_PIECE {
+                    empty_count += 1;
+                } else {
+                    if empty_count != 0 {
+                        fen += format!("{}", empty_count).as_str();
+                        empty_count = 0;
+                    }
+                    match pc {
+                        WP => fen += "P",
+                        WN => fen += "N",
+                        WB => fen += "B",
+                        WR => fen += "R",
+                        WQ => fen += "Q",
+                        WK => fen += "K",
+                        BP => fen += "p",
+                        BN => fen += "n",
+                        BB => fen += "b",
+                        BR => fen += "r",
+                        BQ => fen += "q",
+                        BK => fen += "k",
+                        _ => unreachable!(),
+                    }
+                }
+            }
+        }
+
+        if empty_count != 0 {
+            fen += format!("{}", empty_count).as_str();
+        }
+
+        fen += if self.side_to_move == Colour::White {
+            " w"
+        } else {
+            " b"
+        };
+
+        fen += match self.castling {
+            0b0000_0000 => " -",
+            0b0000_0001 => " K",
+            0b0000_0010 => " Q",
+            0b0000_0100 => " k",
+            0b0000_1000 => " q",
+            0b0000_0011 => " KQ",
+            0b0000_0101 => " Kk",
+            0b0000_1001 => " Kq",
+            0b0000_0110 => " Qk",
+            0b0000_1010 => " Qq",
+            0b0000_1100 => " kq",
+            0b0000_0111 => " KQk",
+            0b0000_1011 => " KQq",
+            0b0000_1101 => " Kkq",
+            0b0000_1110 => " Qkq",
+            0b0000_1111 => " KQkq",
+
+            _ => panic!("invalid castling rights"),
+        };
+
+        if self.en_passant != NO_SQUARE {
+            fen += " ";
+            fen += &coordinate(self.en_passant);
+        } else {
+            fen += " -";
+        };
+
+        fen += format!(" {}", self.fifty_move).as_str();
+        fen += format!(" {}", self.ply % 2 + 1).as_str();
+
+        fen
     }
 }

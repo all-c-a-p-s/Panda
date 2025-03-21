@@ -1,4 +1,5 @@
 pub mod board;
+pub mod datagen;
 pub mod db;
 pub mod eval;
 pub mod helper;
@@ -17,6 +18,7 @@ use std::error::Error;
 use std::time::Instant;
 
 use crate::board::*;
+use crate::datagen::*;
 use crate::db::*;
 use crate::helper::*;
 use crate::magic::*;
@@ -36,12 +38,20 @@ enum Mode {
     Profile,
     Debug,
     Tune,
+    Datagen,
     Db,
     Uci,
 }
 
-const MODE: Mode = Mode::Uci;
+const MODE: Mode = Mode::Profile;
 const TUNING_METHOD: TuneType = TuneType::HillClimb;
+
+#[allow(unused)]
+const ONE_HOUR: u64 = 3600;
+const DATAGEN_PATH: &'static str = "/Users/seba/rs/Panda/marlinflow/trainer/data/data200325.txt";
+//running entry count: ~50k
+//this comment is here so I don't have to load the whole file into a string to count entries
+//instead I keep track of the number of entries added each session
 
 fn main() -> Result<(), Box<dyn Error>> {
     std::env::set_var("RUST_BACKTRACE", "1");
@@ -57,6 +67,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
         }
         Mode::Profile => full_perft(),
+        Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(10))?,
         Mode::Debug => {}
         Mode::Db => inspect_db("/Users/seba/rs/Panda/data/2021-07-31-lichess-evaluations-37MM.db")?,
     };

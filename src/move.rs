@@ -461,25 +461,17 @@ impl Board {
     }
 }
 
+//NOTE: this doesn't actually work but I'm not using it rn
 pub fn is_legal(m: Move, b: &mut Board) -> bool {
-    if m.piece_moved(&b) == WK || m.piece_moved(&b) == BK {
-        let commit = b.make_move(m);
+    let commit = b.make_move(m);
 
-        let legal = match b.side_to_move {
-            // AFTER move has been made
-            Colour::White => !is_attacked(lsfb(b.bitboards[BK]), Colour::White, b),
-            Colour::Black => !is_attacked(lsfb(b.bitboards[WK]), Colour::Black, b),
-        };
-        b.undo_move(m, &commit);
-        return legal;
-    }
-    let pin_rays = get_pin_rays(&b);
-    for r in pin_rays {
-        if get_bit(m.square_from(), r) > 0 && get_bit(m.square_to(), r) == 0 {
-            return false;
-        }
-    }
-    true
+    let legal = match b.side_to_move {
+        // AFTER move has been made
+        Colour::White => !is_attacked(lsfb(b.bitboards[BK]), Colour::White, b),
+        Colour::Black => !is_attacked(lsfb(b.bitboards[WK]), Colour::Black, b),
+    };
+    b.undo_move(m, &commit);
+    return legal;
 }
 impl Board {
     /*pub fn try_move(&mut self, m: Move, pin_rays: &[u64]) -> (Commit, bool) {

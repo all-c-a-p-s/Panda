@@ -218,7 +218,7 @@ pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveDa
         return parse_special_go(command, position, s);
     } else if words[1] == "movetime" {
         movetime = words[2].parse().expect("failed to convert movetime to int");
-        return best_move(position, 0, 0, 0, movetime, s);
+        return best_move(position, 0, 0, 0, movetime, s, true);
     }
 
     let w_time = words[2].parse().expect("failed to convert wtime to int");
@@ -266,7 +266,15 @@ pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveDa
         Colour::Black => b_inc,
     };
 
-    best_move(position, engine_time, engine_inc, moves_to_go, movetime, s)
+    best_move(
+        position,
+        engine_time,
+        engine_inc,
+        moves_to_go,
+        movetime,
+        s,
+        true,
+    )
 }
 
 fn parse_perft(command: &str, position: &mut Board) {
