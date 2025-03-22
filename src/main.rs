@@ -43,8 +43,8 @@ enum Mode {
     Uci,
 }
 
-const MODE: Mode = Mode::Profile;
-const TUNING_METHOD: TuneType = TuneType::HillClimb;
+const MODE: Mode = Mode::Uci;
+const TUNING_METHOD: TuneType = TuneType::Genetic;
 
 #[allow(unused)]
 const ONE_HOUR: u64 = 3600;

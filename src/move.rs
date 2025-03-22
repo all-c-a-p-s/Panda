@@ -12,6 +12,7 @@
 
 use crate::board::*;
 use crate::helper::*;
+use crate::magic::*;
 use crate::movegen::*;
 use crate::zobrist::*;
 use crate::REPETITION_TABLE;
@@ -47,6 +48,8 @@ pub struct Commit {
     pub piece_captured: usize,
     pub hash_key: u64,
     pub made_move: bool,
+    pub pinned: u64,
+    pub checkers: u64,
 }
 
 impl Move {
@@ -159,191 +162,41 @@ pub fn encode_move(sq_from: usize, sq_to: usize, promoted_piece: usize, flag: u1
     }
 }
 
-impl Board {
-    pub fn make_move(&mut self, m: Move) -> Commit {
-        let mut commit = Commit {
-            castling_reset: self.castling,
-            ep_reset: self.en_passant,
-            fifty_move_reset: self.fifty_move,
-            piece_captured: NO_PIECE,
-            hash_key: self.hash_key,
-            made_move: true,
-        };
-
-        self.hash_key = hash_update(self.hash_key, &m, &self);
-        //MUST be done before any changes made on the board
-
-        let sq_from = m.square_from();
-        let sq_to = m.square_to();
-        let piece = m.piece_moved(&self);
-        let piece_captured = m.piece_captured(&self);
-        let double_push = m.is_double_push(&self);
-        let promoted_piece = match m.is_promotion() {
-            false => NO_PIECE,
-            true => match self.side_to_move {
-                Colour::White => m.promoted_piece(),
-                Colour::Black => m.promoted_piece() + 6,
-            },
-        };
-
-        //NOTE: piece removed from sq_from below
-
-        if m.is_capture(&self) {
-            //remove captured piece from bitboard
-            self.bitboards[piece_captured] = pop_bit(sq_to, self.bitboards[piece_captured]);
-            self.pieces_array[sq_to] = piece;
-            commit.piece_captured = piece_captured;
-            match m.square_to() {
-                //remove castling rights is a1/h1/a8/h8 is captured on
-                A1 => self.castling &= 0b0000_1101,
-                H1 => self.castling &= 0b0000_1110,
-                A8 => self.castling &= 0b0000_0111,
-                H8 => self.castling &= 0b0000_1011,
-                _ => {}
-            }
-        } else if m.is_en_passant() {
-            match piece {
-                WP => {
-                    self.bitboards[BP] = pop_bit(sq_to - 8, self.bitboards[BP]);
-                    self.pieces_array[sq_to - 8] = NO_PIECE;
-                }
-                BP => {
-                    self.bitboards[WP] = pop_bit(sq_to + 8, self.bitboards[WP]);
-                    self.pieces_array[sq_to + 8] = NO_PIECE;
-                }
-                _ => panic!("non-pawn is capturing en passant 🤔"),
-            }
-        }
-
-        if m.is_promotion() {
-            self.bitboards[promoted_piece] = set_bit(sq_to, self.bitboards[promoted_piece]);
-            self.pieces_array[sq_to] = promoted_piece;
-            //remove pawn and add promoted piece
-        } else if m.is_castling() {
-            //update king and rook for castling
-            match sq_to {
-                C1 => {
-                    self.bitboards[WK] = set_bit(C1, 0); //works bc only 1 wk
-                    self.bitboards[WR] = pop_bit(A1, self.bitboards[WR]);
-                    self.bitboards[WR] = set_bit(D1, self.bitboards[WR]);
-
-                    self.pieces_array[E1] = NO_PIECE;
-                    self.pieces_array[A1] = NO_PIECE;
-                    self.pieces_array[C1] = WK;
-                    self.pieces_array[D1] = WR;
-                }
-                G1 => {
-                    self.bitboards[WK] = set_bit(G1, 0);
-                    self.bitboards[WR] = pop_bit(H1, self.bitboards[WR]);
-                    self.bitboards[WR] = set_bit(F1, self.bitboards[WR]);
-
-                    self.pieces_array[E1] = NO_PIECE;
-                    self.pieces_array[H1] = NO_PIECE;
-                    self.pieces_array[G1] = WK;
-                    self.pieces_array[F1] = WR;
-                }
-                C8 => {
-                    self.bitboards[BK] = set_bit(C8, 0);
-                    self.bitboards[BR] = pop_bit(A8, self.bitboards[BR]);
-                    self.bitboards[BR] = set_bit(D8, self.bitboards[BR]);
-
-                    self.pieces_array[E8] = NO_PIECE;
-                    self.pieces_array[A8] = NO_PIECE;
-                    self.pieces_array[C8] = BK;
-                    self.pieces_array[D8] = BR;
-                }
-                G8 => {
-                    self.bitboards[BK] = set_bit(G8, 0);
-                    self.bitboards[BR] = pop_bit(H8, self.bitboards[BR]);
-                    self.bitboards[BR] = set_bit(F8, self.bitboards[BR]);
-
-                    self.pieces_array[E8] = NO_PIECE;
-                    self.pieces_array[H8] = NO_PIECE;
-                    self.pieces_array[G8] = BK;
-                    self.pieces_array[F8] = BR;
-                }
-                _ => panic!("castling to a square that is not c1 g1 c8 or g8 🤔"),
-            }
-        } else {
-            self.bitboards[piece] = set_bit(sq_to, self.bitboards[piece]);
-            self.pieces_array[sq_to] = piece;
-            //set new bit on bitboard
-        }
-
-        self.bitboards[piece] = pop_bit(sq_from, self.bitboards[piece]);
-        self.pieces_array[sq_from] = NO_PIECE;
-        //remove moved piece from sq_from in all cases
-
-        if double_push {
-            //must do before moving pieces on the board
-            self.en_passant = match piece {
-                WP => sq_from + 8,
-                BP => sq_from - 8,
-                _ => panic!("non-pawn is making a double push 🤔"),
-            };
-        } else {
-            self.en_passant = NO_SQUARE;
-        }
-
-        self.occupancies[WHITE] = self.bitboards[WP]
-            | self.bitboards[WN]
-            | self.bitboards[WB]
-            | self.bitboards[WR]
-            | self.bitboards[WQ]
-            | self.bitboards[WK];
-
-        self.occupancies[BLACK] = self.bitboards[BP]
-            | self.bitboards[BN]
-            | self.bitboards[BB]
-            | self.bitboards[BR]
-            | self.bitboards[BQ]
-            | self.bitboards[BK];
-
-        self.occupancies[BOTH] = self.occupancies[WHITE] | self.occupancies[BLACK];
-        //update occupancies
-
-        if piece_captured != NO_PIECE || piece_type(piece) == PAWN {
-            self.fifty_move = 0;
-        } else {
-            self.fifty_move += 1;
-        }
-
-        if piece_type(piece) == KING {
-            if piece == WK {
-                //wk moved
-                self.castling &= 0b0000_1100;
-            } else if piece == BK {
-                self.castling &= 0b0000_0011;
-            }
-        }
-
-        if piece_type(piece) == ROOK {
-            if sq_from == A1 {
-                //wr leaves a1
-                self.castling &= 0b0000_1101;
-            } else if sq_from == H1 {
-                self.castling &= 0b0000_1110;
-            } else if sq_from == A8 {
-                self.castling &= 0b0000_0111;
-            } else if sq_from == H8 {
-                self.castling &= 0b0000_1011;
-            } //update castling rights
-        }
-
-        self.ply += 1;
-
-        self.side_to_move = match self.side_to_move {
-            Colour::White => Colour::Black,
-            Colour::Black => Colour::White,
-        };
-
-        unsafe {
-            REPETITION_TABLE[self.ply] = self.hash_key;
-        }
-
-        commit
+//this gets the longest line in the direction of two squares
+//except for those two squares themselves
+//used for detecting pins in movegen
+const fn get_line_rays(sq1: usize, sq2: usize) -> u64 {
+    let rays = BISHOP_EDGE_RAYS[sq1];
+    if rays & set_bit(sq2, 0) > 0 {
+        return (rays | set_bit(sq1, 0)) & (BISHOP_EDGE_RAYS[sq2] | set_bit(sq2, 0))
+            ^ set_bit(sq1, 0)
+            ^ set_bit(sq2, 0);
     }
 
+    let rays = ROOK_EDGE_RAYS[sq1];
+    if rays & set_bit(sq2, 0) > 0 {
+        return (rays | set_bit(sq1, 0)) & (ROOK_EDGE_RAYS[sq2] | set_bit(sq2, 0))
+            ^ set_bit(sq1, 0)
+            ^ set_bit(sq2, 0);
+    }
+    0
+}
+
+const LINE_RAYS: [[u64; 64]; 64] = {
+    let mut r = [[0u64; 64]; 64];
+    let mut a = 0;
+    while a < 64 {
+        let mut b = 0;
+        while b < 64 {
+            r[a][b] = get_line_rays(a, b);
+            b += 1;
+        }
+        a += 1;
+    }
+    r
+};
+
+impl Board {
     pub fn undo_move(&mut self, m: Move, c: &Commit) {
         //incremental update should be faster than copying the whole board
         self.side_to_move = match self.side_to_move {
@@ -360,7 +213,7 @@ impl Board {
             true => match self.pieces_array[sq_to] {
                 WN..=WQ => WP,
                 BN..=BQ => BP,
-                _ => panic!("impossible n'est pas français"),
+                _ => unreachable!(),
             },
         }; //not m.piece_moved(&self) because board has been mutated
 
@@ -453,6 +306,8 @@ impl Board {
         self.en_passant = c.ep_reset;
         self.castling = c.castling_reset;
         self.fifty_move = c.fifty_move_reset;
+        self.pinned = c.pinned;
+        self.checkers = c.checkers;
         self.ply -= 1;
 
         unsafe {
@@ -461,36 +316,296 @@ impl Board {
     }
 }
 
-//NOTE: this doesn't actually work but I'm not using it rn
-pub fn is_legal(m: Move, b: &mut Board) -> bool {
-    let commit = b.make_move(m);
-
-    let legal = match b.side_to_move {
-        // AFTER move has been made
-        Colour::White => !is_attacked(lsfb(b.bitboards[BK]), Colour::White, b),
-        Colour::Black => !is_attacked(lsfb(b.bitboards[WK]), Colour::Black, b),
-    };
-    b.undo_move(m, &commit);
-    return legal;
-}
 impl Board {
-    /*pub fn try_move(&mut self, m: Move, pin_rays: &[u64]) -> (Commit, bool) {
-        let mut commit = Commit::default();
-        let mut ok = false;
-        if self.is_check() {
-            commit = self.make_move(m);
-            ok = !self.is_still_check();
-        } else if legal_non_check_evasion(m, &self, pin_rays) {
-            commit = self.make_move(m);
-            ok = true;
+    pub fn try_move(&mut self, m: Move) -> Result<Commit, ()> {
+        if !self.is_legal(m) {
+            return Err(());
+        }
+        Ok(self.play_unchecked(m))
+    }
+
+    pub fn play_unchecked(&mut self, m: Move) -> Commit {
+        let mut commit = Commit {
+            castling_reset: self.castling,
+            ep_reset: self.en_passant,
+            fifty_move_reset: self.fifty_move,
+            piece_captured: NO_PIECE,
+            hash_key: self.hash_key,
+            made_move: true,
+            pinned: self.pinned,
+            checkers: self.checkers,
+        };
+
+        self.hash_key = hash_update(self.hash_key, &m, &self);
+        //MUST be done before any changes made on the board
+
+        (self.checkers, self.pinned) = (0, 0);
+
+        let (from, to) = (m.square_from(), m.square_to());
+        let piece_moved = self.pieces_array[from];
+        let victim = self.pieces_array[to];
+        let colour = self.side_to_move;
+
+        let enemy_king = match colour {
+            Colour::White => lsfb(self.bitboards[BK]),
+            Colour::Black => lsfb(self.bitboards[WK]),
+        };
+
+        if piece_type(piece_moved) == PAWN || victim != NO_PIECE {
+            self.fifty_move = 0;
+        } else {
+            self.fifty_move += 1;
         }
 
-        (commit, ok)
-    }*/
+        self.en_passant = NO_SQUARE;
 
-    pub fn try_move(&mut self, m: Move) -> (Commit, bool) {
-        let commit = self.make_move(m);
-        let ok = !self.is_still_check();
-        (commit, ok)
+        if m.is_castling() {
+            //update king and rook for castling
+            match to {
+                C1 => {
+                    self.bitboards[WK] = set_bit(C1, 0); //works bc only 1 wk
+                    self.bitboards[WR] = pop_bit(A1, self.bitboards[WR]);
+                    self.bitboards[WR] = set_bit(D1, self.bitboards[WR]);
+
+                    self.pieces_array[E1] = NO_PIECE;
+                    self.pieces_array[A1] = NO_PIECE;
+                    self.pieces_array[C1] = WK;
+                    self.pieces_array[D1] = WR;
+
+                    self.castling &= 0b0000_1100;
+                }
+                G1 => {
+                    self.bitboards[WK] = set_bit(G1, 0);
+                    self.bitboards[WR] = pop_bit(H1, self.bitboards[WR]);
+                    self.bitboards[WR] = set_bit(F1, self.bitboards[WR]);
+
+                    self.pieces_array[E1] = NO_PIECE;
+                    self.pieces_array[H1] = NO_PIECE;
+                    self.pieces_array[G1] = WK;
+                    self.pieces_array[F1] = WR;
+
+                    self.castling &= 0b0000_1100;
+                }
+                C8 => {
+                    self.bitboards[BK] = set_bit(C8, 0);
+                    self.bitboards[BR] = pop_bit(A8, self.bitboards[BR]);
+                    self.bitboards[BR] = set_bit(D8, self.bitboards[BR]);
+
+                    self.pieces_array[E8] = NO_PIECE;
+                    self.pieces_array[A8] = NO_PIECE;
+                    self.pieces_array[C8] = BK;
+                    self.pieces_array[D8] = BR;
+
+                    self.castling &= 0b0000_0011;
+                }
+                G8 => {
+                    self.bitboards[BK] = set_bit(G8, 0);
+                    self.bitboards[BR] = pop_bit(H8, self.bitboards[BR]);
+                    self.bitboards[BR] = set_bit(F8, self.bitboards[BR]);
+
+                    self.pieces_array[E8] = NO_PIECE;
+                    self.pieces_array[H8] = NO_PIECE;
+                    self.pieces_array[G8] = BK;
+                    self.pieces_array[F8] = BR;
+
+                    self.castling &= 0b0000_0011;
+                }
+                _ => unreachable!(),
+            }
+        } else {
+            self.bitboards[piece_moved] ^= set_bit(from, 0);
+            self.bitboards[piece_moved] ^= set_bit(to, 0);
+
+            self.pieces_array[from] = NO_PIECE;
+            self.pieces_array[to] = piece_moved;
+
+            if victim != NO_PIECE {
+                commit.piece_captured = victim;
+                self.bitboards[victim] ^= set_bit(to, 0);
+                match m.square_to() {
+                    //remove castling rights is a1/h1/a8/h8 is captured on
+                    A1 => self.castling &= 0b0000_1101,
+                    H1 => self.castling &= 0b0000_1110,
+                    A8 => self.castling &= 0b0000_0111,
+                    H8 => self.castling &= 0b0000_1011,
+                    _ => {}
+                }
+            }
+
+            match piece_moved {
+                WN | BN => self.checkers |= N_ATTACKS[enemy_king] & set_bit(to, 0),
+                WP | BP => {
+                    if m.is_promotion() {
+                        self.bitboards[piece_moved] ^= set_bit(to, 0);
+
+                        let promoted_piece = if colour == Colour::White {
+                            m.promoted_piece()
+                        } else {
+                            m.promoted_piece() + 6
+                        };
+
+                        self.bitboards[promoted_piece] ^= set_bit(to, 0);
+                        self.pieces_array[to] = promoted_piece;
+
+                        if piece_type(promoted_piece) == KNIGHT {
+                            self.checkers |= N_ATTACKS[enemy_king] & set_bit(to, 0);
+                        }
+                    } else {
+                        if rank(from).abs_diff(rank(to)) == 2 {
+                            match colour {
+                                Colour::White => self.en_passant = to - 8,
+                                Colour::Black => self.en_passant = to + 8,
+                            }
+                        } else if m.is_en_passant() {
+                            match colour {
+                                Colour::White => {
+                                    self.bitboards[BP] ^= set_bit(to - 8, 0);
+                                    self.pieces_array[to - 8] = NO_PIECE;
+                                }
+                                Colour::Black => {
+                                    self.bitboards[WP] ^= set_bit(to + 8, 0);
+                                    self.pieces_array[to + 8] = NO_PIECE;
+                                }
+                            }
+                        }
+
+                        self.checkers |= match colour {
+                            Colour::White => BP_ATTACKS,
+                            Colour::Black => WP_ATTACKS,
+                        }[enemy_king]
+                            & set_bit(to, 0);
+                    }
+                }
+                WK => self.castling &= 0b0000_1100,
+                BK => self.castling &= 0b0000_0011,
+                WR | BR => match from {
+                    A1 => self.castling &= 0b0000_1101,
+                    H1 => self.castling &= 0b0000_1110,
+                    A8 => self.castling &= 0b0000_0111,
+                    H8 => self.castling &= 0b0000_1011,
+                    _ => {}
+                },
+                _ => {}
+            };
+        }
+
+        self.occupancies[WHITE] = self.bitboards[WP]
+            | self.bitboards[WN]
+            | self.bitboards[WB]
+            | self.bitboards[WR]
+            | self.bitboards[WQ]
+            | self.bitboards[WK];
+
+        self.occupancies[BLACK] = self.bitboards[BP]
+            | self.bitboards[BN]
+            | self.bitboards[BB]
+            | self.bitboards[BR]
+            | self.bitboards[BQ]
+            | self.bitboards[BK];
+
+        self.occupancies[BOTH] = self.occupancies[WHITE] | self.occupancies[BLACK];
+        //update occupancies
+
+        let mut our_attackers = if colour == Colour::White {
+            self.occupancies[WHITE]
+                & ((BISHOP_EDGE_RAYS[enemy_king] & (self.bitboards[WB] | self.bitboards[WQ]))
+                    | ROOK_EDGE_RAYS[enemy_king] & (self.bitboards[WR] | self.bitboards[WQ]))
+        } else {
+            self.occupancies[BLACK]
+                & ((BISHOP_EDGE_RAYS[enemy_king] & (self.bitboards[BB] | self.bitboards[BQ]))
+                    | ROOK_EDGE_RAYS[enemy_king] & (self.bitboards[BR] | self.bitboards[BQ]))
+        };
+
+        while our_attackers > 0 {
+            let sq = lsfb(our_attackers);
+            let ray_between = RAY_BETWEEN[sq][enemy_king] & self.occupancies[BOTH];
+            match count(ray_between) {
+                0 => self.checkers |= set_bit(sq, 0),
+                1 => self.pinned |= ray_between,
+                _ => {}
+            }
+            our_attackers = pop_bit(sq, our_attackers);
+        }
+
+        self.side_to_move = self.side_to_move.opponent();
+        self.ply += 1;
+        commit
+    }
+
+    //NOTE: this assumes that the move is pseudo-legal
+    pub fn is_legal(&mut self, m: Move) -> bool {
+        let king_sq = lsfb(
+            self.bitboards[match self.side_to_move {
+                Colour::White => WK,
+                Colour::Black => BK,
+            }],
+        );
+
+        let from = m.square_from();
+        let to = m.square_to();
+
+        if m.square_from() == king_sq {
+            return self.legal_king_move(m);
+        }
+
+        if self.pinned & set_bit(from, 0) > 0 && LINE_RAYS[from][king_sq] & set_bit(to, 0) == 0 {
+            return false;
+        }
+
+        let target_squares = match count(self.checkers) {
+            0 => self.target_squares(false),
+            1 => self.target_squares(true),
+            _ => return false,
+        };
+
+        let piece_moved = self.pieces_array[from];
+
+        match piece_type(piece_moved) {
+            PAWN => {
+                if m.is_en_passant() {
+                    check_en_passant(m, &self)
+                } else {
+                    target_squares & set_bit(to, 0) > 0
+                }
+            }
+            _ => target_squares & set_bit(to, 0) > 0,
+        }
+    }
+
+    fn legal_king_move(&mut self, m: Move) -> bool {
+        let king_sq = lsfb(
+            self.bitboards[match self.side_to_move {
+                Colour::White => WK,
+                Colour::Black => BK,
+            }],
+        );
+        self.occupancies[BOTH] ^= set_bit(king_sq, 0);
+        let ok = !is_attacked(m.square_to(), self.side_to_move.opponent(), &self);
+        self.occupancies[BOTH] ^= set_bit(king_sq, 0);
+
+        ok
+    }
+
+    //NOTE: assumes at most one checker (double check case handled elsewhere)
+    fn target_squares(&self, in_check: bool) -> u64 {
+        let colour = self.side_to_move;
+        let targets = if in_check {
+            let checker = lsfb(self.checkers);
+            let our_king = lsfb(
+                self.bitboards[match colour {
+                    Colour::White => WK,
+                    Colour::Black => BK,
+                }],
+            );
+            RAY_BETWEEN[checker][our_king] | set_bit(checker, 0)
+        } else {
+            !0u64
+        };
+
+        targets
+            & !self.occupancies[match colour {
+                Colour::White => WHITE,
+                Colour::Black => BLACK,
+            }]
     }
 }

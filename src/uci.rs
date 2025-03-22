@@ -108,7 +108,9 @@ pub fn parse_position(command: &str, b: &mut Board) {
                 for w in words.iter().skip(3) {
                     //parse moves
                     let m = parse_move(w, b);
-                    b.make_move(m);
+                    let Ok(_) = b.try_move(m) else {
+                        panic!("Illegal move: {}", m.uci());
+                    };
                     unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
                 }
             }
@@ -126,7 +128,9 @@ pub fn parse_position(command: &str, b: &mut Board) {
         "moves" => {
             for w in words.iter().skip(2) {
                 let m = parse_move(w, b);
-                b.make_move(m);
+                let Ok(_) = b.try_move(m) else {
+                    panic!("invalid move {}", m.uci());
+                };
                 unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
             }
         }
@@ -158,7 +162,9 @@ pub fn parse_special_go(command: &str, b: &mut Board, s: &mut Searcher) -> MoveD
                     }
                     //parse moves
                     let m = parse_move(words[i], b);
-                    b.make_move(m);
+                    let Ok(_) = b.try_move(m) else {
+                        panic!("invalid move {}", m.uci());
+                    };
                     unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
                 }
             }
@@ -186,7 +192,9 @@ pub fn parse_special_go(command: &str, b: &mut Board, s: &mut Searcher) -> MoveD
                     break;
                 }
                 let m = parse_move(words[i], b);
-                b.make_move(m);
+                let Ok(_) = b.try_move(m) else {
+                    panic!("invalid move {}", m.uci());
+                };
                 unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
             }
         }

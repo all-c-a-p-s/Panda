@@ -35,8 +35,8 @@ fn is_terminal(eval: i32) -> bool {
 fn game_result(legal_moves: &MoveList, board: &Board, history: &Vec<u64>) -> Option<f32> {
     if legal_moves.moves[0].is_null() {
         match board.side_to_move {
-            Colour::White => return Some(if board.is_check() { 0.0 } else { 0.5 }),
-            Colour::Black => return Some(if board.is_check() { 1.0 } else { 0.5 }),
+            Colour::White => return Some(if board.checkers != 0 { 0.0 } else { 0.5 }),
+            Colour::Black => return Some(if board.checkers != 0 { 1.0 } else { 0.5 }),
         }
     }
 
@@ -86,12 +86,9 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
                     break;
                 }
 
-                let (commit, ok) = board.try_move(m);
-
-                if !ok {
-                    board.undo_move(m, &commit);
+                let Ok(commit) = board.try_move(m) else {
                     continue;
-                }
+                };
 
                 let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10));
                 searcher.do_pruning = false;
@@ -145,7 +142,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
             && (board.ply - first_pick) % pick_interval == 0
             && !best.is_capture(&board)
             && !is_terminal(s)
-            && !board.is_check()
+            && !board.checkers == 0
         {
             let fen = board.fen();
 
@@ -159,7 +156,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
             selected_fens.push((fen, eval, wdl));
         }
 
-        board.make_move(chosen_move);
+        board.play_unchecked(chosen_move);
     }
 
     for x in selected_fens.iter_mut() {

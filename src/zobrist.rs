@@ -79,6 +79,11 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
     let sq_from = m.square_from();
     let piece = m.piece_moved(&b);
 
+    if piece == NO_PIECE {
+        b.print_board();
+        m.print_move();
+    }
+
     res ^= PIECE_KEYS[sq_from][piece];
     res ^= PIECE_KEYS[sq_to][piece];
 
@@ -165,7 +170,7 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
             BP => {
                 res ^= PIECE_KEYS[sq_to + 8][WP];
             }
-            _ => panic!("non-pawn is capturing en passant 🤔"),
+            _ => unreachable!(),
         }
     }
 
@@ -208,7 +213,9 @@ pub fn hash_update_test(depth: usize, b: &mut Board) -> usize {
         if depth != 1 {
             let updated_hash = hash_update(hash_before_move, &moves.moves[i], b);
             //must be done before making move
-            let commit = b.make_move(moves.moves[i]);
+            let Ok(commit) = b.try_move(moves.moves[i]) else {
+                panic!("invalid move {}", moves.moves[i].uci());
+            };
 
             let hash_after_move = hash(b);
 

@@ -282,7 +282,7 @@ fn evaluate_pawns(
                     let can_advance = match get_bit(square + 8, b.occupancies[BOTH]) {
                         0 => 1,
                         1 => 0,
-                        _ => panic!("this is very problematic..."),
+                        _ => unreachable!(),
                     };
                     pawn_eval += tapered_score(
                         weights[PASSED_PAWN_BONUS_IDX][rank(square) * 2 + can_advance],
@@ -304,7 +304,7 @@ fn evaluate_pawns(
                     let can_advance = match get_bit(square - 8, b.occupancies[BOTH]) {
                         0 => 1,
                         1 => 0,
-                        _ => panic!("this aint good chief"),
+                        _ => unreachable!(),
                     };
                     pawn_eval += tapered_score(
                         weights[PASSED_PAWN_BONUS_IDX][(7 - rank(square)) * 2 + can_advance],
@@ -656,11 +656,15 @@ impl Individual {
 
         alpha = std::cmp::max(alpha, eval);
 
-        let mut captures = MoveList::gen_captures(position); //in tuner I don't think we care
-                                                             //whether or not its check
-        captures.order_moves(position, &Searcher::new(Instant::now()), &NULL_MOVE);
+        let in_check = position.checkers != 0;
 
-        //let pin_rays = movegen::get_pin_rays(&position);
+        let mut captures = if in_check {
+            MoveList::gen_moves(position)
+        } else {
+            MoveList::gen_captures(position)
+        };
+
+        captures.order_moves(position, &Searcher::new(Instant::now()), &NULL_MOVE);
 
         for c in captures.moves {
             if c.is_null() {
@@ -692,15 +696,9 @@ impl Individual {
                 continue;
             }
 
-            let (commit, ok) = position.try_move(c /*, &pin_rays*/);
-
-            if !ok {
-                if !commit.made_move {
-                    continue;
-                }
-                position.undo_move(c, &commit);
+            let Ok(commit) = position.try_move(c) else {
                 continue;
-            }
+            };
 
             let eval = -self.quiescence_search(position, -beta, -alpha);
             position.undo_move(c, &commit);

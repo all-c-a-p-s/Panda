@@ -2,10 +2,7 @@ use std::time::{Duration, Instant};
 
 use crate::*;
 
-// Baseline: 11.8
-// Copy/Make: 13.5
-
-pub fn perft(depth: usize, b: &Board, reporting_depth: Option<usize>) -> usize {
+pub fn perft(depth: usize, b: &mut Board, reporting_depth: Option<usize>) -> usize {
     if depth == 0 {
         return 1;
     }
@@ -13,28 +10,23 @@ pub fn perft(depth: usize, b: &Board, reporting_depth: Option<usize>) -> usize {
     let mut total = 0;
     let moves = MoveList::gen_moves(b);
 
-    for i in 0..MAX_MOVES {
-        if moves.moves[i].is_null() {
+    for m in moves.moves {
+        if m.is_null() {
             break;
         }
 
-        let mut new_board = b.clone();
-
-        let (_, ok) = new_board.try_move(moves.moves[i]);
-        if !ok {
+        let Ok(commit) = b.try_move(m) else {
             continue;
-        }
-        let added = perft(depth - 1, &new_board, reporting_depth);
+        };
+
+        let added = perft(depth - 1, b, reporting_depth);
         total += added;
+
+        b.undo_move(m, &commit);
 
         if let Some(d) = reporting_depth {
             if depth == d {
-                println!(
-                    "{}{}: {}",
-                    coordinate(moves.moves[i].square_from()),
-                    coordinate(moves.moves[i].square_to()),
-                    added
-                );
+                println!("{}: {}", m.uci(), added);
             }
         }
     }

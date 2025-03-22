@@ -3,6 +3,7 @@ use crate::eval::*;
 use crate::get_bishop_attacks;
 use crate::get_rook_attacks;
 use crate::helper::*;
+use crate::magic::*;
 use crate::movegen::*;
 use crate::r#move::*;
 use crate::transposition::*;
@@ -130,11 +131,18 @@ pub struct Searcher {
     info: SearchInfo,
 }
 
-fn reduction_ok(tactical: bool, is_check: bool) -> bool {
-    !(tactical || is_check)
+struct NullMoveUndo {
+    ep: usize,
+    pinned: u64,
 }
 
-fn make_null_move(b: &mut Board) -> usize {
+fn reduction_ok(tactical: bool, in_check: bool) -> bool {
+    !(tactical || in_check)
+}
+
+//make null move for NMP
+//we have to update pinners but not checkers since NMP is never done while in check
+fn make_null_move(b: &mut Board) -> NullMoveUndo {
     //returns en passant reset
     b.side_to_move = match b.side_to_move {
         Colour::White => Colour::Black,
@@ -142,22 +150,60 @@ fn make_null_move(b: &mut Board) -> usize {
     };
     b.ply += 1;
     b.last_move_null = true;
+
+    let pinned_reset = b.pinned;
+
+    let colour = b.side_to_move;
+    let our_king = lsfb(
+        b.bitboards[match colour {
+            Colour::White => WK,
+            Colour::Black => BK,
+        }],
+    );
+
+    let mut their_attackers = if colour == Colour::White {
+        b.occupancies[BLACK]
+            & ((BISHOP_EDGE_RAYS[our_king] & (b.bitboards[BB] | b.bitboards[BQ]))
+                | ROOK_EDGE_RAYS[our_king] & (b.bitboards[BR] | b.bitboards[BQ]))
+    } else {
+        b.occupancies[WHITE]
+            & ((BISHOP_EDGE_RAYS[our_king] & (b.bitboards[WB] | b.bitboards[WQ]))
+                | ROOK_EDGE_RAYS[our_king] & (b.bitboards[WR] | b.bitboards[WQ]))
+    };
+
+    while their_attackers > 0 {
+        let sq = lsfb(their_attackers);
+        let ray_between = RAY_BETWEEN[sq][our_king] & b.occupancies[BOTH];
+        match count(ray_between) {
+            1 => b.pinned |= ray_between,
+            _ => {}
+        }
+        their_attackers = pop_bit(sq, their_attackers);
+    }
+
     if b.en_passant != NO_SQUARE {
         let reset = b.en_passant;
         b.en_passant = NO_SQUARE;
-        return reset;
+        return NullMoveUndo {
+            ep: reset,
+            pinned: pinned_reset,
+        };
     }
-    NO_SQUARE
+    return NullMoveUndo {
+        ep: NO_SQUARE,
+        pinned: pinned_reset,
+    };
 }
 
-fn undo_null_move(b: &mut Board, ep_reset: usize) {
+fn undo_null_move(b: &mut Board, undo: &NullMoveUndo) {
     b.side_to_move = match b.side_to_move {
         Colour::White => Colour::Black,
         Colour::Black => Colour::White,
     };
     b.ply -= 1;
     b.last_move_null = false;
-    b.en_passant = ep_reset;
+    b.en_passant = undo.ep;
+    b.pinned = undo.pinned;
 }
 
 fn is_insufficient_material(b: &Board) -> bool {
@@ -361,11 +407,11 @@ impl Searcher {
         self.info.killer_moves[0][self.ply + 1] = NULL_MOVE;
         self.info.killer_moves[1][self.ply + 1] = NULL_MOVE;
 
-        let is_check = position.is_check();
+        let in_check = position.checkers != 0;
         let mut improving = false;
 
         //avoid static pruning when in check or in singular search
-        if !is_check && self.info.excluded.is_none() && self.do_pruning {
+        if !in_check && self.info.excluded.is_none() && self.do_pruning {
             let static_eval = evaluate(position);
             if self.ply < MAX_SEARCH_DEPTH {
                 self.info.ss[self.ply] = SearchStackEntry { eval: static_eval };
@@ -421,14 +467,14 @@ impl Searcher {
                     && static_eval >= beta + 200 - 20 * (depth as i32)
                     && !root
                 {
-                    let ep_reset = make_null_move(position);
+                    let undo = make_null_move(position);
                     self.ply += 1;
                     let r = 2 + depth as i32 / 4 + cmp::min((static_eval - beta) / 256, 3);
                     let reduced_depth = cmp::max(depth as i32 - r, 1) as usize;
                     let null_move_eval =
                         -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
                     //minimal window used because all that matters is whether the search result is better than beta
-                    undo_null_move(position, ep_reset);
+                    undo_null_move(position, &undo);
                     self.ply -= 1;
                     if null_move_eval >= beta {
                         return beta;
@@ -448,8 +494,6 @@ impl Searcher {
         if pv_node && depth > 3 && best_move.is_null() {
             self.negamax(position, depth - 2, alpha, beta, !cutnode);
         }
-
-        //depth += (is_check && !root) as usize;
 
         /*
          Generate pseudo-legal moves here because this should be faster in cases where
@@ -520,20 +564,14 @@ impl Searcher {
                     true => depth * depth + 2,
                     false => depth * depth / 2,
                 };
-                if depth <= LMP_DEPTH && moves_seen > lmp_threshold && !is_check {
+                if depth <= LMP_DEPTH && moves_seen > lmp_threshold && !in_check {
                     skip_quiets = true;
                 }
             }
 
-            let (commit, ok) = position.try_move(m);
-            //test if move is legal and make it at the same time
-            //this obv faster that making the move to check if it is legal
-            //then unmaking it and making it again for the search
-
-            if !ok {
-                position.undo_move(m, &commit);
+            let Ok(commit) = position.try_move(m) else {
                 continue;
-            }
+            };
 
             moves_played += 1;
             self.ply += 1;
@@ -553,14 +591,14 @@ impl Searcher {
                     position, best_move, &commit, tt_score, depth, pv_node, alpha, beta, cutnode,
                 )
             } else {
-                Some((is_check && !root) as i32)
+                Some((in_check && !root) as i32)
             };
 
             if extension.is_none() {
                 //MultiCut case from singularity() function
                 return tt_score - (depth as i32 * 2);
             } else if maybe_singular {
-                position.try_move(best_move);
+                position.play_unchecked(best_move);
                 self.ply += 1;
                 //we unmade the move while calling the singularity() function
             }
@@ -590,7 +628,7 @@ impl Searcher {
                 let mut reduction_eval = if moves_played
                     > (FULL_DEPTH_MOVES + pv_node as usize + !tt_move as usize + root as usize)
                     && depth >= REDUCTION_LIMIT
-                    && reduction_ok(tactical, is_check)
+                    && reduction_ok(tactical, in_check)
                 {
                     //decrease reduction for pv-nodes
                     r -= pv_node as i32;
@@ -678,7 +716,7 @@ impl Searcher {
 
         if moves_played == 0 {
             //no legal moves -> mate or stalemate
-            return match is_check {
+            return match in_check {
                 true => -INFINITY + self.ply as i32,
                 false => 0,
             };
@@ -747,7 +785,9 @@ impl Searcher {
 
         alpha = cmp::max(alpha, eval);
 
-        let mut captures = if position.is_check() {
+        let in_check = position.checkers != 0;
+
+        let mut captures = if in_check {
             //try generating all moves in the case that we're in check because it's unsound to rely
             //on static eval + if could be mate
             MoveList::gen_moves(position)
@@ -786,12 +826,9 @@ impl Searcher {
                 continue;
             }
 
-            let (commit, ok) = position.try_move(c);
-
-            if !ok {
-                position.undo_move(c, &commit);
+            let Ok(commit) = position.try_move(c) else {
                 continue;
-            }
+            };
 
             self.ply += 1;
 

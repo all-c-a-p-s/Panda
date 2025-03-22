@@ -33,6 +33,114 @@ pub const ROOK_RELEVANT_BITS: [usize; 64] = [
     12, 11, 11, 11, 11, 11, 11, 12,
 ];
 
+pub const BISHOP_RAYS: [u64; 64] = {
+    let mut table = [0u64; 64];
+    let mut sq = 0;
+    while sq < 64 {
+        table[sq] = bishop_rays(sq);
+        sq += 1;
+    }
+    table
+};
+
+pub const ROOK_RAYS: [u64; 64] = {
+    let mut table = [0u64; 64];
+    let mut sq = 0;
+    while sq < 64 {
+        table[sq] = rook_rays(sq);
+        sq += 1;
+    }
+    table
+};
+
+//these tables include the edge of the board
+//they are used for detecting pins in move generation
+pub const BISHOP_EDGE_RAYS: [u64; 64] = {
+    let mut table = [0u64; 64];
+    let mut sq = 0;
+    while sq < 64 {
+        table[sq] = bishop_edge_rays(sq);
+        sq += 1;
+    }
+    table
+};
+
+pub const ROOK_EDGE_RAYS: [u64; 64] = {
+    let mut table = [0u64; 64];
+    let mut sq = 0;
+    while sq < 64 {
+        table[sq] = rook_edge_rays(sq);
+        sq += 1;
+    }
+    table
+};
+
+//includes edge of baord
+const fn bishop_edge_rays(square: usize) -> u64 {
+    let mut attacks: u64 = 0;
+    let square_rank: usize = square / 8;
+    let square_file: usize = square % 8;
+    let mut rank: usize = square_rank;
+    let mut file: usize = square_file;
+    while rank >= 1 && file >= 1 {
+        rank -= 1;
+        file -= 1; //file and rank decreasing
+        attacks = set_bit(rank * 8 + file, attacks);
+    }
+
+    rank = square_rank;
+    file = square_file;
+    while rank <= 6 && file >= 1 {
+        rank += 1;
+        file -= 1; // rank increasing, file decreasing
+        attacks = set_bit(rank * 8 + file, attacks);
+    }
+
+    rank = square_rank;
+    file = square_file;
+    while rank >= 1 && file <= 6 {
+        rank -= 1;
+        file += 1; //rank increasing, file decreasing
+        attacks = set_bit(rank * 8 + file, attacks);
+    }
+
+    rank = square_rank;
+    file = square_file;
+    while rank <= 6 && file <= 6 {
+        rank += 1;
+        file += 1; //both increasing
+        attacks = set_bit(rank * 8 + file, attacks);
+    }
+    attacks
+}
+
+const fn rook_edge_rays(square: usize) -> u64 {
+    let mut attacks: u64 = 0;
+    let square_rank: usize = square / 8;
+    let square_file: usize = square % 8;
+    let mut rank = square_rank;
+    let mut file = square_file;
+    while rank <= 6 {
+        rank += 1;
+        attacks = set_bit(rank * 8 + square_file, attacks);
+    }
+    rank = square_rank;
+    while rank >= 1 {
+        rank -= 1;
+        attacks = set_bit(rank * 8 + square_file, attacks);
+    }
+    while file <= 6 {
+        file += 1;
+        attacks = set_bit(square_rank * 8 + file, attacks);
+    }
+    file = square_file;
+    while file >= 1 {
+        file -= 1;
+        attacks = set_bit(square_rank * 8 + file, attacks);
+    }
+    attacks
+}
+
 //functions with attack maps for non-sliders
 pub const fn mask_pawn_attacks(square: usize, side: Colour) -> u64 {
     //generate capturing attacks
@@ -492,22 +600,16 @@ pub const K_ATTACKS: [u64; 64] = {
     table
 };
 
-pub static mut BISHOP_RAYS: [u64; 64] = [0u64; 64];
-pub static mut ROOK_RAYS: [u64; 64] = [0u64; 64];
-
 pub static mut BISHOP_ATTACKS: [[u64; 512]; 64] = [[0u64; 512]; 64];
 pub static mut ROOK_ATTACKS: [[u64; 4096]; 64] = [[0u64; 4096]; 64];
 
 // init() functions calculate BISHOP_RAYS, BISHOP_ATTACKS, ROOK_RAYS, ROOK_ATTACKS
 pub fn init_bishop_attacks() {
     for square in 0..64 {
-        let relevant_bits: usize = unsafe {
-            BISHOP_RAYS[square] = bishop_rays(square);
-            count(BISHOP_RAYS[square])
-        };
+        let relevant_bits: usize = count(BISHOP_RAYS[square]);
         let blocker_indices = 1 << relevant_bits;
         for i in 0..blocker_indices {
-            let blockers = unsafe { set_blockers(i, relevant_bits, BISHOP_RAYS[square]) };
+            let blockers = set_blockers(i, relevant_bits, BISHOP_RAYS[square]);
             let magic_index =
                 (blockers * BISHOP_MAGICS[square]) >> (64 - BISHOP_RELEVANT_BITS[square]);
             unsafe {
@@ -520,13 +622,10 @@ pub fn init_bishop_attacks() {
 
 pub fn init_rook_attacks() {
     for square in 0..64 {
-        let relevant_bits: usize = unsafe {
-            ROOK_RAYS[square] = rook_rays(square);
-            count(ROOK_RAYS[square])
-        };
+        let relevant_bits: usize = count(ROOK_RAYS[square]);
         let blocker_indices = 1 << relevant_bits;
         for i in 0..blocker_indices {
-            let blockers = unsafe { set_blockers(i, relevant_bits, ROOK_RAYS[square]) };
+            let blockers = set_blockers(i, relevant_bits, ROOK_RAYS[square]);
             let magic_index = (blockers * ROOK_MAGICS[square]) >> (64 - ROOK_RELEVANT_BITS[square]);
             unsafe {
                 ROOK_ATTACKS[square][magic_index as usize] = mask_rook_attacks(square, blockers);
@@ -542,21 +641,17 @@ pub fn init_slider_attacks() {
 
 pub fn get_bishop_attacks(square: usize, blockers: u64) -> u64 {
     let mut b: u64 = blockers;
-    unsafe {
-        b &= BISHOP_RAYS[square]; //bits where blockers block rays
-        b *= BISHOP_MAGICS[square]; //magic hashing
-        b >>= 64 - BISHOP_RELEVANT_BITS[square];
-    };
+    b &= BISHOP_RAYS[square]; //bits where blockers block rays
+    b *= BISHOP_MAGICS[square]; //magic hashing
+    b >>= 64 - BISHOP_RELEVANT_BITS[square];
     unsafe { BISHOP_ATTACKS[square][b as usize] }
 }
 
 pub fn get_rook_attacks(square: usize, blockers: u64) -> u64 {
     let mut b: u64 = blockers;
-    unsafe {
-        b &= ROOK_RAYS[square];
-        b *= ROOK_MAGICS[square];
-        b >>= 64 - ROOK_RELEVANT_BITS[square];
-    };
+    b &= ROOK_RAYS[square];
+    b *= ROOK_MAGICS[square];
+    b >>= 64 - ROOK_RELEVANT_BITS[square];
     unsafe { ROOK_ATTACKS[square][b as usize] }
 }
 
@@ -564,19 +659,15 @@ pub fn get_queen_attacks(square: usize, blockers: u64) -> u64 {
     let mut bishop_blockers: u64 = blockers;
     let mut rook_blockers: u64 = blockers;
 
-    unsafe {
-        bishop_blockers &= BISHOP_RAYS[square];
-        bishop_blockers *= BISHOP_MAGICS[square];
-        bishop_blockers >>= 64 - BISHOP_RELEVANT_BITS[square];
-    };
+    bishop_blockers &= BISHOP_RAYS[square];
+    bishop_blockers *= BISHOP_MAGICS[square];
+    bishop_blockers >>= 64 - BISHOP_RELEVANT_BITS[square];
 
     let mut res = unsafe { BISHOP_ATTACKS[square][bishop_blockers as usize] };
 
-    unsafe {
-        rook_blockers &= ROOK_RAYS[square];
-        rook_blockers *= ROOK_MAGICS[square];
-        rook_blockers >>= 64 - ROOK_RELEVANT_BITS[square];
-    };
+    rook_blockers &= ROOK_RAYS[square];
+    rook_blockers *= ROOK_MAGICS[square];
+    rook_blockers >>= 64 - ROOK_RELEVANT_BITS[square];
 
     unsafe { res |= ROOK_ATTACKS[square][rook_blockers as usize] };
     res

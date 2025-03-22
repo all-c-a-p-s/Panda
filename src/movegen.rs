@@ -17,9 +17,6 @@ impl MoveListEntry {
 pub fn is_attacked(square: usize, colour: Colour, board: &Board) -> bool {
     //attacked BY colour
     match colour {
-        /*in my testing this one-liner approach is no slower than checking one-by-one and
-         * exiting as soon as one is true. I assume this is because of some optimisations
-         * the compiler is doing under the hood.*/
         Colour::White => {
             //leapers then sliders
             BP_ATTACKS[square] & board.bitboards[WP] != 0
@@ -247,7 +244,7 @@ impl MoveList {
                     WR | BR => get_rook_attacks(lsb, board.occupancies[BOTH]),
                     WQ | BQ => get_queen_attacks(lsb, board.occupancies[BOTH]),
                     WK | BK => K_ATTACKS[lsb],
-                    _ => panic!("this is impossible"),
+                    _ => unreachable!(),
                 };
                 match board.side_to_move {
                     Colour::White => attacks &= !board.occupancies[WHITE], //remove attacks on own pieces
@@ -352,7 +349,7 @@ impl MoveList {
                     }
                     WK => K_ATTACKS[lsb] & board.occupancies[BLACK],
                     BK => K_ATTACKS[lsb] & board.occupancies[WHITE],
-                    _ => panic!("this is impossible"),
+                    _ => unreachable!(),
                 };
                 while attacks > 0 {
                     let lsb_attack = lsfb(attacks);
@@ -410,7 +407,7 @@ impl MoveList {
             if pseudo_legal.moves[i].is_null() {
                 break;
             }
-            if is_legal(pseudo_legal.moves[i], b) {
+            if b.is_legal(pseudo_legal.moves[i]) {
                 legal.moves[last] = pseudo_legal.moves[i];
                 last += 1;
             }
@@ -507,183 +504,35 @@ pub fn get_smallest_attack(b: &mut Board, square: usize) -> Move {
     NULL_MOVE
 }
 
-/* I don't think checking all edge cases separately is actually faster
-but code to detect pins might be useful in the future */
+pub const fn in_between(mut sq1: usize, mut sq2: usize) -> u64 {
+    if sq1 == sq2 {
+        return 0u64;
+    } else if sq1 > sq2 {
+        let temp = sq2;
+        sq2 = sq1;
+        sq1 = temp;
+    }
 
-pub fn get_pin_rays(b: &Board) -> Vec<u64> {
-    let mut res = vec![];
-    match b.side_to_move {
-        Colour::White => {
-            let king_sq = lsfb(b.bitboards[WK]);
-            let (mut tb, mut tr) = (
-                b.bitboards[BB] | b.bitboards[BQ],
-                b.bitboards[BR] | b.bitboards[BQ],
-            );
+    let dx = file(sq2) as i8 - file(sq1) as i8;
+    let dy = rank(sq2) as i8 - rank(sq1) as i8;
 
-            while tb > 0 {
-                let sq = lsfb(tb);
-                if rank(sq) == rank(king_sq) || file(sq) == file(king_sq) {
-                    tb = pop_bit(sq, tb);
-                    continue;
-                }
-                let between = RAY_BETWEEN[sq][king_sq];
-                let maybe_pin_ray = (between ^ b.bitboards[WK]) ^ set_bit(sq, 0);
-                if count(maybe_pin_ray & b.occupancies[WHITE]) == 1
-                    && count(maybe_pin_ray & b.occupancies[BLACK]) == 0
-                {
-                    res.push(between);
-                }
+    let orthogonal = dx == 0 || dy == 0;
+    let diagonal = dx.abs() == dy.abs();
 
-                tb = pop_bit(sq, tb);
-            }
+    if !(orthogonal || diagonal) {
+        return 0u64;
+    }
 
-            while tr > 0 {
-                let sq = lsfb(tr);
-                if rank(sq) != rank(king_sq) && file(sq) != file(king_sq) {
-                    tr = pop_bit(sq, tr);
-                    continue;
-                }
-                let between = RAY_BETWEEN[sq][king_sq];
-                let maybe_pin_ray = (between ^ b.bitboards[WK]) ^ set_bit(sq, 0);
-                if count(maybe_pin_ray & b.occupancies[WHITE]) == 1
-                    && count(maybe_pin_ray & b.occupancies[BLACK]) == 0
-                {
-                    res.push(between);
-                }
+    let (dx, dy) = (dx.signum(), dy.signum());
+    let (dx, dy) = (dx, dy * 8);
 
-                tr = pop_bit(sq, tr);
-            }
-        }
-        Colour::Black => {
-            let king_sq = lsfb(b.bitboards[BK]);
-            let (mut tb, mut tr) = (
-                b.bitboards[WB] | b.bitboards[WQ],
-                b.bitboards[WR] | b.bitboards[WQ],
-            );
+    let mut res = 0u64;
 
-            while tb > 0 {
-                let sq = lsfb(tb);
-                if rank(sq) == rank(king_sq) || file(sq) == file(king_sq) {
-                    tb = pop_bit(sq, tb);
-                    continue;
-                }
-                let between = RAY_BETWEEN[sq][king_sq];
-                let maybe_pin_ray = (between ^ b.bitboards[BK]) ^ set_bit(sq, 0);
-                if count(maybe_pin_ray & b.occupancies[BLACK]) == 1
-                    && count(maybe_pin_ray & b.occupancies[WHITE]) == 0
-                {
-                    res.push(between);
-                }
-
-                tb = pop_bit(sq, tb);
-            }
-
-            while tr > 0 {
-                let sq = lsfb(tr);
-                if rank(sq) != rank(king_sq) && file(sq) != file(king_sq) {
-                    tr = pop_bit(sq, tr);
-                    continue;
-                }
-                let between = RAY_BETWEEN[sq][king_sq];
-                let maybe_pin_ray = (between ^ b.bitboards[BK]) ^ set_bit(sq, 0);
-                if count(maybe_pin_ray & b.occupancies[BLACK]) == 1
-                    && count(maybe_pin_ray & b.occupancies[WHITE]) == 0
-                {
-                    res.push(between);
-                }
-
-                tr = pop_bit(sq, tr);
-            }
-        }
+    while ((sq1 as i8 + dx + dy) as usize) < sq2 {
+        res |= set_bit((sq1 as i8 + dx + dy) as usize, 0);
+        sq1 = (sq1 as i8 + dx + dy) as usize;
     }
     res
-}
-
-pub const fn in_between(sq1: usize, sq2: usize) -> u64 {
-    if sq1 == sq2 {
-        return 1u64 << sq1;
-    }
-
-    let file1 = file(sq1);
-    let rank1 = rank(sq1);
-    let file2 = file(sq2);
-    let rank2 = rank(sq2);
-
-    if rank1 == rank2 {
-        let min_file;
-        let max_file;
-        if file1 < file2 {
-            min_file = file1;
-            max_file = file2;
-        } else {
-            min_file = file2;
-            max_file = file1;
-        }
-
-        let mut bitboard: u64 = 0;
-        let mut file = min_file;
-        while file <= max_file {
-            let sq = rank1 * 8 + file;
-            bitboard |= 1u64 << sq;
-            file += 1;
-        }
-        return bitboard;
-    }
-
-    if file1 == file2 {
-        let min_rank;
-        let max_rank;
-        if rank1 < rank2 {
-            min_rank = rank1;
-            max_rank = rank2;
-        } else {
-            min_rank = rank2;
-            max_rank = rank1;
-        }
-
-        let mut bitboard: u64 = 0;
-        let mut rank = min_rank;
-        while rank <= max_rank {
-            let sq = rank * 8 + file1;
-            bitboard |= 1u64 << sq;
-            rank += 1;
-        }
-        return bitboard;
-    }
-
-    let file_diff = if file1 > file2 {
-        file1 - file2
-    } else {
-        file2 - file1
-    };
-    let rank_diff = if rank1 > rank2 {
-        rank1 - rank2
-    } else {
-        rank2 - rank1
-    };
-
-    if file_diff == rank_diff {
-        let file_step: i8 = if file2 > file1 { 1 } else { -1 };
-        let rank_step: i8 = if rank2 > rank1 { 1 } else { -1 };
-
-        let mut f = file1 as i8;
-        let mut r = rank1 as i8;
-        let mut bitboard: u64 = 0;
-
-        while f >= 0 && f <= 7 && r >= 0 && r <= 7 {
-            let sq = (r * 8 + f) as u8;
-            bitboard |= 1u64 << sq;
-
-            if f == file2 as i8 && r == rank2 as i8 {
-                return bitboard;
-            }
-
-            f += file_step;
-            r += rank_step;
-        }
-    }
-
-    0
 }
 
 pub static RAY_BETWEEN: [[u64; 64]; 64] = {
@@ -703,14 +552,15 @@ pub static RAY_BETWEEN: [[u64; 64]; 64] = {
 pub fn check_en_passant(m: Move, b: &Board) -> bool {
     //checks en passant edge case where en passant reveals check on the king
     match m.piece_moved(&b) {
-        0 => {
+        WP => {
             let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[BOTH]);
             relevant_blockers = pop_bit(m.square_to() - 8, relevant_blockers);
+
             get_rook_attacks(lsfb(b.bitboards[WK]), relevant_blockers)
                 & (b.bitboards[BR] | b.bitboards[BQ])
                 == 0
         }
-        6 => {
+        BP => {
             let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[BOTH]);
             relevant_blockers = pop_bit(m.square_to() + 8, relevant_blockers);
             get_rook_attacks(lsfb(b.bitboards[BK]), relevant_blockers)
@@ -719,68 +569,4 @@ pub fn check_en_passant(m: Move, b: &Board) -> bool {
         }
         _ => unreachable!(),
     }
-}
-
-pub fn legal_non_check_evasion(m: Move, b: &Board, pin_rays: &[u64]) -> bool {
-    //separate function used to generate check evasions
-    for r in pin_rays {
-        //check that not moving pinned piece out of pin ray
-        if set_bit(m.square_from(), 0) & r > 0
-            && set_bit(m.square_to(), 0) & r == 0
-            && piece_type(m.piece_moved(b)) != KING
-        {
-            return false;
-        }
-    }
-
-    if m.piece_moved(&b) == WK {
-        //check that king isn't moving into check
-        let mut black_attacks = 0u64;
-        for i in BP..=BK {
-            let mut piece_bb = b.bitboards[i];
-            let relevant_blockers = b.occupancies[BOTH] ^ b.bitboards[WK];
-            //king blocking slider attacks doesn't count because it can move back
-            //into a new attack from the same slider
-            while piece_bb > 0 {
-                let sq = lsfb(piece_bb);
-                black_attacks |= match i {
-                    6 => BP_ATTACKS[sq],
-                    7 => N_ATTACKS[sq],
-                    8 => get_bishop_attacks(sq, relevant_blockers),
-                    9 => get_rook_attacks(sq, relevant_blockers),
-                    10 => get_queen_attacks(sq, relevant_blockers),
-                    11 => K_ATTACKS[sq],
-                    _ => unreachable!(),
-                };
-                piece_bb = pop_bit(sq, piece_bb);
-            }
-        }
-        return set_bit(m.square_to(), 0) & black_attacks == 0;
-    } else if m.piece_moved(&b) == BK {
-        let mut white_attacks = 0u64;
-        for i in WP..=WK {
-            let mut piece_bb = b.bitboards[i];
-            let relevant_blockers = b.occupancies[BOTH] ^ b.bitboards[BK];
-            //king blocking slider attacks doesn't count because it can move back
-            //into a new attack from the same slider
-            while piece_bb > 0 {
-                let sq = lsfb(piece_bb);
-                white_attacks |= match i {
-                    0 => WP_ATTACKS[sq],
-                    1 => N_ATTACKS[sq],
-                    2 => get_bishop_attacks(sq, relevant_blockers),
-                    3 => get_rook_attacks(sq, relevant_blockers),
-                    4 => get_queen_attacks(sq, relevant_blockers),
-                    5 => K_ATTACKS[sq],
-                    _ => unreachable!(),
-                };
-                piece_bb = pop_bit(sq, piece_bb);
-            }
-        }
-        return set_bit(m.square_to(), 0) & white_attacks == 0;
-    } else if m.is_en_passant() {
-        //special case where en passant capture creates removes 2 pawns from 1 rank -> discovered check
-        return check_en_passant(m, b);
-    }
-    true
 }

@@ -1,5 +1,6 @@
 use crate::helper::*;
-use crate::movegen::is_attacked;
+use crate::magic::*;
+use crate::movegen::*;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Board {
@@ -13,6 +14,8 @@ pub struct Board {
     pub ply: usize,
     pub last_move_null: bool,
     pub hash_key: u64,
+    pub checkers: u64,
+    pub pinned: u64,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -61,6 +64,8 @@ impl Board {
             ply: 0,
             last_move_null: false,
             hash_key: 0,
+            checkers: 0,
+            pinned: 0,
         };
 
         let mut board_fen: String = String::new();
@@ -161,6 +166,8 @@ impl Board {
 
         new_board.occupancies[BOTH] = new_board.occupancies[WHITE] | new_board.occupancies[BLACK];
 
+        new_board.compute_checkers_and_pins();
+
         new_board
     }
 
@@ -248,23 +255,6 @@ impl Board {
             == 0
     }
 
-    pub fn is_check(&self) -> bool {
-        match self.side_to_move {
-            //used in both search extensions and LMR
-            Colour::White => is_attacked(lsfb(self.bitboards[WK]), Colour::Black, self),
-            Colour::Black => is_attacked(lsfb(self.bitboards[BK]), Colour::White, self),
-        }
-    }
-
-    //check if a move leaves us in check
-    pub fn is_still_check(&self) -> bool {
-        match self.side_to_move {
-            //used in both search extensions and LMR
-            Colour::White => is_attacked(lsfb(self.bitboards[BK]), Colour::White, self),
-            Colour::Black => is_attacked(lsfb(self.bitboards[WK]), Colour::Black, self),
-        }
-    }
-
     pub fn fen(&self) -> String {
         let mut fen = String::new();
         let mut empty_count = 0;
@@ -349,5 +339,37 @@ impl Board {
         fen += format!(" {}", self.ply % 2 + 1).as_str();
 
         fen
+    }
+
+    //used when we take in the board from a fen
+    fn compute_checkers_and_pins(&mut self) {
+        let colour = self.side_to_move;
+        let our_king = lsfb(
+            self.bitboards[match colour {
+                Colour::White => WK,
+                Colour::Black => BK,
+            }],
+        );
+
+        let mut their_attackers = if colour == Colour::White {
+            self.occupancies[BLACK]
+                & ((BISHOP_EDGE_RAYS[our_king] & (self.bitboards[BB] | self.bitboards[BQ]))
+                    | ROOK_EDGE_RAYS[our_king] & (self.bitboards[BR] | self.bitboards[BQ]))
+        } else {
+            self.occupancies[WHITE]
+                & ((BISHOP_EDGE_RAYS[our_king] & (self.bitboards[WB] | self.bitboards[WQ]))
+                    | ROOK_EDGE_RAYS[our_king] & (self.bitboards[WR] | self.bitboards[WQ]))
+        };
+
+        while their_attackers > 0 {
+            let sq = lsfb(their_attackers);
+            let ray_between = RAY_BETWEEN[sq][our_king] & self.occupancies[BOTH];
+            match count(ray_between) {
+                0 => self.checkers |= set_bit(sq, 0),
+                1 => self.pinned |= ray_between,
+                _ => {}
+            }
+            their_attackers = pop_bit(sq, their_attackers);
+        }
     }
 }
