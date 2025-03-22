@@ -52,18 +52,18 @@ I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lich
   + Some other stuff
 
 ## Todo:
-- faster perft results (big room for improvement here)
+- faster perft results
 - tune thresholds in search function
 - endgame tablebases
 - NNUE
 
 ## Usage:
 - [Download Rust](https://www.rust-lang.org/)
-- Build and run the project (NOTE: you must use ```--release``` mode or the magic bitboards will not work)
+- Build and run the project using ```make run```
 - connect to a UCI gui such as CuteChess or Arena
 
 ## Acknowledgements
 Here are some of the many resources without which this engine would be much less strong:
 - [Chess Programming Wiki](https://www.chessprogramming.org/Main_Page)
 - [BBC Chess Engine](https://github.com/maksimKorzh/bbc) + videos
-- Most of all, open source chess engines such as Stockfish, Ethereal and Weiss which have extremely clear and helpful documentation 
+- Open source chess projects such as Ethereal, Weiss and Cozy Chess, which have extremely clear and helpful documentation
