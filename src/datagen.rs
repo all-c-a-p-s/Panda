@@ -32,8 +32,8 @@ fn is_terminal(eval: i32) -> bool {
     eval.abs() > INFINITY / 2
 }
 
-fn game_result(legal_moves: &MoveList, board: &Board, history: &Vec<u64>) -> Option<f32> {
-    if legal_moves.moves[0].is_null() {
+fn game_result(found_move: bool, board: &Board, history: &Vec<u64>) -> Option<f32> {
+    if !found_move {
         match board.side_to_move {
             Colour::White => return Some(if board.checkers != 0 { 0.0 } else { 0.5 }),
             Colour::Black => return Some(if board.checkers != 0 { 1.0 } else { 0.5 }),
@@ -51,26 +51,22 @@ fn game_result(legal_moves: &MoveList, board: &Board, history: &Vec<u64>) -> Opt
 
 pub fn play_one_game() -> Vec<(String, i32, f32)> {
     let mut board = Board::from(STARTPOS);
-    #[allow(unused_mut)]
     let mut selected_fens = vec![];
 
+    //suggested by creator of bullet that you can add all positions that pass through basic filter
     let first_pick = OPENING_PLIES + 1;
     let pick_interval = 1;
 
     let mut history = vec![];
 
     #[allow(unused)]
-    let mut legal_moves = MoveList::empty();
+    let mut moves = MoveList::empty();
     #[allow(unused)]
     let mut result = UNKNOWN_RESULT;
 
     loop {
-        legal_moves = MoveList::gen_legal(&mut board);
-
-        if let Some(r) = game_result(&legal_moves, &board, &history) {
-            result = r;
-            break;
-        }
+        moves = MoveList::gen_moves(&mut board);
+        let mut found_move = false;
 
         let (mut s, mut chosen_move) = (0, NULL_MOVE);
 
@@ -80,7 +76,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
         if board.ply < OPENING_PLIES {
             let mut scores = vec![];
 
-            for m in legal_moves.moves {
+            for m in moves.moves {
                 history.push(board.hash_key);
                 if m.is_null() {
                     break;
@@ -89,6 +85,8 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
                 let Ok(commit) = board.try_move(m) else {
                     continue;
                 };
+
+                found_move = true;
 
                 let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10));
                 searcher.do_pruning = false;
@@ -120,10 +118,15 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
 
             s = move_data.eval;
             chosen_move = move_data.m;
+
+            if !chosen_move.is_null() {
+                found_move = true;
+            }
         }
 
-        if chosen_move.is_null() {
-            return selected_fens;
+        if let Some(r) = game_result(found_move, &board, &history) {
+            result = r;
+            break;
         }
 
         if s > 1000 && count(board.occupancies[BOTH]) < 6 {
@@ -142,7 +145,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
             && (board.ply - first_pick) % pick_interval == 0
             && !best.is_capture(&board)
             && !is_terminal(s)
-            && !board.checkers == 0
+            && board.checkers == 0
         {
             let fen = board.fen();
 
@@ -183,7 +186,7 @@ pub fn play_multiple_games(num_games: usize, num_threads: usize) -> Vec<(String,
             for _ in 0..thread_games {
                 match std::panic::catch_unwind(|| play_one_game()) {
                     Ok(game_results) => results.extend(game_results),
-                    Err(_) => println!("ERROR: a game panicked (skipped)"),
+                    Err(_) => {}
                 }
             }
 
@@ -204,7 +207,7 @@ pub fn play_multiple_games(num_games: usize, num_threads: usize) -> Vec<(String,
     all_results
 }
 
-fn next_checkpoint(path: &str, duration: Duration) -> std::io::Result<()> {
+fn next_checkpoint(path: &str, duration: Duration) -> Result<i32, std::io::Error> {
     let mut file = if let Ok(f) = std::fs::OpenOptions::new()
         .write(true)
         .append(true)
@@ -254,7 +257,7 @@ fn next_checkpoint(path: &str, duration: Duration) -> std::io::Result<()> {
     pb.finish();
 
     println!("Finished checkpoint. Added {} entries.", added);
-    Ok(())
+    Ok(added)
 }
 
 //generate data for a set amount of time so that I can leave it generating data when I can
@@ -263,12 +266,15 @@ fn next_checkpoint(path: &str, duration: Duration) -> std::io::Result<()> {
 pub fn gen_data(path: &str, duration: Duration) -> std::io::Result<()> {
     let mut remaining = duration;
 
-    //run it it
+    let mut added = 0;
+
+    //run it in 10 minute chunks so that if I need to exit with <Ctrl-C>
     while remaining > Duration::from_secs(0) {
         let t = std::cmp::min(Duration::from_secs(60 * 10), remaining);
-        next_checkpoint(path, t)?;
+        added += next_checkpoint(path, t)?;
         remaining -= t;
     }
 
+    println!("Done generating data. {} entries added in total.", added);
     Ok(())
 }

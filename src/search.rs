@@ -143,11 +143,7 @@ fn reduction_ok(tactical: bool, in_check: bool) -> bool {
 //make null move for NMP
 //we have to update pinners but not checkers since NMP is never done while in check
 fn make_null_move(b: &mut Board) -> NullMoveUndo {
-    //returns en passant reset
-    b.side_to_move = match b.side_to_move {
-        Colour::White => Colour::Black,
-        Colour::Black => Colour::White,
-    };
+    b.side_to_move = b.side_to_move.opponent();
     b.ply += 1;
     b.last_move_null = true;
 
@@ -458,7 +454,7 @@ impl Searcher {
 
                 /*
                  * Null move pruning: if we cannot improve our position with 2 moves in a row,
-                 * then the first of these movees is probably bad (exception is zugzwang)
+                 * then the first of these moves is probably bad (exception is zugzwang)
                  * the third condition is a technique I found in various strong engines
                  * (SF, Obsidian etc.)
                  * */

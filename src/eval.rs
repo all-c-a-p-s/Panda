@@ -670,6 +670,7 @@ fn evaluate_king(b: &Board, phase_score: i32, colour: Colour) -> i32 {
         Colour::Black => b.bitboards[BK],
     };
     let king_square = lsfb(king_bb);
+
     king_eval += match colour {
         Colour::White => tapered_score(KING_TABLE[MIRROR[king_square]], phase_score),
         Colour::Black => tapered_score(KING_TABLE[king_square], phase_score),

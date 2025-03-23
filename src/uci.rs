@@ -294,7 +294,7 @@ fn parse_perft(command: &str, position: &mut Board) {
 
     if let Ok(x) = words[2].parse::<usize>() {
         let start = Instant::now();
-        let nodes = perft(x, position, Some(x));
+        let nodes = perft::<true>(x, position, Some(x));
         let time = start.elapsed().as_millis() as usize;
 
         let nps = if time == 0 {

@@ -269,7 +269,7 @@ impl Board {
                     self.pieces_array[H8] = BR;
                 }
 
-                _ => panic!("castling to invalid square in undo_move()"),
+                _ => unreachable!(),
             }
         }
 
@@ -344,6 +344,7 @@ impl Board {
         let (from, to) = (m.square_from(), m.square_to());
         let piece_moved = self.pieces_array[from];
         let victim = self.pieces_array[to];
+
         let colour = self.side_to_move;
 
         let enemy_king = match colour {
@@ -529,6 +530,7 @@ impl Board {
 
         self.side_to_move = self.side_to_move.opponent();
         self.ply += 1;
+
         commit
     }
 
@@ -563,7 +565,10 @@ impl Board {
         match piece_type(piece_moved) {
             PAWN => {
                 if m.is_en_passant() {
-                    check_en_passant(m, &self)
+                    let taken = if piece_moved == WP { to - 8 } else { to + 8 };
+                    //exception here since you can take the pawn giving check en passant
+                    (target_squares & set_bit(to, 0) > 0 || lsfb(self.checkers) == taken)
+                        && check_en_passant(m, &self)
                 } else {
                     target_squares & set_bit(to, 0) > 0
                 }

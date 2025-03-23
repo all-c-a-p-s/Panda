@@ -245,6 +245,8 @@ impl Board {
         } else {
             println!("En passant: NONE");
         }
+
+        println!("FEN: {}", self.fen());
     }
 
     pub fn is_kp_endgame(&self) -> bool {

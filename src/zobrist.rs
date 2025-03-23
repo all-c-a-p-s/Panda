@@ -79,11 +79,6 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
     let sq_from = m.square_from();
     let piece = m.piece_moved(&b);
 
-    if piece == NO_PIECE {
-        b.print_board();
-        m.print_move();
-    }
-
     res ^= PIECE_KEYS[sq_from][piece];
     res ^= PIECE_KEYS[sq_to][piece];
 

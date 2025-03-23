@@ -24,7 +24,7 @@ const K: f32 = 0.99;
 
 //need to tune parameters at a time because otherwise too many chromosomes
 //for ga to be effective
-pub const INDICES_TO_TUNE: &'static [usize] = &[5];
+pub const INDICES_TO_TUNE: &'static [usize] = &[11];
 
 pub const PAWN_VALUE_IDX: usize = 0;
 pub const KNIGHT_VALUE_IDX: usize = 1;
