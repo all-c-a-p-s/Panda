@@ -43,18 +43,24 @@ enum Mode {
     Uci,
 }
 
-const MODE: Mode = Mode::Datagen;
+const MODE: Mode = Mode::Uci;
 const TUNING_METHOD: TuneType = TuneType::Genetic;
 
 #[allow(unused)]
 const ONE_HOUR: u64 = 3600;
 const DATAGEN_PATH: &'static str = "/Users/seba/rs/Panda/marlinflow/trainer/data/data230325.txt";
-//running entry count: 0
+//running entry count: 1.4M
 //this comment is here so I don't have to load the whole file into a string to count entries
 //instead I keep track of the number of entries added each session
 
+//Using datagen for perft
+//if you're trying to debug then just have a pub static mut which is the fen of the last position
+//to be searched
+//
+//also remember to filter out en passant in datagen
+
 fn main() -> Result<(), Box<dyn Error>> {
-    std::env::set_var("RUST_BACKTRACE", "1");
+    //std::env::set_var("RUST_BACKTRACE", "1");
     init_all();
 
     match MODE {
@@ -68,7 +74,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         Mode::Profile => full_perft(),
         Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(ONE_HOUR * 12))?,
-        Mode::Debug => {}
+        Mode::Debug => {
+            let _ = play_one_game();
+        }
         Mode::Db => inspect_db("/Users/seba/rs/Panda/data/2021-07-31-lichess-evaluations-37MM.db")?,
     };
 

@@ -531,6 +531,10 @@ impl Board {
         self.side_to_move = self.side_to_move.opponent();
         self.ply += 1;
 
+        unsafe {
+            REPETITION_TABLE[self.ply] = self.hash_key;
+        }
+
         commit
     }
 

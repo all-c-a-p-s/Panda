@@ -11,6 +11,23 @@ const OPENING_PLIES: usize = 16;
 
 const BATCH_SIZE: usize = 64;
 
+pub static mut CURRENT_BOARD: Board = Board {
+    bitboards: [0; 12],
+    occupancies: [0; 3],
+    pieces_array: [0; 64],
+    castling: 0,
+    en_passant: NO_SQUARE,
+    side_to_move: Colour::White,
+    checkers: 0,
+    pinned: 0,
+    hash_key: 0,
+    fifty_move: 0,
+    last_move_null: false,
+    ply: 0,
+};
+
+pub static mut PREVIOUS_BOARD: Board = unsafe { CURRENT_BOARD };
+
 const UNKNOWN_RESULT: f32 = -1.0;
 //if we find this in the data file we know there's an error
 
@@ -160,6 +177,11 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
         }
 
         board.play_unchecked(chosen_move);
+
+        unsafe {
+            PREVIOUS_BOARD = CURRENT_BOARD;
+            CURRENT_BOARD = board;
+        }
     }
 
     for x in selected_fens.iter_mut() {
@@ -186,7 +208,14 @@ pub fn play_multiple_games(num_games: usize, num_threads: usize) -> Vec<(String,
             for _ in 0..thread_games {
                 match std::panic::catch_unwind(|| play_one_game()) {
                     Ok(game_results) => results.extend(game_results),
-                    Err(_) => {}
+                    Err(_) => unsafe {
+                        println!("CURRENT BOARD:");
+                        #[allow(static_mut_refs)]
+                        CURRENT_BOARD.print_board();
+                        println!("PREVIOUS BOARD:");
+                        #[allow(static_mut_refs)]
+                        PREVIOUS_BOARD.print_board();
+                    },
                 }
             }
 
@@ -242,7 +271,7 @@ fn next_checkpoint(path: &str, duration: Duration) -> Result<i32, std::io::Error
         .progress_chars("##-"),
     );
     while start.elapsed() < duration {
-        let results = play_multiple_games(BATCH_SIZE, thread_count);
+        let results = play_multiple_games(BATCH_SIZE, 1);
 
         for result in &results {
             writeln!(file, "{} | {} | {:.1}", result.0, result.1, result.2)?;

@@ -575,6 +575,7 @@ impl Searcher {
 
             //A singular move is a move which seems to be forced or at least much stronger than
             //others. We should therefore extend to investigate it further.
+
             let maybe_singular = !root
                 && depth >= 8
                 && self.info.excluded.is_none()
@@ -792,6 +793,8 @@ impl Searcher {
         };
 
         captures.order_moves(position, self, &best_move);
+
+        //TODO: try skipping quiets after we've proved we're not mated and we've seen a few
 
         for c in captures.moves {
             if c.is_null() {
