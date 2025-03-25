@@ -1,0 +1,78 @@
+\documentclass{paper}
+\usepackage{algpseudocode}
+
+\title{Considering Uncertainty in Chess Engine Evaluation}
+\author{Sebastiano Rebonato-Scott}
+\date{March 2025}
+
+\setlength{\parindent}{0pt}
+
+\begin{document}
+
+\maketitle
+
+\section{Abstract}
+
+We should prefer a position which we are certain is +2 to a position which we think is +3 but we are not sure. What we should aim to maximise in a chess game is not the evaluation with respect to our side, but our expected score from the game. I define the expected score as the number of points (0 for loss, 0.5 for draw, 1 for win) which we predict to obtain from this game. \\
+
+Considering our uncertainty in the evaluation is important because the expected score from a game does not increase linearly with evaluation. For instance, the difference between the expected score from a position which is +0.5 and a position which is -0.5 is very significant, while the difference in expected score from a position which is +9 and one which is +10 is tiny. Therefore, the expected score from a position which is +2 (± 0.2) to a position which is +3 (±2.5).
+
+\section{Implementation}
+
+The aim is to create a function W(p) which is inputted certain features of a position p, and outputs a weight $w \subset (0, \infty)$.
+
+\subsection{Obtaining Data}
+
+Suggested in this paper are two methods of obtaining data as to the uncertainty of various positions.
+
+\subsubsection{Method 1: WDL prediction}
+
+Positions in which the static evaluation is a poor predictor of the result of the game are high in uncertainty.
+
+\subsubsection{Method 2: Low / High Search Depth}
+
+Positions in which the evaluation returned from a low depth search is very different to the evaluation returned from a high depth search are high in uncertainty.
+
+\subsection{Loss Function}
+
+Let WDL(x) be a function which maps the evaluation of a position to its expected score. This function must:
+
+\begin{itemize}
+	\item be strictly increasing
+	\item be S-shaped
+	\item have range [0, 1]
+\end{itemize}
+
+Let S(p) be the static evaluation of a position p. \\
+Let H(p) be the evaluation returned by a high depth search of p. \\
+\\
+To compute the loss of a function W(p) with method 2:
+
+\begin{algorithmic}
+	\State $T \gets 0$
+	\ForAll{$ \textrm{positions in dataset}$}
+	\State $a \gets H(p)$
+
+	\State $w \gets W(p)$
+	\State $b \gets S(p) \cdot w$
+
+	\State $\Delta \gets WDL(b) - WDL(a)$
+	\State $T = T + \Delta$
+	\EndFor
+
+	\Return $T$
+\end{algorithmic}
+
+If method 1 is used instead then H(p) should be replaced with the eventual result of the game which the position came from.
+
+\subsection{Creating W(p)}
+
+I will first experiment with a handcrafted approach to implementing W(p), tuned using the loss function above. Some features which should be inputted are:
+\begin{itemize}
+	\item king safety of both sides
+	\item total material of both sides
+	\item mobility of pieces (trapped pieces can lead to big misevaluations)
+	\item whether or not the position is check
+\end{itemize}
+
+\end{document}

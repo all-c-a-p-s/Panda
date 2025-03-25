@@ -207,6 +207,7 @@ impl MoveList {
         first_unused
     }
 
+    //TODO: generate moves by piece one at a time / staged move generation
     pub fn gen_moves(board: &Board) -> Self {
         let (min, max) = match board.side_to_move {
             Colour::White => (WP, BP),

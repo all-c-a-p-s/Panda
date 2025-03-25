@@ -12,6 +12,7 @@ debug = true
 colored = "3.0.0"
 indicatif = "0.17.11"
 lazy_static = "1.4.0"
+num_cpus = "1.16.0"
 polars = "0.46.0"
 rand = "0.8.5"
 rand_chacha = "0.3.1"

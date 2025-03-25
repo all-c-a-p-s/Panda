@@ -980,7 +980,7 @@ pub fn see_test() {
     println!("see test passed");
 }
 
-//same as MG evaluation weights
+//same as MG evaluation weights (haven't updated these in a while)
 const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, INFINITY];
 
 impl Move {

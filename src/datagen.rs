@@ -11,23 +11,6 @@ const OPENING_PLIES: usize = 16;
 
 const BATCH_SIZE: usize = 64;
 
-pub static mut CURRENT_BOARD: Board = Board {
-    bitboards: [0; 12],
-    occupancies: [0; 3],
-    pieces_array: [0; 64],
-    castling: 0,
-    en_passant: NO_SQUARE,
-    side_to_move: Colour::White,
-    checkers: 0,
-    pinned: 0,
-    hash_key: 0,
-    fifty_move: 0,
-    last_move_null: false,
-    ply: 0,
-};
-
-pub static mut PREVIOUS_BOARD: Board = unsafe { CURRENT_BOARD };
-
 const UNKNOWN_RESULT: f32 = -1.0;
 //if we find this in the data file we know there's an error
 
@@ -177,11 +160,6 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
         }
 
         board.play_unchecked(chosen_move);
-
-        unsafe {
-            PREVIOUS_BOARD = CURRENT_BOARD;
-            CURRENT_BOARD = board;
-        }
     }
 
     for x in selected_fens.iter_mut() {
@@ -208,14 +186,7 @@ pub fn play_multiple_games(num_games: usize, num_threads: usize) -> Vec<(String,
             for _ in 0..thread_games {
                 match std::panic::catch_unwind(|| play_one_game()) {
                     Ok(game_results) => results.extend(game_results),
-                    Err(_) => unsafe {
-                        println!("CURRENT BOARD:");
-                        #[allow(static_mut_refs)]
-                        CURRENT_BOARD.print_board();
-                        println!("PREVIOUS BOARD:");
-                        #[allow(static_mut_refs)]
-                        PREVIOUS_BOARD.print_board();
-                    },
+                    Err(_) => println!("ERROR: a game panicked (skipped)"),
                 }
             }
 
@@ -255,8 +226,6 @@ fn next_checkpoint(path: &str, duration: Duration) -> Result<i32, std::io::Error
         Err(_) => 1, // fallback to single thread
     };
 
-    println!("Starting data generation with {} threads", thread_count);
-
     let start = Instant::now();
 
     let pb = ProgressBar::new(duration.as_secs() as u64);
@@ -271,7 +240,7 @@ fn next_checkpoint(path: &str, duration: Duration) -> Result<i32, std::io::Error
         .progress_chars("##-"),
     );
     while start.elapsed() < duration {
-        let results = play_multiple_games(BATCH_SIZE, 1);
+        let results = play_multiple_games(BATCH_SIZE, thread_count);
 
         for result in &results {
             writeln!(file, "{} | {} | {:.1}", result.0, result.1, result.2)?;
@@ -285,7 +254,6 @@ fn next_checkpoint(path: &str, duration: Duration) -> Result<i32, std::io::Error
     }
     pb.finish();
 
-    println!("Finished checkpoint. Added {} entries.", added);
     Ok(added)
 }
 
@@ -298,10 +266,18 @@ pub fn gen_data(path: &str, duration: Duration) -> std::io::Result<()> {
     let mut added = 0;
 
     //run it in 10 minute chunks so that if I need to exit with <Ctrl-C>
+    //I don't lose hours of work
     while remaining > Duration::from_secs(0) {
         let t = std::cmp::min(Duration::from_secs(60 * 10), remaining);
-        added += next_checkpoint(path, t)?;
+        let added_this_checkpoint = next_checkpoint(path, t)?;
+
+        added += added_this_checkpoint;
         remaining -= t;
+
+        println!(
+            "Checkpoint Entries: {}\nAdded so far: {}\nTime remaining: {:?}\n",
+            added_this_checkpoint, added, remaining
+        );
     }
 
     println!("Done generating data. {} entries added in total.", added);
