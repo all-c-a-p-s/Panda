@@ -1,55 +1,20 @@
 # Panda
-Panda is a chess engine written in Rust (still a work in progress). It is called Panda because:
+Panda is a chess engine written in Rust (still a work in progress). I work on this project for fun when I have the time. It is called Panda because:
 - pandas are black and white like a chess board
 - pandas are pretty cool
 - red pandas are also pretty cool, and they are orange (like Rust)
 
 ![](logo.jpeg)
 
+## What Makes Panda Interesting?
+
+In terms of strength, Panda is pretty unremarkable - currently somewhere around 2450. One fairly original idea is that it considers uncertainty in evaluation of a position instead of just returning one evaluation like most engines do. The intention is that this makes it value practical chances (i.e. expected score from the game) over just maximising its evaluation.
+
 ## Lichess Bot
 
 I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lichess bot for Panda. Unfortunately it probably won't be online that much because I'm hosting it locally.
 
 [Panda Lichess Bot](https://lichess.org/@/BotNickal)
-
-## Features:
-- __Move Generation__
-  - Magic Bitboards
-  - Make/Unmake Approach
-- __Search__
-  - Negamax Search
-  - Quiescence Search
-  - Principal Variation Search
-  - Iterative Deepening
-  - Transposition Table
-  - Aspiration Windows
-  - Internal Iterative Deepening
-  - __Pruning__
-    - Alpha/Beta Pruning
-    - Null Move Pruning
-    - Beta Pruning/Reverse Futility Pruning
-    - Alpha Pruning/Futility Pruning
-    - Razoring into Quiescence Search
-    - SEE Pruning
-    - Mate Distance Pruning
-    - Late Move Reductions
-  - __Move Ordering__
-    - Moves are ordered as follows:
-    - Move from transposition table (if available)
-    - PV Move
-    - Winning captures by SEE (ordered by MVV/LVA)
-    - Killer Moves
-    - Moves Sorted by History Heuristic
-    - Losing captures by SEE (ordered by MVV/LVA)
-    - Underpromotions
-- __Evaluation__
-  - Piece-Square Tables with middlegame and endgame weights
-  - Mobility Calculations
-  - Pawn Structure Evaluation + Passed Pawns
-  - Tapered Evaluation
-  - Mobility Score
-  - King Safety
-  + Some other stuff
 
 ## Todo:
 - faster perft results
