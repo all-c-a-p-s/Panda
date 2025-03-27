@@ -12,6 +12,7 @@ pub mod search;
 pub mod transposition;
 pub mod tuner;
 pub mod uci;
+pub mod uncertainty;
 pub mod zobrist;
 
 use std::error::Error;
@@ -38,12 +39,13 @@ enum Mode {
     Profile,
     Debug,
     Tune,
+    Uncertainty,
     Datagen,
     Db,
     Uci,
 }
 
-const MODE: Mode = Mode::Datagen;
+const MODE: Mode = Mode::Uci;
 const TUNING_METHOD: TuneType = TuneType::Genetic;
 
 #[allow(unused)]
@@ -67,6 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 TuneType::HillClimb => hill_climbing()?,
             };
         }
+        Mode::Uncertainty => uncertainty::genetic_algorithm()?,
         Mode::Profile => full_perft(),
         Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(ONE_HOUR * 14))?,
         Mode::Debug => {}

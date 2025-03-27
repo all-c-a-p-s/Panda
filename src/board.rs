@@ -216,8 +216,8 @@ impl Board {
         }
         println!("  a b c d e f g h\n");
         match self.side_to_move {
-            Colour::White => println!("white to move"),
-            Colour::Black => println!("black to move"),
+            Colour::White => println!("White to move"),
+            Colour::Black => println!("Black to move"),
         };
         let castling_rights: &str = match self.castling {
             0b0000_0000 => "NONE",

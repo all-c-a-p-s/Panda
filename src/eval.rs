@@ -368,17 +368,17 @@ pub const DOUBLED_PAWN_PENALTY: (i32, i32) = (-10, -12); //only given to the fir
 pub const TEMPO: (i32, i32) = (27, 14);
 pub const ROOK_ON_SEVENTH: (i32, i32) = (41, 34);
 
-pub fn game_phase_score(b: &Board) -> i32 {
+pub fn game_phase_score(b: &Board, side: Colour) -> i32 {
     //score in starting position will be 4*1 + 2*2 + 1*2 + 1*2 = 12
     //lower score = closer to endgame
-    (match b.side_to_move {
-        Colour::White => {
+    (match side {
+        Colour::Black => {
             count(b.bitboards[BQ]) * 4
                 + count(b.bitboards[BR]) * 2
                 + count(b.bitboards[BB])
                 + count(b.bitboards[BN])
         }
-        Colour::Black => {
+        Colour::White => {
             count(b.bitboards[WQ]) * 4
                 + count(b.bitboards[WR]) * 2
                 + count(b.bitboards[WB])
@@ -663,7 +663,7 @@ fn evaluate_queens(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     queen_eval
 }
 
-fn evaluate_king(b: &Board, phase_score: i32, colour: Colour) -> i32 {
+pub fn evaluate_king(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     let mut king_eval = 0;
     let king_bb = match colour {
         Colour::White => b.bitboards[WK],
@@ -750,28 +750,57 @@ fn side_has_sufficient_matieral(b: &Board, side: Colour) -> bool {
 
 pub fn evaluate(b: &Board) -> i32 {
     let mut eval: i32 = 0;
-    let phase_score = game_phase_score(b);
+    let phase_score = game_phase_score(b, b.side_to_move.opponent());
 
     eval += evaluate_pawns(b, phase_score, Colour::White);
     eval += evaluate_knights(b, phase_score, Colour::White);
     eval += evaluate_bishops(b, phase_score, Colour::White);
     eval += evaluate_rooks(b, phase_score, Colour::White);
     eval += evaluate_queens(b, phase_score, Colour::White);
-    eval += evaluate_king(b, phase_score, Colour::White);
+
+    let wk_eval = evaluate_king(b, phase_score, Colour::White);
+
+    eval += wk_eval;
 
     eval -= evaluate_pawns(b, phase_score, Colour::Black);
     eval -= evaluate_knights(b, phase_score, Colour::Black);
     eval -= evaluate_bishops(b, phase_score, Colour::Black);
     eval -= evaluate_rooks(b, phase_score, Colour::Black);
     eval -= evaluate_queens(b, phase_score, Colour::Black);
-    eval -= evaluate_king(b, phase_score, Colour::Black);
 
-    let s = tapered_score(TEMPO, phase_score)
+    let bk_eval = evaluate_king(b, phase_score, Colour::Black);
+
+    eval -= bk_eval;
+
+    let winning_side_ksafety = if eval >= 0 { wk_eval } else { bk_eval };
+
+    let king_safety_bucket = match winning_side_ksafety {
+        ..-100 => 0,
+        -100..-50 => 1,
+        -50..-25 => 2,
+        -25..0 => 3,
+        0..25 => 4,
+        25..50 => 5,
+        50..100 => 6,
+        100.. => 7,
+    };
+
+    let mut s = tapered_score(TEMPO, phase_score)
         + match b.side_to_move {
             //return from perspective of side to move
             Colour::White => eval,
             Colour::Black => -eval,
         };
+
+    let losing_side_phase_score = if eval >= 0 {
+        phase_score
+    } else {
+        game_phase_score(&b, b.side_to_move)
+    } as usize;
+
+    s = (s as f32
+        * crate::uncertainty::confidence_weight(losing_side_phase_score, king_safety_bucket, false))
+        as i32;
 
     //TODO: endgame tablebase for better draw detection
     let side_sm = side_has_sufficient_matieral(b, b.side_to_move);

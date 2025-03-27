@@ -756,7 +756,7 @@ impl Individual {
                 let r = rng.gen_range(1..=1000);
 
                 if r <= p {
-                    let delta = rng.gen_range(5..=15);
+                    let delta = rng.gen_range(1..=10);
                     let change = (*v1 * delta) / 100;
 
                     let noise = rng.gen_range(-2..=2);
@@ -770,7 +770,7 @@ impl Individual {
                 let r = rng.gen_range(1..=1000);
 
                 if r <= p {
-                    let delta = rng.gen_range(5..=15);
+                    let delta = rng.gen_range(1..=10);
                     let change = (*v2 * delta) / 100;
 
                     //percentage change
