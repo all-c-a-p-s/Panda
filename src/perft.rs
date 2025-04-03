@@ -12,14 +12,21 @@ pub fn perft<const BULK: bool>(
     }
 
     let mut total = 0;
-    let moves = MoveList::gen_moves(b);
+    let moves = MoveList::gen_moves::<false>(b);
 
     if depth == 1 && BULK {
-        return moves
-            .moves
-            .iter()
-            .filter(|x| b.is_legal(**x) && !x.is_null())
-            .count();
+        let legal = MoveList::gen_legal(b);
+        let mut count = 0;
+        for m in legal.moves {
+            if m.is_null() {
+                break;
+            }
+            count += 1;
+            if Some(1) == reporting_depth {
+                println!("{}: 1", m.uci());
+            }
+        }
+        return count;
     }
 
     for m in moves.moves {

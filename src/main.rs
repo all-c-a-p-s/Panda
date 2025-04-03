@@ -45,7 +45,6 @@ enum Mode {
     Uci,
 }
 
-//11.5s
 const MODE: Mode = Mode::Uci;
 const TUNING_METHOD: TuneType = TuneType::Genetic;
 

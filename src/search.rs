@@ -502,7 +502,7 @@ impl Searcher {
          interfere with move ordering, but my testing seems to show that this ultimately results
          in a net performace gain due to higher NPS.
         */
-        let mut child_nodes = MoveList::gen_moves(position);
+        let mut child_nodes = MoveList::gen_moves::<false>(position);
         child_nodes.order_moves(position, self, &best_move);
 
         let (mut moves_played, mut moves_seen) = (0, 0);
@@ -791,9 +791,9 @@ impl Searcher {
         let mut captures = if in_check {
             //try generating all moves in the case that we're in check because it's unsound to rely
             //on static eval + if could be mate
-            MoveList::gen_moves(position)
+            MoveList::gen_moves::<false>(position)
         } else {
-            MoveList::gen_captures(position)
+            MoveList::gen_moves::<true>(position)
         };
 
         captures.order_moves(position, self, &best_move);

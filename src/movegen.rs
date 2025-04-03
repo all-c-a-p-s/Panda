@@ -205,195 +205,246 @@ impl MoveList {
         first_unused
     }
 
-    //TODO: generate moves by piece one at a time / staged move generation
-    pub fn gen_moves(board: &Board) -> Self {
-        let (min, max) = match board.side_to_move {
-            Colour::White => (WP, BP),
-            Colour::Black => (BP, 12),
-        };
+    pub fn gen_pawn_captures(&mut self, board: &Board, mut first_unused: usize) -> usize {
+        match board.side_to_move {
+            Colour::White => {
+                let mut bitboard = board.bitboards[WP];
 
-        let mut moves = MoveList::empty();
+                while let Some(lsb) = lsfb(bitboard) {
+                    let mut attacks = WP_ATTACKS[lsb]
+                        & match board.en_passant {
+                            NO_SQUARE => board.occupancies[BLACK],
+                            k => set_bit(k, board.occupancies[BLACK]),
+                        };
 
-        let mut first_unused = moves.pawn_push_moves(board, 0);
-        first_unused = moves.castling_moves(board, first_unused);
-
-        for piece in min..max {
-            //pieces of colour to move
-            let mut bitboard = board.bitboards[piece];
-
-            while let Some(lsb) = lsfb(bitboard) {
-                let mut attacks = match piece {
-                    WP => {
-                        WP_ATTACKS[lsb]
-                            & match board.en_passant {
-                                NO_SQUARE => board.occupancies[BLACK],
-                                k => set_bit(k, board.occupancies[BLACK]),
-                            }
-                    } //en passant capture
-                    BP => {
-                        BP_ATTACKS[lsb]
-                            & match board.en_passant {
-                                NO_SQUARE => board.occupancies[WHITE],
-                                k => set_bit(k, board.occupancies[WHITE]),
-                            }
-                    } //or with set en passant square if it is not 64 i.e. none
-                    WN | BN => N_ATTACKS[lsb],
-                    WB | BB => get_bishop_attacks(lsb, board.occupancies[BOTH]),
-                    WR | BR => get_rook_attacks(lsb, board.occupancies[BOTH]),
-                    WQ | BQ => get_queen_attacks(lsb, board.occupancies[BOTH]),
-                    WK | BK => K_ATTACKS[lsb],
-                    _ => unreachable!(),
-                };
-                match board.side_to_move {
-                    Colour::White => attacks &= !board.occupancies[WHITE], //remove attacks on own pieces
-                    Colour::Black => attacks &= !board.occupancies[BLACK],
+                    while let Some(lsb_attack) = lsfb(attacks) {
+                        //promotions that are also captures
+                        if rank(lsb) == 6 {
+                            // white promotion
+                            self.moves[first_unused] =
+                                encode_move(lsb, lsb_attack, QUEEN, PROMOTION_FLAG);
+                            first_unused += 1;
+                            self.moves[first_unused] =
+                                encode_move(lsb, lsb_attack, ROOK, PROMOTION_FLAG);
+                            first_unused += 1;
+                            self.moves[first_unused] =
+                                encode_move(lsb, lsb_attack, BISHOP, PROMOTION_FLAG);
+                            first_unused += 1;
+                            self.moves[first_unused] =
+                                encode_move(lsb, lsb_attack, KNIGHT, PROMOTION_FLAG);
+                            first_unused += 1;
+                        } else if lsb_attack == board.en_passant {
+                            self.moves[first_unused] =
+                                encode_move(lsb, lsb_attack, NO_PIECE, EN_PASSANT_FLAG);
+                            first_unused += 1;
+                        } else {
+                            self.moves[first_unused] =
+                                encode_move(lsb, lsb_attack, NO_PIECE, NO_FLAG);
+                            first_unused += 1;
+                        } //list to return here
+                        attacks = pop_bit(lsb_attack, attacks);
+                    }
+                    bitboard = pop_bit(lsb, bitboard);
                 }
-                while let Some(lsb_attack) = lsfb(attacks) {
-                    //promotions that are also captures
-                    if piece == WP && rank(lsb) == 6 {
-                        // white promotion
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, QUEEN, PROMOTION_FLAG);
-                        first_unused += 1;
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, ROOK, PROMOTION_FLAG);
-                        first_unused += 1;
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, BISHOP, PROMOTION_FLAG);
-                        first_unused += 1;
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, KNIGHT, PROMOTION_FLAG);
-                        first_unused += 1;
-                    } else if piece == BP && rank(lsb) == 1 {
-                        //black promotion
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, QUEEN, PROMOTION_FLAG);
-                        first_unused += 1;
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, ROOK, PROMOTION_FLAG);
-                        first_unused += 1;
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, BISHOP, PROMOTION_FLAG);
-                        first_unused += 1;
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, KNIGHT, PROMOTION_FLAG);
-                        first_unused += 1;
-                    } else if lsb_attack == board.en_passant && piece_type(piece) == PAWN {
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, NO_PIECE, EN_PASSANT_FLAG);
-                        first_unused += 1;
-                    } else {
-                        moves.moves[first_unused] = encode_move(lsb, lsb_attack, NO_PIECE, NO_FLAG);
-                        first_unused += 1;
-                    } //list to return here
-                    attacks = pop_bit(lsb_attack, attacks);
-                }
-                bitboard = pop_bit(lsb, bitboard);
             }
-        }
-        moves
+            Colour::Black => {
+                let mut bitboard = board.bitboards[BP];
+
+                while let Some(lsb) = lsfb(bitboard) {
+                    let mut attacks = BP_ATTACKS[lsb]
+                        & match board.en_passant {
+                            NO_SQUARE => board.occupancies[WHITE],
+                            k => set_bit(k, board.occupancies[WHITE]),
+                        };
+
+                    while let Some(lsb_attack) = lsfb(attacks) {
+                        //promotions that are also captures
+                        if rank(lsb) == 1 {
+                            // white promotion
+                            self.moves[first_unused] =
+                                encode_move(lsb, lsb_attack, QUEEN, PROMOTION_FLAG);
+                            first_unused += 1;
+                            self.moves[first_unused] =
+                                encode_move(lsb, lsb_attack, ROOK, PROMOTION_FLAG);
+                            first_unused += 1;
+                            self.moves[first_unused] =
+                                encode_move(lsb, lsb_attack, BISHOP, PROMOTION_FLAG);
+                            first_unused += 1;
+                            self.moves[first_unused] =
+                                encode_move(lsb, lsb_attack, KNIGHT, PROMOTION_FLAG);
+                            first_unused += 1;
+                        } else if lsb_attack == board.en_passant {
+                            self.moves[first_unused] =
+                                encode_move(lsb, lsb_attack, NO_PIECE, EN_PASSANT_FLAG);
+                            first_unused += 1;
+                        } else {
+                            self.moves[first_unused] =
+                                encode_move(lsb, lsb_attack, NO_PIECE, NO_FLAG);
+                            first_unused += 1;
+                        } //list to return here
+                        attacks = pop_bit(lsb_attack, attacks);
+                    }
+                    bitboard = pop_bit(lsb, bitboard);
+                }
+            }
+        };
+        first_unused
     }
 
-    pub fn gen_captures(board: &mut Board) -> Self {
-        //special capture-only move generation for quiescence search
-        //NOTE: this generates pseudo-legal captures, and they are checked to be legal in place
-        let (min, max) = match board.side_to_move {
-            Colour::White => (WP, BP),
-            Colour::Black => (BP, 12),
+    pub fn gen_knight_moves<const CAPS_ONLY: bool>(
+        &mut self,
+        board: &Board,
+        mut first_unused: usize,
+    ) -> usize {
+        let (piece, occs, opps) = match board.side_to_move {
+            Colour::White => (WN, board.occupancies[WHITE], board.occupancies[BLACK]),
+            Colour::Black => (BN, board.occupancies[BLACK], board.occupancies[WHITE]),
         };
 
+        let mut bitboard = board.bitboards[piece];
+
+        while let Some(lsb) = lsfb(bitboard) {
+            let mut attacks = N_ATTACKS[lsb] & if CAPS_ONLY { opps } else { !occs };
+
+            while let Some(lsb_attack) = lsfb(attacks) {
+                self.moves[first_unused] = encode_move(lsb, lsb_attack, NO_PIECE, NO_FLAG);
+                first_unused += 1;
+                attacks = pop_bit(lsb_attack, attacks);
+            }
+            bitboard = pop_bit(lsb, bitboard);
+        }
+
+        first_unused
+    }
+
+    pub fn gen_bishop_moves<const CAPS_ONLY: bool>(
+        &mut self,
+        board: &Board,
+        mut first_unused: usize,
+    ) -> usize {
+        let (piece, occs, opps) = match board.side_to_move {
+            Colour::White => (WB, board.occupancies[WHITE], board.occupancies[BLACK]),
+            Colour::Black => (BB, board.occupancies[BLACK], board.occupancies[WHITE]),
+        };
+
+        let mut bitboard = board.bitboards[piece];
+
+        while let Some(lsb) = lsfb(bitboard) {
+            let mut attacks = get_bishop_attacks(lsb, board.occupancies[BOTH])
+                & if CAPS_ONLY { opps } else { !occs };
+
+            while let Some(lsb_attack) = lsfb(attacks) {
+                self.moves[first_unused] = encode_move(lsb, lsb_attack, NO_PIECE, NO_FLAG);
+                first_unused += 1;
+                attacks = pop_bit(lsb_attack, attacks);
+            }
+            bitboard = pop_bit(lsb, bitboard);
+        }
+
+        first_unused
+    }
+
+    pub fn gen_rook_moves<const CAPS_ONLY: bool>(
+        &mut self,
+        board: &Board,
+        mut first_unused: usize,
+    ) -> usize {
+        let (piece, occs, opps) = match board.side_to_move {
+            Colour::White => (WR, board.occupancies[WHITE], board.occupancies[BLACK]),
+            Colour::Black => (BR, board.occupancies[BLACK], board.occupancies[WHITE]),
+        };
+
+        let mut bitboard = board.bitboards[piece];
+
+        while let Some(lsb) = lsfb(bitboard) {
+            let mut attacks = get_rook_attacks(lsb, board.occupancies[BOTH])
+                & if CAPS_ONLY { opps } else { !occs };
+
+            while let Some(lsb_attack) = lsfb(attacks) {
+                self.moves[first_unused] = encode_move(lsb, lsb_attack, NO_PIECE, NO_FLAG);
+                first_unused += 1;
+                attacks = pop_bit(lsb_attack, attacks);
+            }
+            bitboard = pop_bit(lsb, bitboard);
+        }
+
+        first_unused
+    }
+
+    pub fn gen_queen_moves<const CAPS_ONLY: bool>(
+        &mut self,
+        board: &Board,
+        mut first_unused: usize,
+    ) -> usize {
+        let (piece, occs, opps) = match board.side_to_move {
+            Colour::White => (WQ, board.occupancies[WHITE], board.occupancies[BLACK]),
+            Colour::Black => (BQ, board.occupancies[BLACK], board.occupancies[WHITE]),
+        };
+
+        let mut bitboard = board.bitboards[piece];
+
+        while let Some(lsb) = lsfb(bitboard) {
+            let mut attacks = get_queen_attacks(lsb, board.occupancies[BOTH])
+                & if CAPS_ONLY { opps } else { !occs };
+
+            while let Some(lsb_attack) = lsfb(attacks) {
+                self.moves[first_unused] = encode_move(lsb, lsb_attack, NO_PIECE, NO_FLAG);
+                first_unused += 1;
+                attacks = pop_bit(lsb_attack, attacks);
+            }
+            bitboard = pop_bit(lsb, bitboard);
+        }
+
+        first_unused
+    }
+
+    pub fn gen_king_moves<const CAPS_ONLY: bool>(
+        &mut self,
+        board: &Board,
+        mut first_unused: usize,
+    ) -> usize {
+        let (piece, occs, opps) = match board.side_to_move {
+            Colour::White => (WK, board.occupancies[WHITE], board.occupancies[BLACK]),
+            Colour::Black => (BK, board.occupancies[BLACK], board.occupancies[WHITE]),
+        };
+
+        let mut bitboard = board.bitboards[piece];
+
+        while let Some(lsb) = lsfb(bitboard) {
+            let mut attacks = K_ATTACKS[lsb] & if CAPS_ONLY { opps } else { !occs };
+
+            while let Some(lsb_attack) = lsfb(attacks) {
+                self.moves[first_unused] = encode_move(lsb, lsb_attack, NO_PIECE, NO_FLAG);
+                first_unused += 1;
+                attacks = pop_bit(lsb_attack, attacks);
+            }
+            bitboard = pop_bit(lsb, bitboard);
+        }
+
+        first_unused
+    }
+
+    //TODO: generate moves by piece one at a time / staged move generation
+    pub fn gen_moves<const CAPS_ONLY: bool>(board: &Board) -> Self {
         let mut moves = MoveList::empty();
 
         let mut first_unused = 0;
-        for piece in min..max {
-            //pieces of colour to move
-            let mut bitboard = board.bitboards[piece];
-
-            while let Some(lsb) = lsfb(bitboard) {
-                let mut attacks = match piece {
-                    //ensuring captures is handled piece-by-piece instead of by colour after
-                    //because otherwise en passant captures get removed
-                    WP => {
-                        WP_ATTACKS[lsb]
-                            & match board.en_passant {
-                                NO_SQUARE => board.occupancies[BLACK],
-                                k => set_bit(k, board.occupancies[BLACK]),
-                            }
-                    } //en passant capture
-                    BP => {
-                        BP_ATTACKS[lsb]
-                            & match board.en_passant {
-                                NO_SQUARE => board.occupancies[WHITE],
-                                k => set_bit(k, board.occupancies[WHITE]),
-                            }
-                    } //or with set en passant square if it is not 64 i.e. none
-                    WN => N_ATTACKS[lsb] & board.occupancies[BLACK],
-                    BN => N_ATTACKS[lsb] & board.occupancies[WHITE],
-                    WB => {
-                        get_bishop_attacks(lsb, board.occupancies[BOTH]) & board.occupancies[BLACK]
-                    }
-                    BB => {
-                        get_bishop_attacks(lsb, board.occupancies[BOTH]) & board.occupancies[WHITE]
-                    }
-                    WR => get_rook_attacks(lsb, board.occupancies[BOTH]) & board.occupancies[BLACK],
-                    BR => get_rook_attacks(lsb, board.occupancies[BOTH]) & board.occupancies[WHITE],
-                    WQ => {
-                        get_queen_attacks(lsb, board.occupancies[BOTH]) & board.occupancies[BLACK]
-                    }
-                    BQ => {
-                        get_queen_attacks(lsb, board.occupancies[BOTH]) & board.occupancies[WHITE]
-                    }
-                    WK => K_ATTACKS[lsb] & board.occupancies[BLACK],
-                    BK => K_ATTACKS[lsb] & board.occupancies[WHITE],
-                    _ => unreachable!(),
-                };
-                while let Some(lsb_attack) = lsfb(attacks) {
-                    if (get_bit(lsb, board.bitboards[WP]) > 0) && rank(lsb) == 6 {
-                        // white promotion
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, QUEEN, PROMOTION_FLAG);
-                        first_unused += 1;
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, ROOK, PROMOTION_FLAG);
-                        first_unused += 1;
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, BISHOP, PROMOTION_FLAG);
-                        first_unused += 1;
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, KNIGHT, PROMOTION_FLAG);
-                        first_unused += 1;
-                    } else if (get_bit(lsb, board.bitboards[BP]) > 0) && rank(lsb) == 1 {
-                        //black promotion
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, QUEEN, PROMOTION_FLAG);
-                        first_unused += 1;
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, ROOK, PROMOTION_FLAG);
-                        first_unused += 1;
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, BISHOP, PROMOTION_FLAG);
-                        first_unused += 1;
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, KNIGHT, PROMOTION_FLAG);
-                        first_unused += 1;
-                    } else if lsb_attack == board.en_passant && piece_type(piece) == PAWN {
-                        moves.moves[first_unused] =
-                            encode_move(lsb, lsb_attack, NO_PIECE, EN_PASSANT_FLAG);
-                        first_unused += 1;
-                    } else {
-                        moves.moves[first_unused] = encode_move(lsb, lsb_attack, NO_PIECE, NO_FLAG);
-                        first_unused += 1;
-                    } //list to return here
-                    attacks = pop_bit(lsb_attack, attacks);
-                }
-                bitboard = pop_bit(lsb, bitboard);
-            }
+        if !CAPS_ONLY {
+            first_unused = moves.pawn_push_moves(board, first_unused);
+            first_unused = moves.castling_moves(board, first_unused);
         }
+        first_unused = moves.gen_pawn_captures(board, first_unused);
+        first_unused = moves.gen_knight_moves::<CAPS_ONLY>(board, first_unused);
+        first_unused = moves.gen_bishop_moves::<CAPS_ONLY>(board, first_unused);
+        first_unused = moves.gen_rook_moves::<CAPS_ONLY>(board, first_unused);
+        first_unused = moves.gen_queen_moves::<CAPS_ONLY>(board, first_unused);
+        _ = moves.gen_king_moves::<CAPS_ONLY>(board, first_unused);
+
         moves
     }
 
     pub fn gen_legal(b: &mut Board) -> Self {
-        let pseudo_legal = MoveList::gen_moves(b);
+        let pseudo_legal = MoveList::gen_moves::<false>(b);
         let mut legal = MoveList {
             moves: [NULL_MOVE; MAX_MOVES],
         };

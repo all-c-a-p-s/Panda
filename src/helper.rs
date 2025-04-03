@@ -48,7 +48,7 @@ pub const QUEEN: usize = 4;
 pub const KING: usize = 5;
 
 pub const NO_SQUARE: usize = 64; //these exist because from my testing using an
-pub const NO_PIECE: usize = 15; //Option<usize> slows down perft
+pub const NO_PIECE: usize = 15; //Option<usize> in board struct slows down perft
 
 pub const MAX_MOVES: usize = 218;
 

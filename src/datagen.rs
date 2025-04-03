@@ -65,7 +65,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
     let mut result = UNKNOWN_RESULT;
 
     loop {
-        moves = MoveList::gen_moves(&mut board);
+        moves = MoveList::gen_moves::<false>(&mut board);
         let mut found_move = false;
 
         let (mut s, mut chosen_move) = (0, NULL_MOVE);

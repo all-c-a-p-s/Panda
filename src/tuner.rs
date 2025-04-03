@@ -660,9 +660,9 @@ impl Individual {
         let in_check = position.checkers != 0;
 
         let mut captures = if in_check {
-            MoveList::gen_moves(position)
+            MoveList::gen_moves::<false>(position)
         } else {
-            MoveList::gen_captures(position)
+            MoveList::gen_moves::<true>(position)
         };
 
         captures.order_moves(position, &Searcher::new(Instant::now()), &NULL_MOVE);
