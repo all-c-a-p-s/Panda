@@ -10,17 +10,10 @@ use utils::math;
 
 #[allow(unused)]
 const LOSING_SIDE_MATERIAL_WEIGHTS: [f32; 13] = [
-    1.075754, 1.0538692, 1.0336324, 1.0452185, 1.0428557, 1.0159496, 1.0, 1.0274405, 1.0, 1.0,
-    0.97144693, 0.9339284, 0.8586135,
+    1.0965039, 1.0757979, 1.0569726, 1.059839, 1.0428557, 1.0292687, 1.0110841, 1.0151744,
+    1.0125952, 1.0, 0.9591061, 0.891087, 0.80261296,
 ];
 //done in same way as phase score
-
-#[allow(unused)]
-const WINNING_SIDE_KING_SAFETY_WEIGHTS: [f32; 8] = [1.0; 8];
-//put into buckets based on king safety eval
-
-#[allow(unused)]
-const WINNING_SIDE_IN_CHECK_WEIGHT: f32 = 1.0406485;
 
 const MUTATION_PROBABILTY: f32 = 0.06;
 const FIRST_GEN_MUTATION_PROBABILITY: f32 = 0.3;
@@ -35,49 +28,24 @@ struct Individual {
 
 /// This function returns a multiplicative constant which we multiply an evaluation by
 /// depending on how confident we are in that evaluation
-#[allow(unused)]
-pub fn confidence_weight(
-    losing_side_phase: usize,
-    winning_side_ksafety_bucket: usize,
-    winning_side_in_check: bool,
-) -> f32 {
+pub fn confidence_weight(losing_side_phase: usize) -> f32 {
     let mut w = 1.0;
 
     let phase_index = usize::clamp(losing_side_phase, 0, 12);
 
     w *= LOSING_SIDE_MATERIAL_WEIGHTS[phase_index];
 
-    w *= WINNING_SIDE_KING_SAFETY_WEIGHTS[winning_side_ksafety_bucket];
-
-    /*
-     commented out because none of the positions in the current dataset are checks!
-    if winning_side_in_check {
-        w *= WINNING_SIDE_IN_CHECK_WEIGHT;
-    }
-    */
     w
 }
 
-fn tuner_cw(
-    losing_side_phase: usize,
-    winning_side_ksafety_bucket: usize,
-    winning_side_in_check: bool,
-    weights: &Vec<Vec<f32>>,
-) -> f32 {
+fn tuner_cw(losing_side_phase: usize, weights: &Vec<Vec<f32>>) -> f32 {
     let mat_w = weights[0].clone();
-    let ks_w = weights[1].clone();
-    let ch_w = weights[2][0];
 
     let mut w = 1.0;
 
     let phase_index = usize::clamp(losing_side_phase, 0, 12);
     w *= mat_w[phase_index];
 
-    w *= ks_w[winning_side_ksafety_bucket];
-
-    if winning_side_in_check {
-        w *= ch_w;
-    }
     w
 }
 
@@ -93,16 +61,9 @@ fn wdl(eval: i32) -> f32 {
 
 fn init_weights() -> Individual {
     Individual {
-        weights: vec![
-            vec![
-                1.075754, 1.0538692, 1.0336324, 1.0452185, 1.0428557, 1.0159496, 1.0, 1.0274405,
-                1.0, 1.0, 0.97144693, 0.9339284, 0.8586135,
-            ],
-            vec![
-                1.0316231, 1.0317799, 1.0234864, 1.0106, 1.0, 0.98411125, 0.9784453, 1.0058842,
-            ],
-            vec![1.0406485],
-        ],
+        weights: vec![vec![
+            1.06, 1.05, 1.04, 1.06, 1.03, 1.03, 1.02, 1.02, 1.01, 1.01, 0.97, 0.92, 0.80,
+        ]],
         loss: 0.0,
     }
 }
@@ -114,9 +75,7 @@ impl Individual {
             let pos = Board::from(&elem.0);
             let label_wdl = elem.1;
 
-            let colour = pos.side_to_move;
-
-            let static_eval = match colour {
+            let static_eval = match pos.side_to_move {
                 Colour::White => eval::evaluate(&pos),
                 Colour::Black => -eval::evaluate(&pos),
             };
@@ -142,28 +101,7 @@ impl Individual {
                 }
             };
 
-            let winning_side_ksafety =
-                eval::evaluate_king(&pos, losing_phase_score as i32, winning_side);
-
-            let king_safety_bucket = match winning_side_ksafety {
-                ..-100 => 0,
-                -100..-50 => 1,
-                -50..-25 => 2,
-                -25..0 => 3,
-                0..25 => 4,
-                25..50 => 5,
-                50..100 => 6,
-                100.. => 7,
-            };
-
-            let winning_side_in_check = pos.side_to_move == winning_side && pos.checkers > 0;
-
-            let w = tuner_cw(
-                losing_phase_score,
-                king_safety_bucket,
-                winning_side_in_check,
-                &self.weights,
-            );
+            let w = tuner_cw(losing_phase_score, &self.weights);
 
             let computed_eval = (static_eval as f32 * w) as i32;
             let computed_wdl = wdl(computed_eval);
@@ -173,6 +111,36 @@ impl Individual {
         }
 
         self.loss = total_loss;
+    }
+
+    #[allow(unused)]
+    fn tune_one_parameter(&self, i: usize, j: usize, data: &Vec<(String, f32)>) -> Self {
+        //since parameters are combined linearly they can actually be tuned one at a time
+        let mut n = self.clone();
+        let mut best = n.clone();
+        let mut k = 0.74;
+
+        let bar = ProgressBar::new(50);
+        bar.set_style(
+            ProgressStyle::with_template(
+                "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+            )
+            .unwrap()
+            .progress_chars("##-"),
+        );
+
+        while k < 1.25 {
+            k += 0.01;
+            n.weights[i][j] = k;
+            n.compute_loss(data);
+            if n.loss < best.loss {
+                best = n.clone();
+            }
+
+            bar.inc(1);
+        }
+        bar.finish();
+        best
     }
 
     fn mutate(&self, probability: f32) -> Self {
@@ -309,22 +277,14 @@ pub fn genetic_algorithm() -> Result<(), Box<dyn Error>> {
             let n3 = rng.gen_range(0..POPULATION_SIZE);
             let child3 = x.combine(&population[n3 as usize]);
 
-            /*
-                        let n4 = rng.gen_range(0..POPULATION_SIZE);
-                        let child4 = x.combine(&population[n4 as usize]);
-
-                        let child6 = x.mutate(MUTATION_PROBABILTY);
-            */
             let child7 = x.mutate(MUTATION_PROBABILTY);
             let child8 = x.mutate(MUTATION_PROBABILTY);
             let child9 = x.mutate(MUTATION_PROBABILTY);
 
-            new_population.extend(vec![
-                child1, child2, child3, /*child4, child6,*/ child7, child8, child9,
-            ]);
+            new_population.extend(vec![child1, child2, child3, child7, child8, child9]);
         }
 
-        let bar = ProgressBar::new(POPULATION_SIZE as u64 * 9);
+        let bar = ProgressBar::new(POPULATION_SIZE as u64 * 7);
         bar.set_style(
             ProgressStyle::with_template(
                 "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
@@ -385,4 +345,45 @@ pub fn genetic_algorithm() -> Result<(), Box<dyn Error>> {
     );
 
     Ok(())
+}
+pub fn tune_one_by_one() {
+    println!("Beginning one-by-one parameter tuning");
+    let data = load_data(
+        "/Users/seba/rs/Panda/marlinflow/trainer/data/data230325.txt",
+        LabelType::LoHi,
+    );
+
+    let data = take_sample(&data, 250_000);
+
+    let mut i1 = init_weights();
+
+    i1.compute_loss(&data);
+    let original_loss = i1.loss;
+
+    for i in 0..2 {
+        for j in 0..i1.weights[i].len() {
+            println!("Currently tuning parameter {}, {}", i, j);
+            i1 = i1.tune_one_parameter(i, j, &data);
+        }
+    }
+
+    let final_loss = i1.loss;
+
+    println!(
+        "Original loss: {}\nFinal loss: {}",
+        original_loss, final_loss
+    );
+
+    println!(
+        "const LOSING_SIDE_MATERIAL_WEIGHTS: [f32; 13] = {:?};",
+        i1.weights[0]
+    );
+    println!(
+        "const WINNING_SIDE_KING_SAFETY_WEIGHTS: [f32; 8] = {:?};",
+        i1.weights[1]
+    );
+    println!(
+        "const WINNING_SIDE_IN_CHECK_WEIGHT: f32 = {};",
+        i1.weights[2][0]
+    );
 }

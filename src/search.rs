@@ -150,12 +150,17 @@ fn make_null_move(b: &mut Board) -> NullMoveUndo {
     let pinned_reset = b.pinned;
 
     let colour = b.side_to_move;
-    let our_king = lsfb(
-        b.bitboards[match colour {
-            Colour::White => WK,
-            Colour::Black => BK,
-        }],
-    );
+
+    //SAFETY: there MUST be a king on the board
+    let our_king = unsafe {
+        lsfb(
+            b.bitboards[match colour {
+                Colour::White => WK,
+                Colour::Black => BK,
+            }],
+        )
+        .unwrap_unchecked()
+    };
 
     let mut their_attackers = if colour == Colour::White {
         b.occupancies[BLACK]
@@ -167,8 +172,7 @@ fn make_null_move(b: &mut Board) -> NullMoveUndo {
                 | ROOK_EDGE_RAYS[our_king] & (b.bitboards[WR] | b.bitboards[WQ]))
     };
 
-    while their_attackers > 0 {
-        let sq = lsfb(their_attackers);
+    while let Some(sq) = lsfb(their_attackers) {
         let ray_between = RAY_BETWEEN[sq][our_king] & b.occupancies[BOTH];
         match count(ray_between) {
             1 => b.pinned |= ray_between,
@@ -1064,7 +1068,11 @@ impl Move {
                 }
             }
 
-            occupancies ^= set_bit(lsfb(side_attackers & b.bitboards[next_victim]), 0);
+            //SAFETY: if this was zero we would have broken above
+            occupancies ^= set_bit(
+                unsafe { lsfb(side_attackers & b.bitboards[next_victim]).unwrap_unchecked() },
+                0,
+            );
 
             if piece_type(next_victim) == PAWN
                 || piece_type(next_victim) == BISHOP

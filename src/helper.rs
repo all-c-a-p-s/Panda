@@ -164,11 +164,12 @@ pub const fn count(bitboard: u64) -> usize {
 }
 
 #[inline(always)]
-pub const fn lsfb(bitboard: u64) -> usize {
+pub const fn lsfb(bitboard: u64) -> Option<usize> {
     if bitboard != 0 {
-        return count(((bitboard as i64) & -(bitboard as i64)) as u64 - 1);
+        Some(count(((bitboard as i64) & -(bitboard as i64)) as u64 - 1))
+    } else {
+        None
     }
-    NO_SQUARE
 }
 
 pub fn square(sq: &str) -> usize {

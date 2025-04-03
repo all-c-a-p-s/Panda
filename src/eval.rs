@@ -412,14 +412,17 @@ fn evaluate_pawns(b: &Board, phase_score: i32, colour: Colour) -> i32 {
         Colour::Black => b.bitboards[BP],
     };
 
-    let king_kside = lsfb(match colour {
-        Colour::White => b.bitboards[WK],
-        Colour::Black => b.bitboards[BK],
-    }) % 8
+    //SAFETY: there MUST be a king on the board
+    let king_kside = unsafe {
+        lsfb(match colour {
+            Colour::White => b.bitboards[WK],
+            Colour::Black => b.bitboards[BK],
+        })
+        .unwrap_unchecked()
+    } % 8
         > 3;
 
-    while temp_pawns > 0 {
-        let square = lsfb(temp_pawns);
+    while let Some(square) = lsfb(temp_pawns) {
         let is_kside = square % 8 > 3;
 
         #[allow(non_snake_case)]
@@ -492,8 +495,7 @@ fn evaluate_knights(b: &Board, phase_score: i32, colour: Colour) -> i32 {
         Colour::Black => b.bitboards[BN],
     };
 
-    while temp_knights > 0 {
-        let square = lsfb(temp_knights);
+    while let Some(square) = lsfb(temp_knights) {
         let attacks = N_ATTACKS[square]
             & !b.occupancies[if colour == Colour::White {
                 WHITE
@@ -524,8 +526,7 @@ fn evaluate_bishops(b: &Board, phase_score: i32, colour: Colour) -> i32 {
         bishop_eval += tapered_score(BISHOP_PAIR, phase_score);
     }
 
-    while temp_bishops > 0 {
-        let square = lsfb(temp_bishops);
+    while let Some(square) = lsfb(temp_bishops) {
         bishop_eval += tapered_score(BISHOP_VALUE, phase_score);
         let attacks = get_bishop_attacks(square, b.occupancies[BOTH])
             & !b.occupancies[match colour {
@@ -579,9 +580,8 @@ fn evaluate_rooks(b: &Board, phase_score: i32, colour: Colour) -> i32 {
         Colour::White => b.bitboards[WR],
         Colour::Black => b.bitboards[BR],
     };
-    while temp_rooks > 0 {
+    while let Some(square) = lsfb(temp_rooks) {
         rook_eval += tapered_score(ROOK_VALUE, phase_score);
-        let square = lsfb(temp_rooks);
 
         if rank(square) == 6 && colour == Colour::White
             || rank(square) == 1 && colour == Colour::Black
@@ -639,8 +639,7 @@ fn evaluate_queens(b: &Board, phase_score: i32, colour: Colour) -> i32 {
         Colour::Black => b.bitboards[BQ],
     };
 
-    while temp_queens > 0 {
-        let square = lsfb(temp_queens);
+    while let Some(square) = lsfb(temp_queens) {
         queen_eval += tapered_score(QUEEN_VALUE, phase_score);
         let attacks = get_queen_attacks(square, b.occupancies[BOTH])
             & !b.occupancies[match colour {
@@ -669,7 +668,9 @@ pub fn evaluate_king(b: &Board, phase_score: i32, colour: Colour) -> i32 {
         Colour::White => b.bitboards[WK],
         Colour::Black => b.bitboards[BK],
     };
-    let king_square = lsfb(king_bb);
+
+    //SAFETY: there MUST be a king on the board
+    let king_square = unsafe { lsfb(king_bb).unwrap_unchecked() };
 
     king_eval += match colour {
         Colour::White => tapered_score(KING_TABLE[MIRROR[king_square]], phase_score),
@@ -717,7 +718,7 @@ pub fn evaluate_king(b: &Board, phase_score: i32, colour: Colour) -> i32 {
     };
 
     //idea of virtual mobility heuristic:
-    //count number of attacks king would have if it were a queen and give penatly
+    //count number of attacks king would have if it were a queen and give penalty
     //scaled by how many there are (i.e. how exposed the king is)
     safety_score += tapered_score(KING_VIRTUAL_MOBILITY_SCORE[count(attacks)], phase_score);
 
@@ -758,9 +759,7 @@ pub fn evaluate(b: &Board) -> i32 {
     eval += evaluate_rooks(b, phase_score, Colour::White);
     eval += evaluate_queens(b, phase_score, Colour::White);
 
-    let wk_eval = evaluate_king(b, phase_score, Colour::White);
-
-    eval += wk_eval;
+    eval += evaluate_king(b, phase_score, Colour::White);
 
     eval -= evaluate_pawns(b, phase_score, Colour::Black);
     eval -= evaluate_knights(b, phase_score, Colour::Black);
@@ -768,22 +767,7 @@ pub fn evaluate(b: &Board) -> i32 {
     eval -= evaluate_rooks(b, phase_score, Colour::Black);
     eval -= evaluate_queens(b, phase_score, Colour::Black);
 
-    let bk_eval = evaluate_king(b, phase_score, Colour::Black);
-
-    eval -= bk_eval;
-
-    let winning_side_ksafety = if eval >= 0 { wk_eval } else { bk_eval };
-
-    let king_safety_bucket = match winning_side_ksafety {
-        ..-100 => 0,
-        -100..-50 => 1,
-        -50..-25 => 2,
-        -25..0 => 3,
-        0..25 => 4,
-        25..50 => 5,
-        50..100 => 6,
-        100.. => 7,
-    };
+    eval -= evaluate_king(b, phase_score, Colour::Black);
 
     let mut s = tapered_score(TEMPO, phase_score)
         + match b.side_to_move {
@@ -798,9 +782,7 @@ pub fn evaluate(b: &Board) -> i32 {
         game_phase_score(&b, b.side_to_move)
     } as usize;
 
-    s = (s as f32
-        * crate::uncertainty::confidence_weight(losing_side_phase_score, king_safety_bucket, false))
-        as i32;
+    s = (s as f32 * crate::uncertainty::confidence_weight(losing_side_phase_score)) as i32;
 
     //TODO: endgame tablebase for better draw detection
     let side_sm = side_has_sufficient_matieral(b, b.side_to_move);

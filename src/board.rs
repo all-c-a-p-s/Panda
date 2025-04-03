@@ -346,12 +346,16 @@ impl Board {
     //used when we take in the board from a fen
     fn compute_checkers_and_pins(&mut self) {
         let colour = self.side_to_move;
-        let our_king = lsfb(
-            self.bitboards[match colour {
-                Colour::White => WK,
-                Colour::Black => BK,
-            }],
-        );
+        let our_king = unsafe {
+            lsfb(
+                self.bitboards[match colour {
+                    Colour::White => WK,
+                    Colour::Black => BK,
+                }],
+            )
+            .unwrap_unchecked()
+        };
+        //SAFETY: there MUST be a king on the board
 
         let mut their_attackers = if colour == Colour::White {
             self.occupancies[BLACK]
@@ -363,8 +367,7 @@ impl Board {
                     | ROOK_EDGE_RAYS[our_king] & (self.bitboards[WR] | self.bitboards[WQ]))
         };
 
-        while their_attackers > 0 {
-            let sq = lsfb(their_attackers);
+        while let Some(sq) = lsfb(their_attackers) {
             let ray_between = RAY_BETWEEN[sq][our_king] & self.occupancies[BOTH];
             match count(ray_between) {
                 0 => self.checkers |= set_bit(sq, 0),

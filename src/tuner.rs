@@ -257,14 +257,17 @@ fn evaluate_pawns(
         Colour::Black => b.bitboards[BP],
     };
 
-    let king_kside = lsfb(match colour {
-        Colour::White => b.bitboards[WK],
-        Colour::Black => b.bitboards[BK],
-    }) % 8
+    //SAFETY: there MUST be a king on the board
+    let king_kside = unsafe {
+        lsfb(match colour {
+            Colour::White => b.bitboards[WK],
+            Colour::Black => b.bitboards[BK],
+        })
+        .unwrap_unchecked()
+    } % 8
         > 3;
 
-    while temp_pawns > 0 {
-        let square = lsfb(temp_pawns);
+    while let Some(square) = lsfb(temp_pawns) {
         let is_kside = square % 8 > 3;
 
         #[allow(non_snake_case)]
@@ -338,8 +341,7 @@ fn evaluate_knights(
         Colour::Black => b.bitboards[BN],
     };
 
-    while temp_knights > 0 {
-        let square = lsfb(temp_knights);
+    while let Some(square) = lsfb(temp_knights) {
         let attacks = N_ATTACKS[square]
             & !b.occupancies[if colour == Colour::White {
                 WHITE
@@ -381,8 +383,7 @@ fn evaluate_bishops(
         bishop_eval += tapered_score(weights[BISHOP_PAIR_IDX][0], phase_score);
     }
 
-    while temp_bishops > 0 {
-        let square = lsfb(temp_bishops);
+    while let Some(square) = lsfb(temp_bishops) {
         bishop_eval += tapered_score(weights[BISHOP_VALUE_IDX][0], phase_score);
         let attacks = get_bishop_attacks(square, b.occupancies[BOTH])
             & !b.occupancies[match colour {
@@ -417,9 +418,8 @@ fn evaluate_rooks(
         Colour::White => b.bitboards[WR],
         Colour::Black => b.bitboards[BR],
     };
-    while temp_rooks > 0 {
+    while let Some(square) = lsfb(temp_rooks) {
         rook_eval += tapered_score(weights[ROOK_VALUE_IDX][0], phase_score);
-        let square = lsfb(temp_rooks);
 
         if rank(square) == 6 && colour == Colour::White
             || rank(square) == 1 && colour == Colour::Black
@@ -485,8 +485,7 @@ fn evaluate_queens(
         Colour::Black => b.bitboards[BQ],
     };
 
-    while temp_queens > 0 {
-        let square = lsfb(temp_queens);
+    while let Some(square) = lsfb(temp_queens) {
         queen_eval += tapered_score(weights[QUEEN_VALUE_IDX][0], phase_score);
         let attacks = get_queen_attacks(square, b.occupancies[BOTH])
             & !b.occupancies[match colour {
@@ -521,7 +520,9 @@ fn evaluate_king(
         Colour::White => b.bitboards[WK],
         Colour::Black => b.bitboards[BK],
     };
-    let king_square = lsfb(king_bb);
+
+    //SAFETY: there MUST be a king on the board
+    let king_square = unsafe { lsfb(king_bb).unwrap_unchecked() };
     king_eval += match colour {
         Colour::White => tapered_score(weights[KING_TABLE_IDX][MIRROR[king_square]], phase_score),
         Colour::Black => tapered_score(weights[KING_TABLE_IDX][king_square], phase_score),

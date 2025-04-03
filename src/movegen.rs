@@ -75,8 +75,7 @@ impl MoveList {
         match board.side_to_move {
             Colour::White => {
                 let mut bitboard = board.bitboards[WP];
-                while bitboard > 0 {
-                    let lsb = lsfb(bitboard);
+                while let Some(lsb) = lsfb(bitboard) {
                     if get_bit(lsb + 8, board.occupancies[BOTH]) == 0 {
                         if rank(lsb) == 6 {
                             //promotion
@@ -113,8 +112,7 @@ impl MoveList {
             }
             Colour::Black => {
                 let mut bitboard = board.bitboards[BP];
-                while bitboard > 0 {
-                    let lsb = lsfb(bitboard);
+                while let Some(lsb) = lsfb(bitboard) {
                     if get_bit(lsb - 8, board.occupancies[BOTH]) == 0 {
                         if rank(lsb - 8) == 0 {
                             //promotion
@@ -223,8 +221,7 @@ impl MoveList {
             //pieces of colour to move
             let mut bitboard = board.bitboards[piece];
 
-            while bitboard > 0 {
-                let lsb = lsfb(bitboard); // never panics as loop will have already exited
+            while let Some(lsb) = lsfb(bitboard) {
                 let mut attacks = match piece {
                     WP => {
                         WP_ATTACKS[lsb]
@@ -251,8 +248,7 @@ impl MoveList {
                     Colour::White => attacks &= !board.occupancies[WHITE], //remove attacks on own pieces
                     Colour::Black => attacks &= !board.occupancies[BLACK],
                 }
-                while attacks > 0 {
-                    let lsb_attack = lsfb(attacks);
+                while let Some(lsb_attack) = lsfb(attacks) {
                     //promotions that are also captures
                     if piece == WP && rank(lsb) == 6 {
                         // white promotion
@@ -313,8 +309,7 @@ impl MoveList {
             //pieces of colour to move
             let mut bitboard = board.bitboards[piece];
 
-            while bitboard > 0 {
-                let lsb = lsfb(bitboard); // never panics as loop will have already exited
+            while let Some(lsb) = lsfb(bitboard) {
                 let mut attacks = match piece {
                     //ensuring captures is handled piece-by-piece instead of by colour after
                     //because otherwise en passant captures get removed
@@ -352,8 +347,7 @@ impl MoveList {
                     BK => K_ATTACKS[lsb] & board.occupancies[WHITE],
                     _ => unreachable!(),
                 };
-                while attacks > 0 {
-                    let lsb_attack = lsfb(attacks);
+                while let Some(lsb_attack) = lsfb(attacks) {
                     if (get_bit(lsb, board.bitboards[WP]) > 0) && rank(lsb) == 6 {
                         // white promotion
                         moves.moves[first_unused] =
@@ -420,11 +414,14 @@ impl MoveList {
 pub fn get_smallest_attack(b: &mut Board, square: usize) -> Move {
     //NOTE: for speed this does not take pins into account
     //attacked BY colour
+
+    //SAFETY for these: we know that an attacker exists
+
     match b.side_to_move {
         Colour::White => {
             let pawn_attackers = BP_ATTACKS[square] & b.bitboards[WP];
             if pawn_attackers > 0 {
-                let sq_from = lsfb(pawn_attackers);
+                let sq_from = unsafe { lsfb(pawn_attackers).unwrap_unchecked() };
                 return match rank(square) {
                     7 => encode_move(sq_from, square, QUEEN, PROMOTION_FLAG),
                     //no point considering underpromotions
@@ -433,38 +430,38 @@ pub fn get_smallest_attack(b: &mut Board, square: usize) -> Move {
             }
             let knight_attackers = N_ATTACKS[square] & b.bitboards[WN];
             if knight_attackers > 0 {
-                let sq_from = lsfb(knight_attackers);
+                let sq_from = unsafe { lsfb(knight_attackers).unwrap_unchecked() };
                 return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
             }
             let king_attackers = K_ATTACKS[square] & b.bitboards[WK];
             if king_attackers > 0 {
                 //only one king
-                let sq_from = lsfb(king_attackers);
+                let sq_from = unsafe { lsfb(king_attackers).unwrap_unchecked() };
                 return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
             }
             let bishop_attacks = get_bishop_attacks(square, b.occupancies[BOTH]);
             //use later to get queen attackers
             let bishop_attackers = bishop_attacks & b.bitboards[WB];
             if bishop_attackers > 0 {
-                let sq_from = lsfb(bishop_attackers);
+                let sq_from = unsafe { lsfb(bishop_attackers).unwrap_unchecked() };
                 return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
             }
             let rook_attacks = get_rook_attacks(square, b.occupancies[BOTH]);
             let rook_attackers = rook_attacks & b.bitboards[WR];
             if rook_attackers > 0 {
-                let sq_from = lsfb(rook_attackers);
+                let sq_from = unsafe { lsfb(rook_attackers).unwrap_unchecked() };
                 return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
             }
             let queen_attackers = (rook_attacks | bishop_attacks) & b.bitboards[WQ];
             if queen_attackers > 0 {
-                let sq_from = lsfb(queen_attackers);
+                let sq_from = unsafe { lsfb(queen_attackers).unwrap_unchecked() };
                 return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
             }
         }
         Colour::Black => {
             let pawn_attackers = WP_ATTACKS[square] & b.bitboards[BP];
             if pawn_attackers > 0 {
-                let sq_from = lsfb(pawn_attackers);
+                let sq_from = unsafe { lsfb(pawn_attackers).unwrap_unchecked() };
                 return match rank(square) {
                     0 => encode_move(sq_from, square, QUEEN, PROMOTION_FLAG),
                     //no point considering underpromotions
@@ -473,31 +470,31 @@ pub fn get_smallest_attack(b: &mut Board, square: usize) -> Move {
             }
             let knight_attackers = N_ATTACKS[square] & b.bitboards[BN];
             if knight_attackers > 0 {
-                let sq_from = lsfb(knight_attackers);
+                let sq_from = unsafe { lsfb(knight_attackers).unwrap_unchecked() };
                 return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
             }
             let king_attackers = K_ATTACKS[square] & b.bitboards[BK];
             if king_attackers > 0 {
                 //only one king
-                let sq_from = lsfb(king_attackers);
+                let sq_from = unsafe { lsfb(king_attackers).unwrap_unchecked() };
                 return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
             }
             let bishop_attacks = get_bishop_attacks(square, b.occupancies[BOTH]);
             //use later to get queen attackers
             let bishop_attackers = bishop_attacks & b.bitboards[BB];
             if bishop_attackers > 0 {
-                let sq_from = lsfb(bishop_attackers);
+                let sq_from = unsafe { lsfb(bishop_attackers).unwrap_unchecked() };
                 return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
             }
             let rook_attacks = get_rook_attacks(square, b.occupancies[BOTH]);
             let rook_attackers = rook_attacks & b.bitboards[BR];
             if rook_attackers > 0 {
-                let sq_from = lsfb(rook_attackers);
+                let sq_from = unsafe { lsfb(rook_attackers).unwrap_unchecked() };
                 return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
             }
             let queen_attackers = (rook_attacks | bishop_attacks) & b.bitboards[BQ];
             if queen_attackers > 0 {
-                let sq_from = lsfb(queen_attackers);
+                let sq_from = unsafe { lsfb(queen_attackers).unwrap_unchecked() };
                 return encode_move(sq_from, square, NO_PIECE, NO_FLAG);
             }
         }
@@ -556,16 +553,21 @@ pub fn check_en_passant(m: Move, b: &Board) -> bool {
         WP => {
             let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[BOTH]);
             relevant_blockers = pop_bit(m.square_to() - 8, relevant_blockers);
-
-            get_rook_attacks(lsfb(b.bitboards[WK]), relevant_blockers)
-                & (b.bitboards[BR] | b.bitboards[BQ])
+            //SAFETY: there MUST be a king on the board
+            get_rook_attacks(
+                unsafe { lsfb(b.bitboards[WK]).unwrap_unchecked() },
+                relevant_blockers,
+            ) & (b.bitboards[BR] | b.bitboards[BQ])
                 == 0
         }
         BP => {
             let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[BOTH]);
             relevant_blockers = pop_bit(m.square_to() + 8, relevant_blockers);
-            get_rook_attacks(lsfb(b.bitboards[BK]), relevant_blockers)
-                & (b.bitboards[WR] | b.bitboards[WQ])
+            //SAFETY: there MUST be a king on the board
+            get_rook_attacks(
+                unsafe { lsfb(b.bitboards[BK]).unwrap_unchecked() },
+                relevant_blockers,
+            ) & (b.bitboards[WR] | b.bitboards[WQ])
                 == 0
         }
         _ => unreachable!(),

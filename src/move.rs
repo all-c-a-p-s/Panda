@@ -347,9 +347,12 @@ impl Board {
 
         let colour = self.side_to_move;
 
-        let enemy_king = match colour {
-            Colour::White => lsfb(self.bitboards[BK]),
-            Colour::Black => lsfb(self.bitboards[WK]),
+        //SAFETY: there MUST be a king on the board
+        let enemy_king = unsafe {
+            match colour {
+                Colour::White => lsfb(self.bitboards[BK]).unwrap_unchecked(),
+                Colour::Black => lsfb(self.bitboards[WK]).unwrap_unchecked(),
+            }
         };
 
         if piece_type(piece_moved) == PAWN || victim != NO_PIECE {
@@ -517,8 +520,7 @@ impl Board {
                     | ROOK_EDGE_RAYS[enemy_king] & (self.bitboards[BR] | self.bitboards[BQ]))
         };
 
-        while our_attackers > 0 {
-            let sq = lsfb(our_attackers);
+        while let Some(sq) = lsfb(our_attackers) {
             let ray_between = RAY_BETWEEN[sq][enemy_king] & self.occupancies[BOTH];
             match count(ray_between) {
                 0 => self.checkers |= set_bit(sq, 0),
@@ -540,12 +542,16 @@ impl Board {
 
     //NOTE: this assumes that the move is pseudo-legal
     pub fn is_legal(&mut self, m: Move) -> bool {
-        let king_sq = lsfb(
-            self.bitboards[match self.side_to_move {
-                Colour::White => WK,
-                Colour::Black => BK,
-            }],
-        );
+        //SAFETY: there MUST be a king on the board
+        let king_sq = unsafe {
+            lsfb(
+                self.bitboards[match self.side_to_move {
+                    Colour::White => WK,
+                    Colour::Black => BK,
+                }],
+            )
+            .unwrap_unchecked()
+        };
 
         let from = m.square_from();
         let to = m.square_to();
@@ -571,7 +577,7 @@ impl Board {
                 if m.is_en_passant() {
                     let taken = if piece_moved == WP { to - 8 } else { to + 8 };
                     //exception here since you can take the pawn giving check en passant
-                    (target_squares & set_bit(to, 0) > 0 || lsfb(self.checkers) == taken)
+                    (target_squares & set_bit(to, 0) > 0 || lsfb(self.checkers) == Some(taken))
                         && check_en_passant(m, &self)
                 } else {
                     target_squares & set_bit(to, 0) > 0
@@ -582,12 +588,16 @@ impl Board {
     }
 
     fn legal_king_move(&mut self, m: Move) -> bool {
-        let king_sq = lsfb(
-            self.bitboards[match self.side_to_move {
-                Colour::White => WK,
-                Colour::Black => BK,
-            }],
-        );
+        //SAFETY: there MUST be a king on the board
+        let king_sq = unsafe {
+            lsfb(
+                self.bitboards[match self.side_to_move {
+                    Colour::White => WK,
+                    Colour::Black => BK,
+                }],
+            )
+            .unwrap_unchecked()
+        };
         self.occupancies[BOTH] ^= set_bit(king_sq, 0);
         let ok = !is_attacked(m.square_to(), self.side_to_move.opponent(), &self);
         self.occupancies[BOTH] ^= set_bit(king_sq, 0);
@@ -599,13 +609,18 @@ impl Board {
     fn target_squares(&self, in_check: bool) -> u64 {
         let colour = self.side_to_move;
         let targets = if in_check {
-            let checker = lsfb(self.checkers);
-            let our_king = lsfb(
-                self.bitboards[match colour {
-                    Colour::White => WK,
-                    Colour::Black => BK,
-                }],
-            );
+            //SAFETY: there MUST be a checker since we know we are in check
+            let checker = unsafe { lsfb(self.checkers).unwrap_unchecked() };
+            //SAFETY: there MUST be a king on the board
+            let our_king = unsafe {
+                lsfb(
+                    self.bitboards[match colour {
+                        Colour::White => WK,
+                        Colour::Black => BK,
+                    }],
+                )
+                .unwrap_unchecked()
+            };
             RAY_BETWEEN[checker][our_king] | set_bit(checker, 0)
         } else {
             !0u64
