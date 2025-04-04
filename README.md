@@ -8,7 +8,7 @@ Panda is a chess engine written in Rust (still a work in progress). I work on th
 
 ## What Makes Panda Interesting?
 
-In terms of strength, Panda is pretty unremarkable - currently somewhere around 2450. One fairly original idea is that it considers uncertainty in evaluation of a position instead of just returning one evaluation like most engines do. The intention is that this makes it value practical chances (i.e. expected score from the game) over just maximising its evaluation.
+In terms of strength, Panda is pretty unremarkable - currently somewhere around 2620. One fairly original idea is that it considers uncertainty in evaluation of a position instead of just returning one evaluation like most engines do. The intention is that this makes it value practical chances (i.e. expected score from the game) over just maximising its evaluation.
 
 ## Lichess Bot
 
