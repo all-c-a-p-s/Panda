@@ -1,6 +1,14 @@
+#![allow(unused)]
+
+/*
+ At the moment, the HCE is completely unused. However, I have kept the code here for reference.
+*/
+
 use crate::board::*;
 use crate::helper::*;
 use crate::magic::*;
+
+use crate::nnue::Accumulator;
 
 pub const PAWN_VALUE: (i32, i32) = (142, 168);
 pub const KNIGHT_VALUE: (i32, i32) = (519, 547);
@@ -36,11 +44,15 @@ pub const PAWN_OTHER_SIDE_TABLE: [(i32, i32); 64] = [
 
 #[rustfmt::skip]
 pub const KNIGHT_TABLE: [(i32, i32); 64] = [
-    (-43, -47), (-106, -84), (-10, -11), (-32, -33), (-25, -24), (-13, -11), (-40, -40), (-43, -52), (-26, -22), (4, 4), (33
-, 25), (25, 23), (58, 40), (13, 13), (1, 3), (-11, -10), (11, 10), (13, 11), (28, 29), (116, 32), (21, 21), (-6, -5), (72
-, 49), (-3, -1), (4, 3), (-7, -6), (11, 12), (61, 68), (18, 18), (35, 30), (2, 13), (-9, -6), (-17, -18), (-5, -6), (13, 
-11), (3, 16), (21, 20), (17, 16), (-2, 0), (-10, -8), (-57, -26), (-10, -12), (-3, -7), (8, 8), (10, 10), (9, -1), (5, 6)
-, (-27, -28), (-57, -43), (-22, -22), (-23, -23), (5, 3), (4, 1), (-11, -11), (-19, -20), (-21, -20), (-18, -20), (-19, -23), (-10, -10), (-16, -15), (-14, -11), (-14, -13), (-30, -34), (2, 3)];
+    (-43, -47), (-106, -84), (-10, -11), (-32, -33), (-25, -24), (-13, -11), (-40, -40), (-43, -52),
+    (-26, -22), (4, 4), (33, 25), (25, 23), (58, 40), (13, 13), (1, 3), (-11, -10),
+    (11, 10), (13, 11), (28, 29), (116, 32), (21, 21), (-6, -5), (72, 49), (-3, -1),
+    (4, 3), (-7, -6), (11, 12), (61, 68), (18, 18), (35, 30), (2, 13), (-9, -6),
+    (-17, -18), (-5, -6), (13, 11), (3, 16), (21, 20), (17, 16), (-2, 0), (-10, -8),
+    (-57, -26), (-10, -12), (-3, -7), (8, 8), (10, 10), (9, -1), (5, 6), (-27, -28),
+    (-57, -43), (-22, -22), (-23, -23), (5, 3), (4, 1), (-11, -11), (-19, -20), (-21, -20),
+    (-18, -20), (-19, -23), (-10, -10), (-16, -15), (-14, -11), (-14, -13), (-30, -34), (2, 3),
+];
 
 #[rustfmt::skip]
 pub const BISHOP_TABLE: [(i32, i32); 64] = [
@@ -750,39 +762,7 @@ fn side_has_sufficient_matieral(b: &Board, side: Colour) -> bool {
 }
 
 pub fn evaluate(b: &Board) -> i32 {
-    let mut eval: i32 = 0;
-    let phase_score = game_phase_score(b, b.side_to_move.opponent());
-
-    eval += evaluate_pawns(b, phase_score, Colour::White);
-    eval += evaluate_knights(b, phase_score, Colour::White);
-    eval += evaluate_bishops(b, phase_score, Colour::White);
-    eval += evaluate_rooks(b, phase_score, Colour::White);
-    eval += evaluate_queens(b, phase_score, Colour::White);
-
-    eval += evaluate_king(b, phase_score, Colour::White);
-
-    eval -= evaluate_pawns(b, phase_score, Colour::Black);
-    eval -= evaluate_knights(b, phase_score, Colour::Black);
-    eval -= evaluate_bishops(b, phase_score, Colour::Black);
-    eval -= evaluate_rooks(b, phase_score, Colour::Black);
-    eval -= evaluate_queens(b, phase_score, Colour::Black);
-
-    eval -= evaluate_king(b, phase_score, Colour::Black);
-
-    let mut s = tapered_score(TEMPO, phase_score)
-        + match b.side_to_move {
-            //return from perspective of side to move
-            Colour::White => eval,
-            Colour::Black => -eval,
-        };
-
-    let losing_side_phase_score = if eval >= 0 {
-        phase_score
-    } else {
-        game_phase_score(&b, b.side_to_move)
-    } as usize;
-
-    s = (s as f32 * crate::uncertainty::confidence_weight(losing_side_phase_score)) as i32;
+    let s = b.nnue.evaluate(b.side_to_move);
 
     //TODO: endgame tablebase for better draw detection
     let side_sm = side_has_sufficient_matieral(b, b.side_to_move);

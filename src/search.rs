@@ -58,9 +58,9 @@ const UNDER_PROMOTION: i32 = -200_000;
 
 pub const MAX_GAME_PLY: usize = 1024;
 
-const TIME_TO_MOVE: usize = 100;
-const TIME_TO_START_SEARCH: usize = 0; //initialise big TT (if not using HashMap)
-                                       //leave a second total margin
+const TIME_TO_MOVE: usize = 50;
+const TIME_TO_START_SEARCH: usize = 50; //initialise big TT (if not using HashMap)
+                                        //leave 100ms total margin
 
 pub static mut REPETITION_TABLE: [u64; MAX_GAME_PLY] = [0u64; MAX_GAME_PLY];
 pub static mut START_DEPTH: usize = 0;
@@ -126,6 +126,7 @@ pub struct Searcher {
     pub ply: usize,
     pub nodes: usize,
     pub end_time: Instant,
+    pub max_nodes: usize,
     pub moves_fully_searched: usize,
     pub do_pruning: bool,
     info: SearchInfo,
@@ -246,7 +247,7 @@ unsafe fn is_drawn(position: &Board) -> bool {
 }
 
 impl Searcher {
-    pub fn new(end_time: Instant) -> Self {
+    pub fn new(end_time: Instant, max_nodes: usize) -> Self {
         Searcher {
             pv_length: [0usize; 64],
             pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
@@ -255,6 +256,7 @@ impl Searcher {
             ply: 0,
             nodes: 0,
             end_time,
+            max_nodes,
             moves_fully_searched: 0,
             do_pruning: true,
             info: SearchInfo::default(),
@@ -322,7 +324,7 @@ impl Searcher {
          if this happens on PV move it breaks during the main moves loop below
          and so count of moves searched fully is zero -> discard result
         */
-        if Instant::now() > self.end_time && self.ply != 0 {
+        if (Instant::now() > self.end_time || self.nodes >= self.max_nodes) && self.ply != 0 {
             return match self.ply % 2 {
                 0 => -INFINITY,
                 1 => INFINITY,
@@ -740,7 +742,7 @@ impl Searcher {
             }
         }
 
-        if Instant::now() > self.end_time && self.ply != 0 {
+        if (Instant::now() > self.end_time || self.nodes >= self.max_nodes) && self.ply != 0 {
             return match self.ply % 2 {
                 0 => -INFINITY,
                 1 => INFINITY,

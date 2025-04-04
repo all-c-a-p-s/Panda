@@ -1,9 +1,11 @@
 use crate::helper::*;
 use crate::magic::*;
 use crate::movegen::*;
+use crate::nnue::*;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Board {
+    //Fundamental board state
     pub bitboards: [u64; 12],
     pub pieces_array: [usize; 64], //used to speed up move generation
     pub occupancies: [u64; 3],     //white, black, both
@@ -11,11 +13,18 @@ pub struct Board {
     pub en_passant: usize, //ep square index
     pub side_to_move: Colour,
     pub fifty_move: u8,
+
+    //Used in search
     pub ply: usize,
     pub last_move_null: bool,
     pub hash_key: u64,
+
+    //Used in movegen
     pub checkers: u64,
     pub pinned: u64,
+
+    //Used in evaluation
+    pub nnue: Accumulator,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -66,6 +75,7 @@ impl Board {
             hash_key: 0,
             checkers: 0,
             pinned: 0,
+            nnue: Accumulator::default(),
         };
 
         let mut board_fen: String = String::new();
@@ -167,6 +177,7 @@ impl Board {
         new_board.occupancies[BOTH] = new_board.occupancies[WHITE] | new_board.occupancies[BLACK];
 
         new_board.compute_checkers_and_pins();
+        new_board.nnue = Accumulator::from_board(&new_board);
 
         new_board
     }

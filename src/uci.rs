@@ -314,7 +314,7 @@ fn parse_perft(command: &str, position: &mut Board) {
 
 pub fn uci_loop() {
     let mut board = Board::from(STARTPOS);
-    let mut s = Searcher::new(Instant::now());
+    let mut s = Searcher::new(Instant::now(), usize::MAX);
     loop {
         let mut buffer = String::new();
         let ok = std::io::stdin().read_line(&mut buffer);

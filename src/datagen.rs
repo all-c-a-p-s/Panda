@@ -28,6 +28,7 @@ const UNKNOWN_RESULT: f32 = -1.0;
 //   I suspect there will be a bias against having pieces on squares where captures often occur (like
 //   in the centre)
 
+#[allow(unused)]
 fn is_terminal(eval: i32) -> bool {
     eval.abs() > INFINITY / 2
 }
@@ -88,7 +89,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
 
                 found_move = true;
 
-                let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10));
+                let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(50), 5000);
                 searcher.do_pruning = false;
 
                 let score = -searcher.negamax(&mut board, 3, -INFINITY, INFINITY, false);
@@ -113,7 +114,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
                 };
             }
         } else {
-            let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10));
+            let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10), 5000);
             let move_data = best_move(&mut board, 0, 0, 0, 10, &mut searcher, false);
 
             s = move_data.eval;
@@ -144,7 +145,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
         if board.ply > first_pick
             && (board.ply - first_pick) % pick_interval == 0
             && !best.is_capture(&board)
-            && !is_terminal(s)
+            && s.abs() < i16::MAX as i32
             && board.checkers == 0
         {
             let fen = board.fen();

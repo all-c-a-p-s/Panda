@@ -665,7 +665,7 @@ impl Individual {
             MoveList::gen_moves::<true>(position)
         };
 
-        captures.order_moves(position, &Searcher::new(Instant::now()), &NULL_MOVE);
+        captures.order_moves(position, &Searcher::new(Instant::now(), 0), &NULL_MOVE);
 
         for c in captures.moves {
             if c.is_null() {
