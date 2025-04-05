@@ -3,6 +3,8 @@ use std::mem;
 use crate::eval::MIRROR;
 use crate::*;
 
+use crate::types::*;
+
 const NUM_FEATURES: usize = 768;
 const HL_SIZE: usize = 128;
 
@@ -33,11 +35,11 @@ static MODEL: Network = unsafe {
 
 type SideAccumulator = [i16; HL_SIZE];
 
-const fn nnue_index(piece: usize, sq: usize) -> (usize, usize) {
+const fn nnue_index(piece: Piece, sq: Square) -> (usize, usize) {
     const PIECE_STEP: usize = 64;
 
-    let white_idx = PIECE_STEP * piece + sq;
-    let black_idx = PIECE_STEP * ((piece + 6) % 12) + MIRROR[sq];
+    let white_idx = PIECE_STEP * piece as usize + sq as usize;
+    let black_idx = PIECE_STEP * ((piece as usize + 6) % 12) + MIRROR[sq as usize];
 
     (white_idx * HL_SIZE, black_idx * HL_SIZE)
 }
@@ -66,7 +68,7 @@ impl Accumulator {
 
         let mut occs = board.occupancies[BOTH];
         while let Some(sq) = lsfb(occs) {
-            a.set_weight::<ON>(board.pieces_array[sq], sq);
+            a.set_weight::<ON>(unsafe { board.pieces_array[sq].unwrap_unchecked() }, sq);
             occs = pop_bit(sq, occs);
         }
 
@@ -89,81 +91,94 @@ impl Accumulator {
     }
 
     //update state of HL node corresponding to state of one feature
-    pub fn set_weight<const STATE: bool>(&mut self, piece: usize, square: usize) {
+    pub fn set_weight<const STATE: bool>(&mut self, piece: Piece, square: Square) {
         self.set::<STATE>(nnue_index(piece, square));
     }
 
-    pub fn quiet_update(&mut self, piece: usize, from: usize, to: usize) {
+    pub fn quiet_update(&mut self, piece: Piece, from: Square, to: Square) {
         self.set_weight::<OFF>(piece, from);
         self.set_weight::<ON>(piece, to);
     }
 
-    pub fn capture_update(&mut self, _piece: usize, victim: usize, _from: usize, to: usize) {
-        self.set_weight::<OFF>(victim, to);
+    pub fn capture_update(
+        &mut self,
+        _piece: Piece,
+        victim: Option<Piece>,
+        _from: Square,
+        to: Square,
+    ) {
+        //SAFETY: this is only called when there is a capture
+        self.set_weight::<OFF>(unsafe { victim.unwrap_unchecked() }, to);
     }
 
     //promotions that are also captures handled in capture_update()
-    pub fn promotion_update(&mut self, piece: usize, promotion: usize, from: usize, to: usize) {
+    pub fn promotion_update(
+        &mut self,
+        piece: Piece,
+        promotion: Option<Piece>,
+        from: Square,
+        to: Square,
+    ) {
         self.set_weight::<OFF>(piece, from);
-        self.set_weight::<ON>(promotion, to);
+        self.set_weight::<ON>(unsafe { promotion.unwrap_unchecked() }, to);
     }
 
-    pub fn ep_update(&mut self, piece: usize, victim: usize, _from: usize, to: usize) {
+    pub fn ep_update(&mut self, piece: Piece, victim: Option<Piece>, _from: Square, to: Square) {
         let ep = match piece {
-            WP => to - 8,
-            BP => to + 8,
+            Piece::WP => unsafe { to.sub_unchecked(8) },
+            Piece::BP => unsafe { to.add_unchecked(8) },
             _ => unreachable!(),
         };
 
-        self.set_weight::<OFF>(victim, ep);
+        self.set_weight::<OFF>(unsafe { victim.unwrap_unchecked() }, ep);
     }
 
     //update to king already done
-    pub fn castling_update(&mut self, _piece: usize, _from: usize, to: usize) {
+    pub fn castling_update(&mut self, _piece: Piece, _from: Square, to: Square) {
         match to {
-            C1 => self.quiet_update(WR, A1, D1),
-            G1 => self.quiet_update(WR, H1, F1),
-            C8 => self.quiet_update(BR, A8, D8),
-            G8 => self.quiet_update(BR, H8, F8),
+            Square::C1 => self.quiet_update(Piece::WR, Square::A1, Square::D1),
+            Square::G1 => self.quiet_update(Piece::WR, Square::H1, Square::F1),
+            Square::C8 => self.quiet_update(Piece::BR, Square::A8, Square::D8),
+            Square::G8 => self.quiet_update(Piece::BR, Square::H8, Square::F8),
             _ => unreachable!(),
         }
     }
 
     //piece already moved
-    pub fn undo_ep(&mut self, piece: usize, victim: usize, _from: usize, to: usize) {
+    pub fn undo_ep(&mut self, piece: Piece, victim: Option<Piece>, _from: Square, to: Square) {
         let ep = match piece {
-            WP => to - 8,
-            BP => to + 8,
+            Piece::WP => unsafe { to.sub_unchecked(8) },
+            Piece::BP => unsafe { to.add_unchecked(8) },
             _ => unreachable!(),
         };
-        self.set_weight::<ON>(victim, ep);
+        self.set_weight::<ON>(unsafe { victim.unwrap_unchecked() }, ep);
     }
 
     //update to king already done
-    pub fn undo_castling(&mut self, _piece: usize, _from: usize, to: usize) {
+    pub fn undo_castling(&mut self, _piece: Piece, _from: Square, to: Square) {
         match to {
-            C1 => self.quiet_update(WR, D1, A1),
-            G1 => self.quiet_update(WR, F1, H1),
-            C8 => self.quiet_update(BR, D8, A8),
-            G8 => self.quiet_update(BR, F8, H8),
+            Square::C1 => self.quiet_update(Piece::WR, Square::D1, Square::A1),
+            Square::G1 => self.quiet_update(Piece::WR, Square::F1, Square::H1),
+            Square::C8 => self.quiet_update(Piece::BR, Square::D8, Square::A8),
+            Square::G8 => self.quiet_update(Piece::BR, Square::F8, Square::H8),
             _ => unreachable!(),
         }
     }
 
     pub fn undo_move(
         &mut self,
-        piece: usize,
-        victim: usize,
-        promotion: usize,
-        from: usize,
-        to: usize,
+        piece: Piece,
+        victim: Option<Piece>,
+        promotion: Option<Piece>,
+        from: Square,
+        to: Square,
     ) {
-        if victim != NO_PIECE {
-            self.set_weight::<ON>(victim, to);
+        if victim != None {
+            self.set_weight::<ON>(unsafe { victim.unwrap_unchecked() }, to);
         }
 
-        if promotion != NO_PIECE {
-            self.set_weight::<OFF>(promotion, to);
+        if promotion != None {
+            self.set_weight::<OFF>(unsafe { promotion.unwrap_unchecked() }, to);
             self.set_weight::<ON>(piece, from);
         } else {
             self.quiet_update(piece, to, from);
@@ -171,7 +186,7 @@ impl Accumulator {
     }
 
     pub fn set_to_position(&mut self, board: &Board) {
-        for piece in WP..=BK {
+        for piece in PIECES {
             let mut occ = board.bitboards[piece];
             while let Some(sq) = lsfb(occ) {
                 self.set_weight::<ON>(piece, sq);

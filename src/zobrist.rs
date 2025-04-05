@@ -1,4 +1,5 @@
 use crate::rng::XorShiftU64;
+use crate::types::*;
 use crate::*;
 
 use crate::helper::*;
@@ -53,13 +54,13 @@ pub fn hash(b: &Board) -> u64 {
 
     for square in 0..64 {
         let piece = b.pieces_array[square];
-        if piece != NO_PIECE {
+        if let Some(piece) = piece {
             hash_key ^= PIECE_KEYS[square][piece];
         }
     }
 
-    if b.en_passant != NO_SQUARE {
-        hash_key ^= EP_KEYS[b.en_passant];
+    if let Some(sq) = b.en_passant {
+        hash_key ^= EP_KEYS[sq];
     }
 
     hash_key ^= CASTLING_KEYS[b.castling as usize];
@@ -82,31 +83,31 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
     res ^= PIECE_KEYS[sq_from][piece];
     res ^= PIECE_KEYS[sq_to][piece];
 
-    if b.en_passant != NO_SQUARE {
-        res ^= EP_KEYS[b.en_passant];
+    if let Some(sq) = b.en_passant {
+        res ^= EP_KEYS[sq];
     }
 
-    if piece == WK {
+    if piece == Piece::WK {
         res ^= CASTLING_KEYS[b.castling as usize];
         res ^= CASTLING_KEYS[(b.castling & 0b00001100) as usize];
-    } else if piece == BK {
+    } else if piece == Piece::BK {
         res ^= CASTLING_KEYS[b.castling as usize];
         res ^= CASTLING_KEYS[(b.castling & 0b00000011) as usize];
     }
 
-    if piece == WR && sq_from == H1 && (b.castling & 0b00000001 > 0) {
+    if piece == Piece::WR && sq_from == Square::H1 && (b.castling & 0b00000001 > 0) {
         res ^= CASTLING_KEYS[b.castling as usize];
         let new_castling = b.castling ^ 0b00000001;
         res ^= CASTLING_KEYS[new_castling as usize];
-    } else if piece == WR && sq_from == A1 && (b.castling & 0b00000010 > 0) {
+    } else if piece == Piece::WR && sq_from == Square::A1 && (b.castling & 0b00000010 > 0) {
         res ^= CASTLING_KEYS[b.castling as usize];
         let new_castling = b.castling ^ 0b00000010;
         res ^= CASTLING_KEYS[new_castling as usize];
-    } else if piece == BR && sq_from == H8 && (b.castling & 0b00000100 > 0) {
+    } else if piece == Piece::BR && sq_from == Square::H8 && (b.castling & 0b00000100 > 0) {
         res ^= CASTLING_KEYS[b.castling as usize];
         let new_castling = b.castling ^ 0b00000100;
         res ^= CASTLING_KEYS[new_castling as usize];
-    } else if piece == BR && sq_from == A8 && (b.castling & 0b00001000 > 0) {
+    } else if piece == Piece::BR && sq_from == Square::A8 && (b.castling & 0b00001000 > 0) {
         res ^= CASTLING_KEYS[b.castling as usize];
         let new_castling = b.castling ^ 0b00001000;
         res ^= CASTLING_KEYS[new_castling as usize];
@@ -114,21 +115,30 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
 
     if m.is_capture(b) {
         //not including en passant
-        let captured_piece = b.pieces_array[sq_to];
+        let captured_piece = unsafe { b.pieces_array[sq_to].unwrap_unchecked() };
         res ^= PIECE_KEYS[sq_to][captured_piece];
-        if captured_piece == WR && sq_to == H1 && (b.castling & 0b00000001 > 0) {
+        if captured_piece == Piece::WR && sq_to == Square::H1 && (b.castling & 0b00000001 > 0) {
             res ^= CASTLING_KEYS[b.castling as usize];
             let new_castling = b.castling ^ 0b00000001;
             res ^= CASTLING_KEYS[new_castling as usize];
-        } else if captured_piece == WR && sq_to == A1 && (b.castling & 0b00000010 > 0) {
+        } else if captured_piece == Piece::WR
+            && sq_to == Square::A1
+            && (b.castling & 0b00000010 > 0)
+        {
             res ^= CASTLING_KEYS[b.castling as usize];
             let new_castling = b.castling ^ 0b00000010;
             res ^= CASTLING_KEYS[new_castling as usize];
-        } else if captured_piece == BR && sq_to == H8 && (b.castling & 0b000000100 > 0) {
+        } else if captured_piece == Piece::BR
+            && sq_to == Square::H8
+            && (b.castling & 0b000000100 > 0)
+        {
             res ^= CASTLING_KEYS[b.castling as usize];
             let new_castling = b.castling ^ 0b00000100;
             res ^= CASTLING_KEYS[new_castling as usize];
-        } else if captured_piece == BR && sq_to == A8 && (b.castling & 0b00001000 > 0) {
+        } else if captured_piece == Piece::BR
+            && sq_to == Square::A8
+            && (b.castling & 0b00001000 > 0)
+        {
             res ^= CASTLING_KEYS[b.castling as usize];
             let new_castling = b.castling ^ 0b00001000;
             res ^= CASTLING_KEYS[new_castling as usize];
@@ -137,21 +147,21 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
 
     if m.is_castling() {
         match sq_to {
-            C1 => {
-                res ^= PIECE_KEYS[A1][WR];
-                res ^= PIECE_KEYS[D1][WR];
+            Square::C1 => {
+                res ^= PIECE_KEYS[Square::A1][Piece::WR];
+                res ^= PIECE_KEYS[Square::D1][Piece::WR];
             }
-            G1 => {
-                res ^= PIECE_KEYS[H1][WR];
-                res ^= PIECE_KEYS[F1][WR];
+            Square::G1 => {
+                res ^= PIECE_KEYS[Square::H1][Piece::WR];
+                res ^= PIECE_KEYS[Square::F1][Piece::WR];
             }
-            C8 => {
-                res ^= PIECE_KEYS[A8][BR];
-                res ^= PIECE_KEYS[D8][BR];
+            Square::C8 => {
+                res ^= PIECE_KEYS[Square::A8][Piece::BR];
+                res ^= PIECE_KEYS[Square::D8][Piece::BR];
             }
-            G8 => {
-                res ^= PIECE_KEYS[H8][BR];
-                res ^= PIECE_KEYS[F8][BR];
+            Square::G8 => {
+                res ^= PIECE_KEYS[Square::H8][Piece::BR];
+                res ^= PIECE_KEYS[Square::F8][Piece::BR];
             }
             _ => unreachable!(),
         }
@@ -159,11 +169,11 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
 
     if m.is_en_passant() {
         match piece {
-            WP => {
-                res ^= PIECE_KEYS[sq_to - 8][BP];
+            Piece::WP => {
+                res ^= PIECE_KEYS[unsafe { sq_to.sub_unchecked(8) }][Piece::BP];
             }
-            BP => {
-                res ^= PIECE_KEYS[sq_to + 8][WP];
+            Piece::BP => {
+                res ^= PIECE_KEYS[unsafe { sq_to.add_unchecked(8) }][Piece::WP];
             }
             _ => unreachable!(),
         }
@@ -173,8 +183,8 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
         res ^= PIECE_KEYS[sq_to][piece];
         //undo operation from before (works bc XOR is its own inverse)
         let promoted_piece = match piece {
-            WP => m.promoted_piece(),
-            BP => m.promoted_piece() + 6, //only type is encoded in the move
+            Piece::WP => m.promoted_piece(),
+            Piece::BP => m.promoted_piece().opposite(), //only type is encoded in the move
             _ => unreachable!(),
         };
         res ^= PIECE_KEYS[sq_to][promoted_piece];
@@ -182,8 +192,8 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
 
     if m.is_double_push(&b) {
         match piece {
-            WP => res ^= EP_KEYS[sq_to - 8],
-            BP => res ^= EP_KEYS[sq_to + 8],
+            Piece::WP => res ^= EP_KEYS[unsafe { sq_to.sub_unchecked(8) }],
+            Piece::BP => res ^= EP_KEYS[unsafe { sq_to.add_unchecked(8) }],
             _ => unreachable!(),
         }
     }

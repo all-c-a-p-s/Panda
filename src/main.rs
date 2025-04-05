@@ -1,6 +1,5 @@
 pub mod board;
 pub mod datagen;
-pub mod db;
 pub mod eval;
 pub mod helper;
 pub mod magic;
@@ -11,23 +10,20 @@ pub mod perft;
 pub mod rng;
 pub mod search;
 pub mod transposition;
-pub mod tuner;
+pub mod types;
 pub mod uci;
 pub mod uncertainty;
 pub mod zobrist;
 
 use std::error::Error;
-use std::time::Instant;
 
 use crate::board::*;
 use crate::datagen::*;
-use crate::db::*;
 use crate::helper::*;
 use crate::magic::*;
 use crate::perft::*;
 use crate::r#move::*;
 use crate::search::*;
-use crate::tuner::*;
 use crate::uci::*;
 
 fn init_all() {
@@ -39,15 +35,12 @@ fn init_all() {
 enum Mode {
     Profile,
     Debug,
-    Tune,
     Uncertainty,
     Datagen,
-    Db,
     Uci,
 }
 
-const MODE: Mode = Mode::Uci;
-const TUNING_METHOD: TuneType = TuneType::Genetic;
+const MODE: Mode = Mode::Profile;
 
 #[allow(unused)]
 const ONE_HOUR: u64 = 3600;
@@ -63,18 +56,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     match MODE {
         Mode::Uci => uci_loop(),
-        Mode::Tune => {
-            match TUNING_METHOD {
-                TuneType::Genetic => genetic_algorithm()?,
-                TuneType::Anneal => simulated_annealing()?,
-                TuneType::HillClimb => hill_climbing()?,
-            };
-        }
         Mode::Uncertainty => uncertainty::tune_one_by_one(),
         Mode::Profile => full_perft(),
         Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(ONE_HOUR / 3))?,
         Mode::Debug => {}
-        Mode::Db => inspect_db("/Users/seba/rs/Panda/data/2021-07-31-lichess-evaluations-37MM.db")?,
     };
 
     Ok(())

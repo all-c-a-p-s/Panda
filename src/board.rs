@@ -2,15 +2,19 @@ use crate::helper::*;
 use crate::magic::*;
 use crate::movegen::*;
 use crate::nnue::*;
+use crate::types::{Piece, Square};
+
+pub(crate) type BitBoard = u64;
+pub(crate) const EMPTY: BitBoard = 0;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Board {
     //Fundamental board state
-    pub bitboards: [u64; 12],
-    pub pieces_array: [usize; 64], //used to speed up move generation
-    pub occupancies: [u64; 3],     //white, black, both
+    pub bitboards: [BitBoard; 12],
+    pub pieces_array: [Option<Piece>; 64], //used to speed up move generation
+    pub occupancies: [BitBoard; 3],        //white, black, both
     pub castling: u8, //4 bits only should be used 0001 = wk, 0010 = wq, 0100 = bk, 1000 = bq
-    pub en_passant: usize, //ep square index
+    pub en_passant: Option<Square>, //ep square index
     pub side_to_move: Colour,
     pub fifty_move: u8,
 
@@ -20,8 +24,8 @@ pub struct Board {
     pub hash_key: u64,
 
     //Used in movegen
-    pub checkers: u64,
-    pub pinned: u64,
+    pub checkers: BitBoard,
+    pub pinned: BitBoard,
 
     //Used in evaluation
     pub nnue: Accumulator,
@@ -42,32 +46,32 @@ impl Colour {
     }
 }
 
-pub fn ascii_to_piece_index(ascii: char) -> usize {
+pub fn ascii_to_piece(ascii: char) -> Piece {
     match ascii {
-        'P' => 0,
-        'N' => 1,
-        'B' => 2,
-        'R' => 3,
-        'Q' => 4,
-        'K' => 5,
-        'p' => 6,
-        'n' => 7,
-        'b' => 8,
-        'r' => 9,
-        'q' => 10,
-        'k' => 11,
-        _ => panic!("invalid character in ascii_to_piece_index()"),
+        'P' => Piece::WP,
+        'N' => Piece::WN,
+        'B' => Piece::WB,
+        'R' => Piece::WR,
+        'Q' => Piece::WQ,
+        'K' => Piece::WK,
+        'p' => Piece::BP,
+        'n' => Piece::BN,
+        'b' => Piece::BB,
+        'r' => Piece::BR,
+        'q' => Piece::BQ,
+        'k' => Piece::BK,
+        _ => panic!("invalid character in ascii_to_piece()"),
     }
 }
 
 impl Board {
     pub fn from(fen: &str) -> Self {
         let mut new_board = Board {
-            bitboards: [0u64; 12],
-            pieces_array: [NO_PIECE; 64],
-            occupancies: [0u64; 3],
+            bitboards: [EMPTY; 12],
+            pieces_array: [None; 64],
+            occupancies: [EMPTY; 3],
             castling: 0,
-            en_passant: NO_SQUARE,
+            en_passant: None,
             side_to_move: Colour::White,
             fifty_move: 0,
             ply: 0,
@@ -117,8 +121,8 @@ impl Board {
         }
 
         match flags[2] {
-            "-" => new_board.en_passant = NO_SQUARE,
-            _ => new_board.en_passant = square(flags[2]),
+            "-" => new_board.en_passant = None,
+            _ => new_board.en_passant = Some(square(flags[2])),
         }
 
         new_board.fifty_move = flags[3].to_string().parse::<u8>().unwrap();
@@ -149,30 +153,30 @@ impl Board {
                         .unwrap()
                 }
                 'P' | 'N' | 'B' | 'R' | 'Q' | 'K' | 'p' | 'n' | 'b' | 'r' | 'q' | 'k' => {
-                    new_board.bitboards[ascii_to_piece_index(c)] = set_bit(
-                        rank * 8 + file,
-                        new_board.bitboards[ascii_to_piece_index(c)],
+                    new_board.bitboards[ascii_to_piece(c)] = set_bit(
+                        unsafe { Square::from((rank * 8 + file) as u8) },
+                        new_board.bitboards[ascii_to_piece(c)],
                     );
-                    new_board.pieces_array[rank * 8 + file] = ascii_to_piece_index(c);
+                    new_board.pieces_array[rank * 8 + file] = Some(ascii_to_piece(c));
                     file += 1
                 }
                 _ => panic!("unexpected character {}", c),
             }
         }
 
-        new_board.occupancies[WHITE] = new_board.bitboards[WP]
-            | new_board.bitboards[WN]
-            | new_board.bitboards[WB]
-            | new_board.bitboards[WR]
-            | new_board.bitboards[WQ]
-            | new_board.bitboards[WK];
+        new_board.occupancies[WHITE] = new_board.bitboards[Piece::WP]
+            | new_board.bitboards[Piece::WN]
+            | new_board.bitboards[Piece::WB]
+            | new_board.bitboards[Piece::WR]
+            | new_board.bitboards[Piece::WQ]
+            | new_board.bitboards[Piece::WK];
 
-        new_board.occupancies[BLACK] = new_board.bitboards[BP]
-            | new_board.bitboards[BN]
-            | new_board.bitboards[BB]
-            | new_board.bitboards[BR]
-            | new_board.bitboards[BQ]
-            | new_board.bitboards[BK];
+        new_board.occupancies[BLACK] = new_board.bitboards[Piece::BP]
+            | new_board.bitboards[Piece::BN]
+            | new_board.bitboards[Piece::BB]
+            | new_board.bitboards[Piece::BR]
+            | new_board.bitboards[Piece::BQ]
+            | new_board.bitboards[Piece::BK];
 
         new_board.occupancies[BOTH] = new_board.occupancies[WHITE] | new_board.occupancies[BLACK];
 
@@ -187,6 +191,7 @@ impl Board {
         for rank in 0..8 {
             for file in 0..8 {
                 let sq = rank * 8 + file;
+                let sq = unsafe { Square::from(sq as u8) };
                 let mut empty = true;
                 for i in 0..self.bitboards.len() {
                     if (self.bitboards[i] & set_bit(sq, 0)) != 0 {
@@ -251,8 +256,8 @@ impl Board {
             _ => panic!("invalid castling rights"),
         };
         println!("Castling: {}", castling_rights);
-        if self.en_passant != NO_SQUARE {
-            println!("En passant: {}", coordinate(self.en_passant));
+        if let Some(ep) = self.en_passant {
+            println!("En passant: {}", coordinate(ep));
         } else {
             println!("En passant: NONE");
         }
@@ -264,7 +269,10 @@ impl Board {
         //used to avoid null move pruning in king and pawn endgames
         //where zugzwang is very common
         self.occupancies[BOTH]
-            ^ (self.bitboards[WP] | self.bitboards[WK] | self.bitboards[BP] | self.bitboards[BK])
+            ^ (self.bitboards[Piece::WP]
+                | self.bitboards[Piece::WK]
+                | self.bitboards[Piece::BP]
+                | self.bitboards[Piece::BK])
             == 0
     }
 
@@ -284,7 +292,7 @@ impl Board {
                     }
                     fen += "/";
                 }
-                if pc == NO_PIECE {
+                if pc == None {
                     empty_count += 1;
                 } else {
                     if empty_count != 0 {
@@ -292,18 +300,18 @@ impl Board {
                         empty_count = 0;
                     }
                     match pc {
-                        WP => fen += "P",
-                        WN => fen += "N",
-                        WB => fen += "B",
-                        WR => fen += "R",
-                        WQ => fen += "Q",
-                        WK => fen += "K",
-                        BP => fen += "p",
-                        BN => fen += "n",
-                        BB => fen += "b",
-                        BR => fen += "r",
-                        BQ => fen += "q",
-                        BK => fen += "k",
+                        Some(Piece::WP) => fen += "P",
+                        Some(Piece::WN) => fen += "N",
+                        Some(Piece::WB) => fen += "B",
+                        Some(Piece::WR) => fen += "R",
+                        Some(Piece::WQ) => fen += "Q",
+                        Some(Piece::WK) => fen += "K",
+                        Some(Piece::BP) => fen += "p",
+                        Some(Piece::BN) => fen += "n",
+                        Some(Piece::BB) => fen += "b",
+                        Some(Piece::BR) => fen += "r",
+                        Some(Piece::BQ) => fen += "q",
+                        Some(Piece::BK) => fen += "k",
                         _ => unreachable!(),
                     }
                 }
@@ -341,9 +349,10 @@ impl Board {
             _ => panic!("invalid castling rights"),
         };
 
-        if self.en_passant != NO_SQUARE {
+        if self.en_passant != None {
             fen += " ";
-            fen += &coordinate(self.en_passant);
+            //SAFETY: checked above that it is not None
+            fen += &coordinate(unsafe { self.en_passant.unwrap_unchecked() });
         } else {
             fen += " -";
         };
@@ -360,8 +369,8 @@ impl Board {
         let our_king = unsafe {
             lsfb(
                 self.bitboards[match colour {
-                    Colour::White => WK,
-                    Colour::Black => BK,
+                    Colour::White => Piece::WK,
+                    Colour::Black => Piece::BK,
                 }],
             )
             .unwrap_unchecked()
@@ -370,12 +379,16 @@ impl Board {
 
         let mut their_attackers = if colour == Colour::White {
             self.occupancies[BLACK]
-                & ((BISHOP_EDGE_RAYS[our_king] & (self.bitboards[BB] | self.bitboards[BQ]))
-                    | ROOK_EDGE_RAYS[our_king] & (self.bitboards[BR] | self.bitboards[BQ]))
+                & ((BISHOP_EDGE_RAYS[our_king]
+                    & (self.bitboards[Piece::BB] | self.bitboards[Piece::BQ]))
+                    | ROOK_EDGE_RAYS[our_king]
+                        & (self.bitboards[Piece::BR] | self.bitboards[Piece::BQ]))
         } else {
             self.occupancies[WHITE]
-                & ((BISHOP_EDGE_RAYS[our_king] & (self.bitboards[WB] | self.bitboards[WQ]))
-                    | ROOK_EDGE_RAYS[our_king] & (self.bitboards[WR] | self.bitboards[WQ]))
+                & ((BISHOP_EDGE_RAYS[our_king]
+                    & (self.bitboards[Piece::WB] | self.bitboards[Piece::WQ]))
+                    | ROOK_EDGE_RAYS[our_king]
+                        & (self.bitboards[Piece::WR] | self.bitboards[Piece::WQ]))
         };
 
         while let Some(sq) = lsfb(their_attackers) {

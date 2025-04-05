@@ -1,9 +1,11 @@
 use std::time::Instant;
 
+use crate::types::*;
 use crate::zobrist::*;
 use crate::*;
 
 pub enum CommandType {
+    Unknown,
     Uci,
     UciNewGame, //can basically ignore
     IsReady,
@@ -36,39 +38,44 @@ pub fn recognise_command(command: &str) -> CommandType {
         "stop" => CommandType::Stop,
         "quit" => CommandType::Quit,
         "d" => CommandType::D,
-        _ => panic!("invalid command {}", command),
+        _ => CommandType::Unknown,
     }
 }
 
 pub const STARTPOS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 pub fn parse_move(input: &str, board: &Board) -> Move {
-    let sq_from = square(&input[0..2]);
-    let sq_to = square(&input[2..4]);
-    let piece = board.pieces_array[sq_from];
+    let sq_from = unsafe { Square::from(square(&input[0..2]) as u8) };
+    let sq_to = unsafe { Square::from(square(&input[2..4]) as u8) };
+    let piece = unsafe { board.pieces_array[sq_from].unwrap_unchecked() };
     if input.len() == 5 {
         //only type of piece encoded because only 2 bits used in the move
         //and the flag is used to detect promotions
         let promoted_piece = match input.chars().collect::<Vec<char>>()[4] {
-            'q' | 'Q' => QUEEN,
-            'r' | 'R' => ROOK,
-            'b' | 'B' => BISHOP,
-            'n' | 'N' => KNIGHT,
+            'q' | 'Q' => Piece::WQ,
+            'r' | 'R' => Piece::WR,
+            'b' | 'B' => Piece::WB,
+            'n' | 'N' => Piece::WN,
             _ => panic!(
                 "invalid promoted piece {}",
                 input.chars().collect::<Vec<char>>()[4]
             ),
         };
-        return encode_move(sq_from, sq_to, promoted_piece, PROMOTION_FLAG);
+        return encode_move(sq_from, sq_to, Some(promoted_piece), PROMOTION_FLAG);
     }
-    if (sq_from == E1 && piece == WK && (sq_to == G1 || sq_to == C1))
-        || (sq_from == E8 && piece == BK && (sq_to == G8 || sq_to == C8))
+    if (sq_from == Square::E1 && piece == Piece::WK && (sq_to == Square::G1 || sq_to == Square::C1))
+        || (sq_from == Square::E8
+            && piece == Piece::BK
+            && (sq_to == Square::G8 || sq_to == Square::C8))
     {
-        return encode_move(sq_from, sq_to, NO_PIECE, CASTLING_FLAG);
-    } else if sq_to == board.en_passant && piece_type(piece) == PAWN {
-        return encode_move(sq_from, sq_to, NO_PIECE, EN_PASSANT_FLAG);
+        return encode_move(sq_from, sq_to, None, CASTLING_FLAG);
+    } else if board.en_passant.is_some()
+        && board.en_passant.unwrap() == sq_to
+        && piece_type(piece) == PAWN
+    {
+        return encode_move(sq_from, sq_to, None, EN_PASSANT_FLAG);
     }
-    encode_move(sq_from, sq_to, NO_PIECE, NO_FLAG)
+    encode_move(sq_from, sq_to, None, NO_FLAG)
 }
 
 pub fn parse_uci(command: &str) {
@@ -78,14 +85,14 @@ pub fn parse_uci(command: &str) {
             println!("id name Panda 1.0");
             println!("id author Sebastiano Rebonato-Scott");
         }
-        _ => panic!("invalid uci command"),
+        _ => {}
     }
 }
 
 pub fn parse_isready(command: &str) {
     match command {
         "isready" => println!("readyok"),
-        _ => panic!("invalid isready command"),
+        _ => {}
     }
 }
 
@@ -134,7 +141,7 @@ pub fn parse_position(command: &str, b: &mut Board) {
                 unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
             }
         }
-        _ => panic!("invalid position command"),
+        _ => {}
     };
 }
 
@@ -345,12 +352,11 @@ pub fn uci_loop() {
                         + {
                             if move_data.m.is_promotion() {
                                 match move_data.m.promoted_piece() {
-                                    WN | BN => "n",
-                                    WB | BB => "b",
-                                    WR | BR => "r",
-                                    WQ | BQ => "q",
-                                    NO_PIECE => "",
-                                    _ => "impossible",
+                                    Piece::WN | Piece::BN => "n",
+                                    Piece::WB | Piece::BB => "b",
+                                    Piece::WR | Piece::BR => "r",
+                                    Piece::WQ | Piece::BQ => "q",
+                                    _ => unreachable!(),
                                 }
                             } else {
                                 ""

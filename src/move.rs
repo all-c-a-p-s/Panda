@@ -17,6 +17,8 @@ use crate::movegen::*;
 use crate::zobrist::*;
 use crate::REPETITION_TABLE;
 
+use crate::types::{Piece, Square};
+
 pub const SQUARE_FROM_MASK: u16 = 0b0000_0000_0011_1111;
 pub const SQUARE_TO_MASK: u16 = 0b0000_1111_1100_0000;
 pub const PROMOTION_MASK: u16 = 0b0011_0000_0000_0000; // != PROMOTION_FLAG
@@ -43,17 +45,17 @@ pub struct Move {
 pub struct Commit {
     //resets for irreversible fields of Board struct
     pub castling_reset: u8,
-    pub ep_reset: usize,
+    pub ep_reset: Option<Square>,
     pub fifty_move_reset: u8,
-    pub piece_captured: usize,
+    pub piece_captured: Option<Piece>,
     pub hash_key: u64,
     pub made_move: bool,
-    pub pinned: u64,
-    pub checkers: u64,
+    pub pinned: BitBoard,
+    pub checkers: BitBoard,
 }
 
 impl Move {
-    pub fn from_promotion(from: usize, to: usize, promoted_piece: usize) -> Self {
+    pub fn from_promotion(from: Square, to: Square, promoted_piece: Piece) -> Self {
         Self {
             data: from as u16
                 | (to as u16) << 6
@@ -62,24 +64,24 @@ impl Move {
         }
     }
 
-    pub fn from_flags(from: usize, to: usize, flags: u16) -> Self {
+    pub fn from_flags(from: Square, to: Square, flags: u16) -> Self {
         Self {
             data: from as u16 | (to as u16) << 6 | flags,
         }
     }
 
-    pub fn square_from(self) -> usize {
-        (self.data & SQUARE_FROM_MASK) as usize
+    pub fn square_from(self) -> Square {
+        unsafe { Square::from((self.data & SQUARE_FROM_MASK) as u8) }
     }
 
-    pub fn square_to(self) -> usize {
-        ((self.data & SQUARE_TO_MASK) >> 6) as usize
+    pub fn square_to(self) -> Square {
+        unsafe { Square::from(((self.data & SQUARE_TO_MASK) >> 6) as u8) }
     }
 
-    pub fn promoted_piece(self) -> usize {
+    pub fn promoted_piece(self) -> Piece {
         //must be called only if self.is_promotion() is true
         //also only given piece type, not colour
-        (((self.data & PROMOTION_MASK) >> 12) + 1) as usize
+        unsafe { Piece::from((((self.data & PROMOTION_MASK) >> 12) + 1) as u8) }
     }
 
     pub fn is_promotion(self) -> bool {
@@ -98,12 +100,13 @@ impl Move {
         self.data == 0
     }
 
-    pub fn piece_moved(self, b: &Board) -> usize {
-        b.pieces_array[self.square_from()]
+    pub fn piece_moved(self, b: &Board) -> Piece {
+        //SAFETY: if a piece is to be moved from a square then it must be there
+        unsafe { b.pieces_array[self.square_from()].unwrap_unchecked() }
     }
 
     pub fn is_capture(self, b: &Board) -> bool {
-        b.pieces_array[self.square_to()] != NO_PIECE
+        b.pieces_array[self.square_to()].is_some()
     }
 
     pub fn is_double_push(self, b: &Board) -> bool {
@@ -115,8 +118,9 @@ impl Move {
         piece_type(self.piece_moved(b)) == PAWN
     }
 
-    pub fn piece_captured(self, b: &Board) -> usize {
-        b.pieces_array[self.square_to()]
+    pub fn piece_captured(self, b: &Board) -> Piece {
+        //SAFETY: this is only called when we know the move is a capture
+        unsafe { b.pieces_array[self.square_to()].unwrap_unchecked() }
     }
 
     pub fn is_tactical(self, b: &Board) -> bool {
@@ -137,10 +141,10 @@ impl Move {
             "promoted to {}",
             if self.is_promotion() {
                 match self.promoted_piece() {
-                    KNIGHT => "knight",
-                    BISHOP => "bishop",
-                    ROOK => "rook",
-                    QUEEN => "queen",
+                    Piece::WN => "knight",
+                    Piece::WB => "bishop",
+                    Piece::WR => "rook",
+                    Piece::WQ => "queen",
                     _ => unreachable!(),
                 }
             } else {
@@ -153,10 +157,10 @@ impl Move {
     }
 }
 
-pub fn encode_move(from: usize, to: usize, promoted_piece: usize, flag: u16) -> Move {
+pub fn encode_move(from: Square, to: Square, promoted_piece: Option<Piece>, flag: u16) -> Move {
     if flag & PROMOTION_FLAG == PROMOTION_FLAG {
         //move is a promotion
-        Move::from_promotion(from, to, promoted_piece)
+        Move::from_promotion(from, to, unsafe { promoted_piece.unwrap_unchecked() })
     } else {
         Move::from_flags(from, to, flag)
     }
@@ -165,30 +169,32 @@ pub fn encode_move(from: usize, to: usize, promoted_piece: usize, flag: u16) -> 
 //this gets the longest line in the direction of two squares
 //except for those two squares themselves
 //used for detecting pins in movegen
-const fn get_line_rays(sq1: usize, sq2: usize) -> u64 {
-    let rays = BISHOP_EDGE_RAYS[sq1];
-    if rays & set_bit(sq2, 0) > 0 {
-        return (rays | set_bit(sq1, 0)) & (BISHOP_EDGE_RAYS[sq2] | set_bit(sq2, 0))
-            ^ set_bit(sq1, 0)
-            ^ set_bit(sq2, 0);
+const LINE_RAYS: [[BitBoard; 64]; 64] = {
+    const fn get_line_rays(sq1: Square, sq2: Square) -> BitBoard {
+        let rays = BISHOP_EDGE_RAYS[sq1 as usize];
+        if rays & set_bit(sq2, 0) > 0 {
+            return (rays | set_bit(sq1, 0)) & (BISHOP_EDGE_RAYS[sq2 as usize] | set_bit(sq2, 0))
+                ^ set_bit(sq1, 0)
+                ^ set_bit(sq2, 0);
+        }
+
+        let rays = ROOK_EDGE_RAYS[sq1 as usize];
+        if rays & set_bit(sq2, 0) > 0 {
+            return (rays | set_bit(sq1, 0)) & (ROOK_EDGE_RAYS[sq2 as usize] | set_bit(sq2, 0))
+                ^ set_bit(sq1, 0)
+                ^ set_bit(sq2, 0);
+        }
+        0
     }
 
-    let rays = ROOK_EDGE_RAYS[sq1];
-    if rays & set_bit(sq2, 0) > 0 {
-        return (rays | set_bit(sq1, 0)) & (ROOK_EDGE_RAYS[sq2] | set_bit(sq2, 0))
-            ^ set_bit(sq1, 0)
-            ^ set_bit(sq2, 0);
-    }
-    0
-}
-
-const LINE_RAYS: [[u64; 64]; 64] = {
     let mut r = [[0u64; 64]; 64];
     let mut a = 0;
     while a < 64 {
         let mut b = 0;
         while b < 64 {
-            r[a][b] = get_line_rays(a, b);
+            r[a][b] = get_line_rays(unsafe { Square::from(a as u8) }, unsafe {
+                Square::from(b as u8)
+            });
             b += 1;
         }
         a += 1;
@@ -209,68 +215,74 @@ impl Board {
         let to = m.square_to();
         let from = m.square_from();
         let piece = match m.is_promotion() {
-            false => self.pieces_array[to],
+            //SAFETY: there must be a piece on this square
+            false => unsafe { self.pieces_array[to].unwrap_unchecked() },
             true => match self.pieces_array[to] {
-                WN..=WQ => WP,
-                BN..=BQ => BP,
+                Some(Piece::WP) | Some(Piece::WN) | Some(Piece::WB) | Some(Piece::WR)
+                | Some(Piece::WQ) => Piece::WP,
+                Some(Piece::BP) | Some(Piece::BN) | Some(Piece::BB) | Some(Piece::BR)
+                | Some(Piece::BQ) => Piece::BP,
                 _ => unreachable!(),
             },
         }; //not m.piece_moved(&self) because board has been mutated
 
         if m.is_promotion() {
-            let promoted_piece = self.pieces_array[to];
+            //SAFETY: there must be a piece on this square
+            let promoted_piece = unsafe { self.pieces_array[to].unwrap_unchecked() };
             self.bitboards[promoted_piece] = pop_bit(to, self.bitboards[promoted_piece]);
             self.pieces_array[to] = c.piece_captured; //remove promoted piece from pieces_array
             self.bitboards[piece] = set_bit(from, self.bitboards[piece]);
-            self.pieces_array[from] = piece;
+            self.pieces_array[from] = Some(piece);
             //remove promoted piece from bitboard
             self.nnue
-                .undo_move(piece, c.piece_captured, promoted_piece, from, to);
+                .undo_move(piece, c.piece_captured, Some(promoted_piece), from, to);
         } else {
             self.bitboards[piece] = pop_bit(to, self.bitboards[piece]);
             self.pieces_array[to] = c.piece_captured;
             self.bitboards[piece] = set_bit(from, self.bitboards[piece]);
-            self.pieces_array[from] = piece;
-            self.nnue
-                .undo_move(piece, c.piece_captured, NO_PIECE, from, to);
+            self.pieces_array[from] = Some(piece);
+            self.nnue.undo_move(piece, c.piece_captured, None, from, to);
         }
 
-        if c.piece_captured != NO_PIECE {
+        if let Some(victim) = c.piece_captured {
             //put captured piece back onto bitboard
-            self.bitboards[c.piece_captured] = set_bit(to, self.bitboards[c.piece_captured]);
+            self.bitboards[victim] = set_bit(to, self.bitboards[victim]);
             self.pieces_array[to] = c.piece_captured;
         }
 
         if m.is_castling() {
             //reset rooks after castling (king done above)
             match to {
-                C1 => {
-                    self.bitboards[WR] = pop_bit(D1, self.bitboards[WR]);
-                    self.bitboards[WR] = set_bit(A1, self.bitboards[WR]);
+                Square::C1 => {
+                    self.bitboards[Piece::WR] = pop_bit(Square::D1, self.bitboards[Piece::WR]);
+                    self.bitboards[Piece::WR] = set_bit(Square::A1, self.bitboards[Piece::WR]);
 
-                    self.pieces_array[D1] = NO_PIECE;
-                    self.pieces_array[A1] = WR;
+                    self.pieces_array[Square::D1] = None;
+                    self.pieces_array[Square::A1] = Some(Piece::WR);
+
+                    self.pieces_array[Square::D1] = None;
+                    self.pieces_array[Square::A1] = Some(Piece::WR);
                 }
-                G1 => {
-                    self.bitboards[WR] = pop_bit(F1, self.bitboards[WR]);
-                    self.bitboards[WR] = set_bit(H1, self.bitboards[WR]);
+                Square::G1 => {
+                    self.bitboards[Piece::WR] = pop_bit(Square::F1, self.bitboards[Piece::WR]);
+                    self.bitboards[Piece::WR] = set_bit(Square::H1, self.bitboards[Piece::WR]);
 
-                    self.pieces_array[F1] = NO_PIECE;
-                    self.pieces_array[H1] = WR;
+                    self.pieces_array[Square::F1] = None;
+                    self.pieces_array[Square::H1] = Some(Piece::WR);
                 }
-                C8 => {
-                    self.bitboards[BR] = pop_bit(D8, self.bitboards[BR]);
-                    self.bitboards[BR] = set_bit(A8, self.bitboards[BR]);
+                Square::C8 => {
+                    self.bitboards[Piece::BR] = pop_bit(Square::D8, self.bitboards[Piece::BR]);
+                    self.bitboards[Piece::BR] = set_bit(Square::A8, self.bitboards[Piece::BR]);
 
-                    self.pieces_array[D8] = NO_PIECE;
-                    self.pieces_array[A8] = BR;
+                    self.pieces_array[Square::D8] = None;
+                    self.pieces_array[Square::A8] = Some(Piece::BR);
                 }
-                G8 => {
-                    self.bitboards[BR] = pop_bit(F8, self.bitboards[BR]);
-                    self.bitboards[BR] = set_bit(H8, self.bitboards[BR]);
+                Square::G8 => {
+                    self.bitboards[Piece::BR] = pop_bit(Square::F8, self.bitboards[Piece::BR]);
+                    self.bitboards[Piece::BR] = set_bit(Square::H8, self.bitboards[Piece::BR]);
 
-                    self.pieces_array[F8] = NO_PIECE;
-                    self.pieces_array[H8] = BR;
+                    self.pieces_array[Square::F8] = None;
+                    self.pieces_array[Square::H8] = Some(Piece::BR);
                 }
 
                 _ => unreachable!(),
@@ -283,31 +295,33 @@ impl Board {
             match self.side_to_move {
                 Colour::White => {
                     //white to move before move was made
-                    self.bitboards[BP] = set_bit(to - 8, self.bitboards[BP]);
-                    self.pieces_array[to - 8] = BP;
-                    self.nnue.undo_ep(piece, BP, from, to);
+                    self.bitboards[Piece::BP] =
+                        set_bit(unsafe { to.sub_unchecked(8) }, self.bitboards[Piece::BP]);
+                    self.pieces_array[unsafe { to.sub_unchecked(8) }] = Some(Piece::BP);
+                    self.nnue.undo_ep(piece, Some(Piece::BP), from, to);
                 }
                 Colour::Black => {
-                    self.bitboards[WP] = set_bit(to + 8, self.bitboards[WP]);
-                    self.pieces_array[to + 8] = WP;
-                    self.nnue.undo_ep(piece, WP, from, to);
+                    self.bitboards[Piece::WP] =
+                        set_bit(unsafe { to.add_unchecked(8) }, self.bitboards[Piece::WP]);
+                    self.pieces_array[unsafe { to.add_unchecked(8) }] = Some(Piece::WP);
+                    self.nnue.undo_ep(piece, Some(Piece::WP), from, to);
                 }
             };
         }
 
-        self.occupancies[WHITE] = self.bitboards[WP]
-            | self.bitboards[WN]
-            | self.bitboards[WB]
-            | self.bitboards[WR]
-            | self.bitboards[WQ]
-            | self.bitboards[WK];
+        self.occupancies[WHITE] = self.bitboards[Piece::WP]
+            | self.bitboards[Piece::WN]
+            | self.bitboards[Piece::WB]
+            | self.bitboards[Piece::WR]
+            | self.bitboards[Piece::WQ]
+            | self.bitboards[Piece::WK];
 
-        self.occupancies[BLACK] = self.bitboards[BP]
-            | self.bitboards[BN]
-            | self.bitboards[BB]
-            | self.bitboards[BR]
-            | self.bitboards[BQ]
-            | self.bitboards[BK];
+        self.occupancies[BLACK] = self.bitboards[Piece::BP]
+            | self.bitboards[Piece::BN]
+            | self.bitboards[Piece::BB]
+            | self.bitboards[Piece::BR]
+            | self.bitboards[Piece::BQ]
+            | self.bitboards[Piece::BK];
 
         self.occupancies[BOTH] = self.occupancies[WHITE] | self.occupancies[BLACK];
 
@@ -337,7 +351,7 @@ impl Board {
             castling_reset: self.castling,
             ep_reset: self.en_passant,
             fifty_move_reset: self.fifty_move,
-            piece_captured: NO_PIECE,
+            piece_captured: None,
             hash_key: self.hash_key,
             made_move: true,
             pinned: self.pinned,
@@ -350,7 +364,7 @@ impl Board {
         (self.checkers, self.pinned) = (0, 0);
 
         let (from, to) = (m.square_from(), m.square_to());
-        let piece_moved = self.pieces_array[from];
+        let piece_moved = unsafe { self.pieces_array[from].unwrap_unchecked() };
         let victim = self.pieces_array[to];
 
         let colour = self.side_to_move;
@@ -358,18 +372,18 @@ impl Board {
         //SAFETY: there MUST be a king on the board
         let enemy_king = unsafe {
             match colour {
-                Colour::White => lsfb(self.bitboards[BK]).unwrap_unchecked(),
-                Colour::Black => lsfb(self.bitboards[WK]).unwrap_unchecked(),
+                Colour::White => lsfb(self.bitboards[Piece::BK]).unwrap_unchecked(),
+                Colour::Black => lsfb(self.bitboards[Piece::WK]).unwrap_unchecked(),
             }
         };
 
-        if piece_type(piece_moved) == PAWN || victim != NO_PIECE {
+        if piece_type(piece_moved) == PAWN || victim.is_some() {
             self.fifty_move = 0;
         } else {
             self.fifty_move += 1;
         }
 
-        self.en_passant = NO_SQUARE;
+        self.en_passant = None;
 
         if !m.is_promotion() {
             self.nnue.quiet_update(piece_moved, from, to);
@@ -378,51 +392,51 @@ impl Board {
         if m.is_castling() {
             //update king and rook for castling
             match to {
-                C1 => {
-                    self.bitboards[WK] = set_bit(C1, 0); //works bc only 1 wk
-                    self.bitboards[WR] = pop_bit(A1, self.bitboards[WR]);
-                    self.bitboards[WR] = set_bit(D1, self.bitboards[WR]);
+                Square::C1 => {
+                    self.bitboards[Piece::WK] = set_bit(Square::C1, 0); //works bc only 1 wk
+                    self.bitboards[Piece::WR] = pop_bit(Square::A1, self.bitboards[Piece::WR]);
+                    self.bitboards[Piece::WR] = set_bit(Square::D1, self.bitboards[Piece::WR]);
 
-                    self.pieces_array[E1] = NO_PIECE;
-                    self.pieces_array[A1] = NO_PIECE;
-                    self.pieces_array[C1] = WK;
-                    self.pieces_array[D1] = WR;
-
-                    self.castling &= 0b0000_1100;
-                }
-                G1 => {
-                    self.bitboards[WK] = set_bit(G1, 0);
-                    self.bitboards[WR] = pop_bit(H1, self.bitboards[WR]);
-                    self.bitboards[WR] = set_bit(F1, self.bitboards[WR]);
-
-                    self.pieces_array[E1] = NO_PIECE;
-                    self.pieces_array[H1] = NO_PIECE;
-                    self.pieces_array[G1] = WK;
-                    self.pieces_array[F1] = WR;
+                    self.pieces_array[Square::E1] = None;
+                    self.pieces_array[Square::A1] = None;
+                    self.pieces_array[Square::C1] = Some(Piece::WK);
+                    self.pieces_array[Square::D1] = Some(Piece::WR);
 
                     self.castling &= 0b0000_1100;
                 }
-                C8 => {
-                    self.bitboards[BK] = set_bit(C8, 0);
-                    self.bitboards[BR] = pop_bit(A8, self.bitboards[BR]);
-                    self.bitboards[BR] = set_bit(D8, self.bitboards[BR]);
+                Square::G1 => {
+                    self.bitboards[Piece::WK] = set_bit(Square::G1, 0);
+                    self.bitboards[Piece::WR] = pop_bit(Square::H1, self.bitboards[Piece::WR]);
+                    self.bitboards[Piece::WR] = set_bit(Square::F1, self.bitboards[Piece::WR]);
 
-                    self.pieces_array[E8] = NO_PIECE;
-                    self.pieces_array[A8] = NO_PIECE;
-                    self.pieces_array[C8] = BK;
-                    self.pieces_array[D8] = BR;
+                    self.pieces_array[Square::E1] = None;
+                    self.pieces_array[Square::H1] = None;
+                    self.pieces_array[Square::G1] = Some(Piece::WK);
+                    self.pieces_array[Square::F1] = Some(Piece::WR);
+
+                    self.castling &= 0b0000_1100;
+                }
+                Square::C8 => {
+                    self.bitboards[Piece::BK] = set_bit(Square::C8, 0);
+                    self.bitboards[Piece::BR] = pop_bit(Square::A8, self.bitboards[Piece::BR]);
+                    self.bitboards[Piece::BR] = set_bit(Square::D8, self.bitboards[Piece::BR]);
+
+                    self.pieces_array[Square::E8] = None;
+                    self.pieces_array[Square::A8] = None;
+                    self.pieces_array[Square::C8] = Some(Piece::BK);
+                    self.pieces_array[Square::D8] = Some(Piece::BR);
 
                     self.castling &= 0b0000_0011;
                 }
-                G8 => {
-                    self.bitboards[BK] = set_bit(G8, 0);
-                    self.bitboards[BR] = pop_bit(H8, self.bitboards[BR]);
-                    self.bitboards[BR] = set_bit(F8, self.bitboards[BR]);
+                Square::G8 => {
+                    self.bitboards[Piece::BK] = set_bit(Square::G8, 0);
+                    self.bitboards[Piece::BR] = pop_bit(Square::H8, self.bitboards[Piece::BR]);
+                    self.bitboards[Piece::BR] = set_bit(Square::F8, self.bitboards[Piece::BR]);
 
-                    self.pieces_array[E8] = NO_PIECE;
-                    self.pieces_array[H8] = NO_PIECE;
-                    self.pieces_array[G8] = BK;
-                    self.pieces_array[F8] = BR;
+                    self.pieces_array[Square::E8] = None;
+                    self.pieces_array[Square::H8] = None;
+                    self.pieces_array[Square::G8] = Some(Piece::BK);
+                    self.pieces_array[Square::F8] = Some(Piece::BR);
 
                     self.castling &= 0b0000_0011;
                 }
@@ -434,62 +448,69 @@ impl Board {
             self.bitboards[piece_moved] ^= set_bit(from, 0);
             self.bitboards[piece_moved] ^= set_bit(to, 0);
 
-            self.pieces_array[from] = NO_PIECE;
-            self.pieces_array[to] = piece_moved;
+            self.pieces_array[from] = None;
+            self.pieces_array[to] = Some(piece_moved);
 
-            if victim != NO_PIECE {
-                commit.piece_captured = victim;
+            if let Some(victim) = victim {
+                commit.piece_captured = Some(victim);
                 self.bitboards[victim] ^= set_bit(to, 0);
                 match m.square_to() {
                     //remove castling rights is a1/h1/a8/h8 is captured on
-                    A1 => self.castling &= 0b0000_1101,
-                    H1 => self.castling &= 0b0000_1110,
-                    A8 => self.castling &= 0b0000_0111,
-                    H8 => self.castling &= 0b0000_1011,
+                    Square::A1 => self.castling &= 0b0000_1101,
+                    Square::H1 => self.castling &= 0b0000_1110,
+                    Square::A8 => self.castling &= 0b0000_0111,
+                    Square::H8 => self.castling &= 0b0000_1011,
                     _ => {}
                 }
 
-                self.nnue.capture_update(piece_moved, victim, from, to);
+                self.nnue
+                    .capture_update(piece_moved, Some(victim), from, to);
             }
 
             match piece_moved {
-                WN | BN => self.checkers |= N_ATTACKS[enemy_king] & set_bit(to, 0),
-                WP | BP => {
+                Piece::WN | Piece::BN => self.checkers |= N_ATTACKS[enemy_king] & set_bit(to, 0),
+                Piece::WP | Piece::BP => {
                     if m.is_promotion() {
                         self.bitboards[piece_moved] ^= set_bit(to, 0);
 
                         let promoted_piece = if colour == Colour::White {
                             m.promoted_piece()
                         } else {
-                            m.promoted_piece() + 6
+                            m.promoted_piece().opposite()
                         };
 
                         self.bitboards[promoted_piece] ^= set_bit(to, 0);
-                        self.pieces_array[to] = promoted_piece;
+                        self.pieces_array[to] = Some(promoted_piece);
 
                         if piece_type(promoted_piece) == KNIGHT {
                             self.checkers |= N_ATTACKS[enemy_king] & set_bit(to, 0);
                         }
 
                         self.nnue
-                            .promotion_update(piece_moved, promoted_piece, from, to);
+                            .promotion_update(piece_moved, Some(promoted_piece), from, to);
                     } else {
                         if rank(from).abs_diff(rank(to)) == 2 {
                             match colour {
-                                Colour::White => self.en_passant = to - 8,
-                                Colour::Black => self.en_passant = to + 8,
+                                Colour::White => {
+                                    self.en_passant = Some(unsafe { to.sub_unchecked(8) })
+                                }
+                                Colour::Black => {
+                                    self.en_passant = Some(unsafe { to.add_unchecked(8) })
+                                }
                             }
                         } else if m.is_en_passant() {
                             match colour {
                                 Colour::White => {
-                                    self.bitboards[BP] ^= set_bit(to - 8, 0);
-                                    self.pieces_array[to - 8] = NO_PIECE;
-                                    self.nnue.ep_update(piece_moved, BP, from, to);
+                                    self.bitboards[Piece::BP] ^=
+                                        set_bit(unsafe { to.sub_unchecked(8) }, 0);
+                                    self.pieces_array[unsafe { to.sub_unchecked(8) }] = None;
+                                    self.nnue.ep_update(piece_moved, Some(Piece::BP), from, to);
                                 }
                                 Colour::Black => {
-                                    self.bitboards[WP] ^= set_bit(to + 8, 0);
-                                    self.pieces_array[to + 8] = NO_PIECE;
-                                    self.nnue.ep_update(piece_moved, WP, from, to);
+                                    self.bitboards[Piece::WP] ^=
+                                        set_bit(unsafe { to.add_unchecked(8) }, 0);
+                                    self.pieces_array[unsafe { to.add_unchecked(8) }] = None;
+                                    self.nnue.ep_update(piece_moved, Some(Piece::WP), from, to);
                                 }
                             }
                         }
@@ -501,44 +522,48 @@ impl Board {
                             & set_bit(to, 0);
                     }
                 }
-                WK => self.castling &= 0b0000_1100,
-                BK => self.castling &= 0b0000_0011,
-                WR | BR => match from {
-                    A1 => self.castling &= 0b0000_1101,
-                    H1 => self.castling &= 0b0000_1110,
-                    A8 => self.castling &= 0b0000_0111,
-                    H8 => self.castling &= 0b0000_1011,
+                Piece::WK => self.castling &= 0b0000_1100,
+                Piece::BK => self.castling &= 0b0000_0011,
+                Piece::WR | Piece::BR => match from {
+                    Square::A1 => self.castling &= 0b0000_1101,
+                    Square::H1 => self.castling &= 0b0000_1110,
+                    Square::A8 => self.castling &= 0b0000_0111,
+                    Square::H8 => self.castling &= 0b0000_1011,
                     _ => {}
                 },
                 _ => {}
             };
         }
 
-        self.occupancies[WHITE] = self.bitboards[WP]
-            | self.bitboards[WN]
-            | self.bitboards[WB]
-            | self.bitboards[WR]
-            | self.bitboards[WQ]
-            | self.bitboards[WK];
+        self.occupancies[WHITE] = self.bitboards[Piece::WP]
+            | self.bitboards[Piece::WN]
+            | self.bitboards[Piece::WB]
+            | self.bitboards[Piece::WR]
+            | self.bitboards[Piece::WQ]
+            | self.bitboards[Piece::WK];
 
-        self.occupancies[BLACK] = self.bitboards[BP]
-            | self.bitboards[BN]
-            | self.bitboards[BB]
-            | self.bitboards[BR]
-            | self.bitboards[BQ]
-            | self.bitboards[BK];
+        self.occupancies[BLACK] = self.bitboards[Piece::BP]
+            | self.bitboards[Piece::BN]
+            | self.bitboards[Piece::BB]
+            | self.bitboards[Piece::BR]
+            | self.bitboards[Piece::BQ]
+            | self.bitboards[Piece::BK];
 
         self.occupancies[BOTH] = self.occupancies[WHITE] | self.occupancies[BLACK];
         //update occupancies
 
         let mut our_attackers = if colour == Colour::White {
             self.occupancies[WHITE]
-                & ((BISHOP_EDGE_RAYS[enemy_king] & (self.bitboards[WB] | self.bitboards[WQ]))
-                    | ROOK_EDGE_RAYS[enemy_king] & (self.bitboards[WR] | self.bitboards[WQ]))
+                & ((BISHOP_EDGE_RAYS[enemy_king]
+                    & (self.bitboards[Piece::WB] | self.bitboards[Piece::WQ]))
+                    | ROOK_EDGE_RAYS[enemy_king]
+                        & (self.bitboards[Piece::WR] | self.bitboards[Piece::WQ]))
         } else {
             self.occupancies[BLACK]
-                & ((BISHOP_EDGE_RAYS[enemy_king] & (self.bitboards[BB] | self.bitboards[BQ]))
-                    | ROOK_EDGE_RAYS[enemy_king] & (self.bitboards[BR] | self.bitboards[BQ]))
+                & ((BISHOP_EDGE_RAYS[enemy_king]
+                    & (self.bitboards[Piece::BB] | self.bitboards[Piece::BQ]))
+                    | ROOK_EDGE_RAYS[enemy_king]
+                        & (self.bitboards[Piece::BR] | self.bitboards[Piece::BQ]))
         };
 
         while let Some(sq) = lsfb(our_attackers) {
@@ -567,8 +592,8 @@ impl Board {
         let king_sq = unsafe {
             lsfb(
                 self.bitboards[match self.side_to_move {
-                    Colour::White => WK,
-                    Colour::Black => BK,
+                    Colour::White => Piece::WK,
+                    Colour::Black => Piece::BK,
                 }],
             )
             .unwrap_unchecked()
@@ -591,12 +616,16 @@ impl Board {
             _ => return false,
         };
 
-        let piece_moved = self.pieces_array[from];
+        let piece_moved = unsafe { self.pieces_array[from].unwrap_unchecked() };
 
         match piece_type(piece_moved) {
             PAWN => {
                 if m.is_en_passant() {
-                    let taken = if piece_moved == WP { to - 8 } else { to + 8 };
+                    let taken = if piece_moved == Piece::WP {
+                        unsafe { to.sub_unchecked(8) }
+                    } else {
+                        unsafe { to.add_unchecked(8) }
+                    };
                     //exception here since you can take the pawn giving check en passant
                     (target_squares & set_bit(to, 0) > 0 || lsfb(self.checkers) == Some(taken))
                         && check_en_passant(m, &self)
@@ -613,8 +642,8 @@ impl Board {
         let king_sq = unsafe {
             lsfb(
                 self.bitboards[match self.side_to_move {
-                    Colour::White => WK,
-                    Colour::Black => BK,
+                    Colour::White => Piece::WK,
+                    Colour::Black => Piece::BK,
                 }],
             )
             .unwrap_unchecked()
@@ -627,7 +656,7 @@ impl Board {
     }
 
     //NOTE: assumes at most one checker (double check case handled elsewhere)
-    fn target_squares(&self, in_check: bool) -> u64 {
+    fn target_squares(&self, in_check: bool) -> BitBoard {
         let colour = self.side_to_move;
         let targets = if in_check {
             //SAFETY: there MUST be a checker since we know we are in check
@@ -636,8 +665,8 @@ impl Board {
             let our_king = unsafe {
                 lsfb(
                     self.bitboards[match colour {
-                        Colour::White => WK,
-                        Colour::Black => BK,
+                        Colour::White => Piece::WK,
+                        Colour::Black => Piece::BK,
                     }],
                 )
                 .unwrap_unchecked()

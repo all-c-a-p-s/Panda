@@ -9,6 +9,8 @@ use crate::r#move::*;
 use crate::transposition::*;
 use crate::STARTPOS;
 
+use crate::types::*;
+
 use std::cmp;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -58,9 +60,10 @@ const UNDER_PROMOTION: i32 = -200_000;
 
 pub const MAX_GAME_PLY: usize = 1024;
 
+const MIN_MOVE_TIME: usize = 1; //make sure move time is never 0
 const TIME_TO_MOVE: usize = 50;
-const TIME_TO_START_SEARCH: usize = 50; //initialise big TT (if not using HashMap)
-                                        //leave 100ms total margin
+const TIME_TO_START_SEARCH: usize = 0; //initialise big TT (if not using HashMap)
+                                       //leave 100ms total margin
 
 pub static mut REPETITION_TABLE: [u64; MAX_GAME_PLY] = [0u64; MAX_GAME_PLY];
 pub static mut START_DEPTH: usize = 0;
@@ -133,8 +136,8 @@ pub struct Searcher {
 }
 
 struct NullMoveUndo {
-    ep: usize,
-    pinned: u64,
+    ep: Option<Square>,
+    pinned: BitBoard,
 }
 
 fn reduction_ok(tactical: bool, in_check: bool) -> bool {
@@ -156,8 +159,8 @@ fn make_null_move(b: &mut Board) -> NullMoveUndo {
     let our_king = unsafe {
         lsfb(
             b.bitboards[match colour {
-                Colour::White => WK,
-                Colour::Black => BK,
+                Colour::White => Piece::WK,
+                Colour::Black => Piece::BK,
             }],
         )
         .unwrap_unchecked()
@@ -165,12 +168,12 @@ fn make_null_move(b: &mut Board) -> NullMoveUndo {
 
     let mut their_attackers = if colour == Colour::White {
         b.occupancies[BLACK]
-            & ((BISHOP_EDGE_RAYS[our_king] & (b.bitboards[BB] | b.bitboards[BQ]))
-                | ROOK_EDGE_RAYS[our_king] & (b.bitboards[BR] | b.bitboards[BQ]))
+            & ((BISHOP_EDGE_RAYS[our_king] & (b.bitboards[Piece::BB] | b.bitboards[Piece::BQ]))
+                | ROOK_EDGE_RAYS[our_king] & (b.bitboards[Piece::BR] | b.bitboards[Piece::BQ]))
     } else {
         b.occupancies[WHITE]
-            & ((BISHOP_EDGE_RAYS[our_king] & (b.bitboards[WB] | b.bitboards[WQ]))
-                | ROOK_EDGE_RAYS[our_king] & (b.bitboards[WR] | b.bitboards[WQ]))
+            & ((BISHOP_EDGE_RAYS[our_king] & (b.bitboards[Piece::WB] | b.bitboards[Piece::WQ]))
+                | ROOK_EDGE_RAYS[our_king] & (b.bitboards[Piece::WR] | b.bitboards[Piece::WQ]))
     };
 
     while let Some(sq) = lsfb(their_attackers) {
@@ -182,16 +185,15 @@ fn make_null_move(b: &mut Board) -> NullMoveUndo {
         their_attackers = pop_bit(sq, their_attackers);
     }
 
-    if b.en_passant != NO_SQUARE {
-        let reset = b.en_passant;
-        b.en_passant = NO_SQUARE;
+    if let Some(reset) = b.en_passant {
+        b.en_passant = None;
         return NullMoveUndo {
-            ep: reset,
+            ep: Some(reset),
             pinned: pinned_reset,
         };
     }
     return NullMoveUndo {
-        ep: NO_SQUARE,
+        ep: None,
         pinned: pinned_reset,
     };
 }
@@ -209,20 +211,20 @@ fn undo_null_move(b: &mut Board, undo: &NullMoveUndo) {
 
 fn is_insufficient_material(b: &Board) -> bool {
     if count(
-        b.bitboards[WP]
-            | b.bitboards[WR]
-            | b.bitboards[WQ]
-            | b.bitboards[BP]
-            | b.bitboards[BR]
-            | b.bitboards[BQ],
+        b.bitboards[Piece::WP]
+            | b.bitboards[Piece::WR]
+            | b.bitboards[Piece::WQ]
+            | b.bitboards[Piece::BP]
+            | b.bitboards[Piece::BR]
+            | b.bitboards[Piece::BQ],
     ) != 0
     {
         return false;
     }
-    if count(b.bitboards[WB]) >= 2 || count(b.bitboards[BB]) >= 2 {
+    if count(b.bitboards[Piece::WB]) >= 2 || count(b.bitboards[Piece::BB]) >= 2 {
         return false;
     }
-    count(b.bitboards[WN]) <= 2 && count(b.bitboards[BN]) <= 2
+    count(b.bitboards[Piece::WN]) <= 2 && count(b.bitboards[Piece::BN]) <= 2
     //can technically arise a position where KvKNN is mate so this
     //could cause some bug in theory lol
 }
@@ -808,7 +810,8 @@ impl Searcher {
                 break;
             }
 
-            let worst_case = SEE_VALUES[piece_type(position.pieces_array[c.square_to()])]
+            let worst_case = SEE_VALUES
+                [piece_type(unsafe { position.pieces_array[c.square_to()].unwrap_unchecked() })]
                 - SEE_VALUES[piece_type(c.piece_moved(position))];
 
             if eval + worst_case > beta {
@@ -937,49 +940,49 @@ const MVV_LVA: [[i32; 6]; 6] = [
 
 pub fn see_test() {
     let position1 = Board::from("8/7k/8/4p3/8/5N2/K7/8 w - - 0 1");
-    let m = encode_move(F3, E5, NO_PIECE, NO_FLAG);
+    let m = encode_move(Square::F3, Square::E5, None, NO_FLAG);
     let res1 = m.static_exchange_evaluation(&position1, 0);
     assert!(res1, "first see test position failed");
 
     let position2 = Board::from("8/2b4k/8/4p3/8/5N2/K7/8 w - - 0 1");
-    let m = encode_move(F3, E5, NO_PIECE, NO_FLAG);
+    let m = encode_move(Square::F3, Square::E5, None, NO_FLAG);
     let res2 = m.static_exchange_evaluation(&position2, 0);
     assert!(!res2, "second see test position failed");
 
     let position3 = Board::from("8/2b4k/8/4p3/8/5N2/K7/4R3 w - - 0 1");
-    let m = encode_move(F3, E5, NO_PIECE, NO_FLAG);
+    let m = encode_move(Square::F3, Square::E5, None, NO_FLAG);
     let res3 = m.static_exchange_evaluation(&position3, 0);
     assert!(res3, "third see test position failed");
 
     let position4 = Board::from("4q3/2b4k/8/4p3/8/5N2/K7/4R3 w - - 0 1");
-    let m = encode_move(F3, E5, NO_PIECE, NO_FLAG);
+    let m = encode_move(Square::F3, Square::E5, None, NO_FLAG);
     let res4 = m.static_exchange_evaluation(&position4, 0);
     assert!(!res4, "fourth see test position failed");
 
     let position5 = Board::from("4q3/2b4k/8/4p3/8/5N2/K7/Q3R3 w - - 0 1");
-    let m = encode_move(F3, E5, NO_PIECE, NO_FLAG);
+    let m = encode_move(Square::F3, Square::E5, None, NO_FLAG);
     let res5 = m.static_exchange_evaluation(&position5, 0);
     assert!(res5, "fifth see test position failed");
 
     //test start position with no captures
     let position6 = Board::from(STARTPOS);
-    let m = encode_move(E2, E4, NO_PIECE, NO_FLAG);
+    let m = encode_move(Square::E2, Square::E4, None, NO_FLAG);
     let res6 = m.static_exchange_evaluation(&position6, 0);
     assert!(res6, "sixth see test position failed");
 
     let position7 = Board::from("4k3/8/2n2b2/8/3P4/2P5/8/3K4 b - - 0 1");
-    let m = encode_move(C6, D4, NO_PIECE, NO_FLAG);
+    let m = encode_move(Square::C6, Square::D4, None, NO_FLAG);
     let res7 = m.static_exchange_evaluation(&position7, 0);
     assert!(!res7, "seventh see test position failed");
 
     //test sliding attack updates
     let position8 = Board::from("3q3k/3r4/3r4/3p4/8/3R4/3R4/3Q3K w - - 0 1");
-    let m = encode_move(D3, D5, NO_PIECE, NO_FLAG);
+    let m = encode_move(Square::D3, Square::D5, None, NO_FLAG);
     let res8 = m.static_exchange_evaluation(&position8, 0);
     assert!(!res8, "eighth see test position failed");
 
     let position9 = Board::from("7k/8/3r4/3p4/4P3/5B2/8/7K w - - 0 1");
-    let m = encode_move(E4, D5, NO_PIECE, NO_FLAG);
+    let m = encode_move(Square::E4, Square::D5, None, NO_FLAG);
     let res9 = m.static_exchange_evaluation(&position9, 0);
     assert!(res9, "ninth see test position failed");
 
@@ -1004,15 +1007,15 @@ impl Move {
         let mut next_victim = match self.is_promotion() {
             true => match b.side_to_move {
                 //only consider queen promotions
-                Colour::White => WQ,
-                Colour::Black => BQ,
+                Colour::White => Piece::WQ,
+                Colour::Black => Piece::BQ,
             },
             false => self.piece_moved(b),
         };
 
         let mut balance = match b.pieces_array[sq_to] {
-            NO_PIECE => 0,
-            k => SEE_VALUES[piece_type(k)],
+            None => 0,
+            Some(k) => SEE_VALUES[piece_type(k)],
         } + threshold;
 
         if self.is_promotion() {
@@ -1031,9 +1034,14 @@ impl Move {
             return true;
         }
 
-        let bishop_attackers =
-            b.bitboards[WB] | b.bitboards[BB] | b.bitboards[WQ] | b.bitboards[BQ];
-        let rook_attackers = b.bitboards[WR] | b.bitboards[BR] | b.bitboards[WQ] | b.bitboards[BQ];
+        let bishop_attackers = b.bitboards[Piece::WB]
+            | b.bitboards[Piece::BB]
+            | b.bitboards[Piece::WQ]
+            | b.bitboards[Piece::BQ];
+        let rook_attackers = b.bitboards[Piece::WR]
+            | b.bitboards[Piece::BR]
+            | b.bitboards[Piece::WQ]
+            | b.bitboards[Piece::BQ];
 
         let mut occupancies = b.occupancies[BOTH] ^ (set_bit(sq_from, 0) | set_bit(sq_to, 0));
 
@@ -1058,12 +1066,12 @@ impl Move {
                 break;
             }
 
-            let (min, max) = match colour {
-                Colour::White => (WP, BP),
-                Colour::Black => (BP, 12),
+            let pieces = match colour {
+                Colour::White => WHITE_PIECES,
+                Colour::Black => BLACK_PIECES,
             };
 
-            for piece in min..max {
+            for piece in pieces {
                 if side_attackers & b.bitboards[piece] > 0 {
                     next_victim = piece;
                     break;
@@ -1081,12 +1089,12 @@ impl Move {
                 || piece_type(next_victim) == QUEEN
             {
                 //only diagonal moves can reveal new diagonal attackers
-                attackers |= get_bishop_attacks(sq_to, occupancies) & bishop_attackers;
+                attackers |= get_bishop_attacks(sq_to as usize, occupancies) & bishop_attackers;
             }
 
             if piece_type(next_victim) == ROOK || piece_type(next_victim) == QUEEN {
                 //same for rook attacks
-                attackers |= get_rook_attacks(sq_to, occupancies) & rook_attackers;
+                attackers |= get_rook_attacks(sq_to as usize, occupancies) & rook_attackers;
             }
 
             attackers &= occupancies;
@@ -1100,7 +1108,7 @@ impl Move {
             if balance >= 0 {
                 //if last move was king move and opponent still has attackers, the move
                 //must have been illegal
-                if next_victim == KING
+                if next_victim == Piece::WK
                     && (attackers
                         & b.occupancies[match colour {
                             Colour::White => WHITE,
@@ -1144,7 +1152,8 @@ impl Move {
         } else if self == s.pv[0][s.ply] {
             PV_MOVE_SCORE
         } else if self.is_capture(b) {
-            let victim_type: usize = piece_type(b.pieces_array[self.square_to()]);
+            let victim_type: usize =
+                piece_type(unsafe { b.pieces_array[self.square_to()].unwrap_unchecked() });
             let attacker_type = piece_type(self.piece_moved(b));
             let winning_capture = self.static_exchange_evaluation(b, 0);
             match winning_capture {
@@ -1156,10 +1165,10 @@ impl Move {
             //because of promotions that are also captures
             match self.promoted_piece() {
                 //promotions sorted by likelihood to be good
-                QUEEN => QUEEN_PROMOTION,
-                KNIGHT => UNDER_PROMOTION,
-                ROOK => UNDER_PROMOTION,
-                BISHOP => UNDER_PROMOTION,
+                Piece::WQ => QUEEN_PROMOTION,
+                Piece::WN => UNDER_PROMOTION,
+                Piece::WR => UNDER_PROMOTION,
+                Piece::WB => UNDER_PROMOTION,
                 _ => unreachable!(),
             }
         } else if self.is_en_passant() {
@@ -1219,6 +1228,11 @@ pub struct MoveData {
 
 #[allow(unused_variables)]
 pub fn move_time(time: usize, increment: usize, moves_to_go: usize, ply: usize) -> usize {
+    if time < TIME_TO_MOVE {
+        //hopefully this never happens
+        return MIN_MOVE_TIME;
+    }
+
     let time_until_flag = time - TIME_TO_MOVE;
 
     let ideal_time = if moves_to_go == 0 {
@@ -1232,14 +1246,14 @@ pub fn move_time(time: usize, increment: usize, moves_to_go: usize, ply: usize) 
         (match ply {
             0..=10 => (time_until_flag) as f32 / 40.0,
             11..=16 => (time_until_flag) as f32 / (moves_to_go as f32),
-            _ => (time_until_flag) as f32 / cmp::max((moves_to_go as f32 / 2.0) as usize, 1) as f32,
+            _ => (time_until_flag) as f32 / cmp::max((moves_to_go as f32 / 2.0) as usize, 2) as f32,
         }) as usize
             + TIME_TO_START_SEARCH
             + increment
     };
 
     //prevent that high increment > time left breaks this
-    cmp::min(time_until_flag, ideal_time)
+    cmp::max(cmp::min(ideal_time, time_until_flag), MIN_MOVE_TIME)
 }
 
 impl Move {
@@ -1250,10 +1264,10 @@ impl Move {
 
         if self.is_promotion() {
             res += match self.promoted_piece() {
-                KNIGHT => "n",
-                BISHOP => "b",
-                ROOK => "r",
-                QUEEN => "q",
+                Piece::WN => "n",
+                Piece::WB => "b",
+                Piece::WR => "r",
+                Piece::WQ => "q",
                 _ => unreachable!(),
             }
         }
@@ -1288,7 +1302,7 @@ pub fn best_move(
     s.end_time = end_time;
 
     let mut eval: i32 = 0;
-    let mut previous_eval = eval; //used for cases shere search cancelled after searching zero moves fully
+    let mut previous_eval = eval; //used for cases where search cancelled after searching zero moves fully
     let mut pv = String::new();
 
     let mut previous_pv = s.pv;
@@ -1302,7 +1316,7 @@ pub fn best_move(
 
     let rt_table_reset = unsafe { REPETITION_TABLE };
 
-    while depth < MAX_SEARCH_DEPTH {
+    while depth < MAX_SEARCH_DEPTH && start.elapsed() < move_duration {
         unsafe { START_DEPTH = depth };
         eval = s.negamax(position, std::cmp::max(depth, 1), alpha, beta, false);
         if s.moves_fully_searched == 0 {
@@ -1347,15 +1361,6 @@ pub fn best_move(
                     }
                 }
             );
-        }
-
-        if start.elapsed() > move_duration {
-            /*
-             more than half of time used -> no point starting another search as its likely
-             that zero moves will be searched fully.
-             ofc this also catches situations where all of move duration has elapsed
-            */
-            break;
         }
 
         s.moves_fully_searched = 0;

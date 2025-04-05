@@ -1,5 +1,7 @@
 use crate::*;
 
+use crate::types::*;
+
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::Rng;
@@ -88,16 +90,16 @@ impl Individual {
 
             let losing_phase_score = match winning_side {
                 Colour::White => {
-                    count(pos.bitboards[BQ]) * 4
-                        + count(pos.bitboards[BR]) * 2
-                        + count(pos.bitboards[BB])
-                        + count(pos.bitboards[BN])
+                    count(pos.bitboards[Piece::BQ]) * 4
+                        + count(pos.bitboards[Piece::BR]) * 2
+                        + count(pos.bitboards[Piece::BB])
+                        + count(pos.bitboards[Piece::BN])
                 }
                 Colour::Black => {
-                    count(pos.bitboards[WQ]) * 4
-                        + count(pos.bitboards[WR]) * 2
-                        + count(pos.bitboards[WB])
-                        + count(pos.bitboards[WN])
+                    count(pos.bitboards[Piece::WQ]) * 4
+                        + count(pos.bitboards[Piece::WR]) * 2
+                        + count(pos.bitboards[Piece::WB])
+                        + count(pos.bitboards[Piece::WN])
                 }
             };
 
