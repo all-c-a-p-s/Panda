@@ -35,7 +35,7 @@ static MODEL: Network = unsafe {
 
 type SideAccumulator = [i16; HL_SIZE];
 
-const fn nnue_index(piece: Piece, sq: Square) -> (usize, usize) {
+pub const fn nnue_index(piece: Piece, sq: Square) -> (usize, usize) {
     const PIECE_STEP: usize = 64;
 
     let white_idx = PIECE_STEP * piece as usize + sq as usize;
@@ -100,15 +100,9 @@ impl Accumulator {
         self.set_weight::<ON>(piece, to);
     }
 
-    pub fn capture_update(
-        &mut self,
-        _piece: Piece,
-        victim: Option<Piece>,
-        _from: Square,
-        to: Square,
-    ) {
+    pub fn capture_update(&mut self, _piece: Piece, victim: Piece, _from: Square, to: Square) {
         //SAFETY: this is only called when there is a capture
-        self.set_weight::<OFF>(unsafe { victim.unwrap_unchecked() }, to);
+        self.set_weight::<OFF>(victim, to);
     }
 
     //promotions that are also captures handled in capture_update()
@@ -123,14 +117,14 @@ impl Accumulator {
         self.set_weight::<ON>(unsafe { promotion.unwrap_unchecked() }, to);
     }
 
-    pub fn ep_update(&mut self, piece: Piece, victim: Option<Piece>, _from: Square, to: Square) {
+    pub fn ep_update(&mut self, piece: Piece, victim: Piece, _from: Square, to: Square) {
         let ep = match piece {
             Piece::WP => unsafe { to.sub_unchecked(8) },
             Piece::BP => unsafe { to.add_unchecked(8) },
             _ => unreachable!(),
         };
 
-        self.set_weight::<OFF>(unsafe { victim.unwrap_unchecked() }, ep);
+        self.set_weight::<OFF>(victim, ep);
     }
 
     //update to king already done
@@ -173,11 +167,11 @@ impl Accumulator {
         from: Square,
         to: Square,
     ) {
-        if victim != None {
+        if victim.is_some() {
             self.set_weight::<ON>(unsafe { victim.unwrap_unchecked() }, to);
         }
 
-        if promotion != None {
+        if promotion.is_some() {
             self.set_weight::<OFF>(unsafe { promotion.unwrap_unchecked() }, to);
             self.set_weight::<ON>(piece, from);
         } else {

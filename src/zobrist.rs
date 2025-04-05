@@ -183,8 +183,8 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
         res ^= PIECE_KEYS[sq_to][piece];
         //undo operation from before (works bc XOR is its own inverse)
         let promoted_piece = match piece {
-            Piece::WP => m.promoted_piece(),
-            Piece::BP => m.promoted_piece().opposite(), //only type is encoded in the move
+            Piece::WP => m.promoted_piece().to_white_piece(),
+            Piece::BP => m.promoted_piece().to_white_piece().opposite(), //only type is encoded in the move
             _ => unreachable!(),
         };
         res ^= PIECE_KEYS[sq_to][promoted_piece];

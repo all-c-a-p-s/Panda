@@ -40,7 +40,7 @@ enum Mode {
     Uci,
 }
 
-const MODE: Mode = Mode::Profile;
+const MODE: Mode = Mode::Uci;
 
 #[allow(unused)]
 const ONE_HOUR: u64 = 3600;

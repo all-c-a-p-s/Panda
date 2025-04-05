@@ -17,7 +17,7 @@ use crate::movegen::*;
 use crate::zobrist::*;
 use crate::REPETITION_TABLE;
 
-use crate::types::{Piece, Square};
+use crate::types::*;
 
 pub const SQUARE_FROM_MASK: u16 = 0b0000_0000_0011_1111;
 pub const SQUARE_TO_MASK: u16 = 0b0000_1111_1100_0000;
@@ -55,7 +55,7 @@ pub struct Commit {
 }
 
 impl Move {
-    pub fn from_promotion(from: Square, to: Square, promoted_piece: Piece) -> Self {
+    pub fn from_promotion(from: Square, to: Square, promoted_piece: PieceType) -> Self {
         Self {
             data: from as u16
                 | (to as u16) << 6
@@ -78,10 +78,10 @@ impl Move {
         unsafe { Square::from(((self.data & SQUARE_TO_MASK) >> 6) as u8) }
     }
 
-    pub fn promoted_piece(self) -> Piece {
+    pub fn promoted_piece(self) -> PieceType {
         //must be called only if self.is_promotion() is true
         //also only given piece type, not colour
-        unsafe { Piece::from((((self.data & PROMOTION_MASK) >> 12) + 1) as u8) }
+        unsafe { PieceType::from((((self.data & PROMOTION_MASK) >> 12) + 1) as u8) }
     }
 
     pub fn is_promotion(self) -> bool {
@@ -141,10 +141,10 @@ impl Move {
             "promoted to {}",
             if self.is_promotion() {
                 match self.promoted_piece() {
-                    Piece::WN => "knight",
-                    Piece::WB => "bishop",
-                    Piece::WR => "rook",
-                    Piece::WQ => "queen",
+                    PieceType::Knight => "knight",
+                    PieceType::Bishop => "bishop",
+                    PieceType::Rook => "rook",
+                    PieceType::Queen => "queen",
                     _ => unreachable!(),
                 }
             } else {
@@ -157,7 +157,7 @@ impl Move {
     }
 }
 
-pub fn encode_move(from: Square, to: Square, promoted_piece: Option<Piece>, flag: u16) -> Move {
+pub fn encode_move(from: Square, to: Square, promoted_piece: Option<PieceType>, flag: u16) -> Move {
     if flag & PROMOTION_FLAG == PROMOTION_FLAG {
         //move is a promotion
         Move::from_promotion(from, to, unsafe { promoted_piece.unwrap_unchecked() })
@@ -463,8 +463,7 @@ impl Board {
                     _ => {}
                 }
 
-                self.nnue
-                    .capture_update(piece_moved, Some(victim), from, to);
+                self.nnue.capture_update(piece_moved, victim, from, to);
             }
 
             match piece_moved {
@@ -474,9 +473,9 @@ impl Board {
                         self.bitboards[piece_moved] ^= set_bit(to, 0);
 
                         let promoted_piece = if colour == Colour::White {
-                            m.promoted_piece()
+                            m.promoted_piece().to_white_piece()
                         } else {
-                            m.promoted_piece().opposite()
+                            m.promoted_piece().to_white_piece().opposite()
                         };
 
                         self.bitboards[promoted_piece] ^= set_bit(to, 0);
@@ -504,13 +503,13 @@ impl Board {
                                     self.bitboards[Piece::BP] ^=
                                         set_bit(unsafe { to.sub_unchecked(8) }, 0);
                                     self.pieces_array[unsafe { to.sub_unchecked(8) }] = None;
-                                    self.nnue.ep_update(piece_moved, Some(Piece::BP), from, to);
+                                    self.nnue.ep_update(piece_moved, Piece::BP, from, to);
                                 }
                                 Colour::Black => {
                                     self.bitboards[Piece::WP] ^=
                                         set_bit(unsafe { to.add_unchecked(8) }, 0);
                                     self.pieces_array[unsafe { to.add_unchecked(8) }] = None;
-                                    self.nnue.ep_update(piece_moved, Some(Piece::WP), from, to);
+                                    self.nnue.ep_update(piece_moved, Piece::WP, from, to);
                                 }
                             }
                         }

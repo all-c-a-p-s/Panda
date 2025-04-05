@@ -52,10 +52,10 @@ pub fn parse_move(input: &str, board: &Board) -> Move {
         //only type of piece encoded because only 2 bits used in the move
         //and the flag is used to detect promotions
         let promoted_piece = match input.chars().collect::<Vec<char>>()[4] {
-            'q' | 'Q' => Piece::WQ,
-            'r' | 'R' => Piece::WR,
-            'b' | 'B' => Piece::WB,
-            'n' | 'N' => Piece::WN,
+            'q' | 'Q' => PieceType::Queen,
+            'r' | 'R' => PieceType::Rook,
+            'b' | 'B' => PieceType::Bishop,
+            'n' | 'N' => PieceType::Knight,
             _ => panic!(
                 "invalid promoted piece {}",
                 input.chars().collect::<Vec<char>>()[4]
@@ -352,10 +352,10 @@ pub fn uci_loop() {
                         + {
                             if move_data.m.is_promotion() {
                                 match move_data.m.promoted_piece() {
-                                    Piece::WN | Piece::BN => "n",
-                                    Piece::WB | Piece::BB => "b",
-                                    Piece::WR | Piece::BR => "r",
-                                    Piece::WQ | Piece::BQ => "q",
+                                    PieceType::Knight => "n",
+                                    PieceType::Bishop => "b",
+                                    PieceType::Rook => "r",
+                                    PieceType::Queen => "q",
                                     _ => unreachable!(),
                                 }
                             } else {

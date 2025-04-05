@@ -60,6 +60,7 @@ const UNDER_PROMOTION: i32 = -200_000;
 
 pub const MAX_GAME_PLY: usize = 1024;
 
+#[allow(unused)]
 const MIN_MOVE_TIME: usize = 1; //make sure move time is never 0
 const TIME_TO_MOVE: usize = 50;
 const TIME_TO_START_SEARCH: usize = 0; //initialise big TT (if not using HashMap)
@@ -1165,10 +1166,10 @@ impl Move {
             //because of promotions that are also captures
             match self.promoted_piece() {
                 //promotions sorted by likelihood to be good
-                Piece::WQ => QUEEN_PROMOTION,
-                Piece::WN => UNDER_PROMOTION,
-                Piece::WR => UNDER_PROMOTION,
-                Piece::WB => UNDER_PROMOTION,
+                PieceType::Queen => QUEEN_PROMOTION,
+                PieceType::Knight => UNDER_PROMOTION,
+                PieceType::Rook => UNDER_PROMOTION,
+                PieceType::Bishop => UNDER_PROMOTION,
                 _ => unreachable!(),
             }
         } else if self.is_en_passant() {
@@ -1196,13 +1197,12 @@ impl MoveList {
             score: -INFINITY,
         }; MAX_MOVES];
 
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..self.moves.len() {
-            if self.moves[i].is_null() {
+        for (i, m) in self.moves.iter().enumerate() {
+            if m.is_null() {
                 break;
             }
-            ordered_moves[i].m = &self.moves[i];
-            ordered_moves[i].score = self.moves[i].score_move(board, s, best_move);
+            ordered_moves[i].m = m;
+            ordered_moves[i].score = m.score_move(board, s, best_move);
         }
 
         ordered_moves.sort_by(|a, b| b.score.cmp(&a.score));
@@ -1226,7 +1226,6 @@ pub struct MoveData {
     pub pv: String,
 }
 
-#[allow(unused_variables)]
 pub fn move_time(time: usize, increment: usize, moves_to_go: usize, ply: usize) -> usize {
     if time < TIME_TO_MOVE {
         //hopefully this never happens
@@ -1264,10 +1263,10 @@ impl Move {
 
         if self.is_promotion() {
             res += match self.promoted_piece() {
-                Piece::WN => "n",
-                Piece::WB => "b",
-                Piece::WR => "r",
-                Piece::WQ => "q",
+                PieceType::Knight => "n",
+                PieceType::Bishop => "b",
+                PieceType::Rook => "r",
+                PieceType::Queen => "q",
                 _ => unreachable!(),
             }
         }

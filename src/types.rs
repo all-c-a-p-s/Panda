@@ -21,8 +21,8 @@ pub enum Square {
 #[repr(u8)]
 pub enum Piece {
     WP,
-    WB,
     WN,
+    WB,
     WR,
     WQ,
     WK,
@@ -33,6 +33,17 @@ pub enum Piece {
     BR,
     BQ,
     BK,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[repr(u8)]
+pub enum PieceType {
+    Pawn,
+    Knight,
+    Bishop,
+    Rook,
+    Queen,
+    King,
 }
 
 pub const PIECES: [Piece; 12] = [
@@ -142,5 +153,22 @@ impl Piece {
             Piece::BQ => Piece::WQ,
             Piece::BK => Piece::WK,
         }
+    }
+}
+
+impl PieceType {
+    pub fn to_white_piece(self) -> Piece {
+        match self {
+            PieceType::Pawn => Piece::WP,
+            PieceType::Knight => Piece::WN,
+            PieceType::Bishop => Piece::WB,
+            PieceType::Rook => Piece::WR,
+            PieceType::Queen => Piece::WQ,
+            PieceType::King => Piece::WK,
+        }
+    }
+
+    pub const unsafe fn from(x: u8) -> Self {
+        std::mem::transmute(x)
     }
 }

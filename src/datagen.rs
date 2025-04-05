@@ -161,6 +161,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
         }
 
         board.play_unchecked(chosen_move);
+        assert_eq!(board.nnue, nnue::Accumulator::from_board(&board));
     }
 
     for x in selected_fens.iter_mut() {

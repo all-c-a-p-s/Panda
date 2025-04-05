@@ -95,16 +95,16 @@ impl MoveList {
                             //the piece type is passed into encode_move because only 2 bits are used to encode
                             //the promoted piece (and flag is used to detect if there is one)
                             self.moves[first_unused] =
-                                encode_move(lsb, up, Some(Piece::WQ), PROMOTION_FLAG);
+                                encode_move(lsb, up, Some(PieceType::Queen), PROMOTION_FLAG);
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, up, Some(Piece::WR), PROMOTION_FLAG);
+                                encode_move(lsb, up, Some(PieceType::Rook), PROMOTION_FLAG);
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, up, Some(Piece::WB), PROMOTION_FLAG);
+                                encode_move(lsb, up, Some(PieceType::Bishop), PROMOTION_FLAG);
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, up, Some(Piece::WN), PROMOTION_FLAG);
+                                encode_move(lsb, up, Some(PieceType::Knight), PROMOTION_FLAG);
                             first_unused += 1;
                             //add all different possible promotions to move list
                         } else {
@@ -134,16 +134,16 @@ impl MoveList {
                         if rank(down) == 0 {
                             //promotion
                             self.moves[first_unused] =
-                                encode_move(lsb, down, Some(Piece::WQ), PROMOTION_FLAG);
+                                encode_move(lsb, down, Some(PieceType::Queen), PROMOTION_FLAG);
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, down, Some(Piece::WR), PROMOTION_FLAG);
+                                encode_move(lsb, down, Some(PieceType::Rook), PROMOTION_FLAG);
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, down, Some(Piece::WB), PROMOTION_FLAG);
+                                encode_move(lsb, down, Some(PieceType::Bishop), PROMOTION_FLAG);
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, down, Some(Piece::WN), PROMOTION_FLAG);
+                                encode_move(lsb, down, Some(PieceType::Knight), PROMOTION_FLAG);
                             first_unused += 1;
                         } else {
                             self.moves[first_unused] = encode_move(lsb, down, None, NO_FLAG);
@@ -245,17 +245,29 @@ impl MoveList {
                         //promotions that are also captures
                         if rank(lsb) == 6 {
                             // white promotion
-                            self.moves[first_unused] =
-                                encode_move(lsb, lsb_attack, Some(Piece::WQ), PROMOTION_FLAG);
+                            self.moves[first_unused] = encode_move(
+                                lsb,
+                                lsb_attack,
+                                Some(PieceType::Queen),
+                                PROMOTION_FLAG,
+                            );
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, lsb_attack, Some(Piece::WR), PROMOTION_FLAG);
+                                encode_move(lsb, lsb_attack, Some(PieceType::Rook), PROMOTION_FLAG);
                             first_unused += 1;
-                            self.moves[first_unused] =
-                                encode_move(lsb, lsb_attack, Some(Piece::WB), PROMOTION_FLAG);
+                            self.moves[first_unused] = encode_move(
+                                lsb,
+                                lsb_attack,
+                                Some(PieceType::Bishop),
+                                PROMOTION_FLAG,
+                            );
                             first_unused += 1;
-                            self.moves[first_unused] =
-                                encode_move(lsb, lsb_attack, Some(Piece::WN), PROMOTION_FLAG);
+                            self.moves[first_unused] = encode_move(
+                                lsb,
+                                lsb_attack,
+                                Some(PieceType::Knight),
+                                PROMOTION_FLAG,
+                            );
                             first_unused += 1;
                         } else if board.en_passant.is_some()
                             && lsb_attack == unsafe { board.en_passant.unwrap_unchecked() }
@@ -286,17 +298,29 @@ impl MoveList {
                         //promotions that are also captures
                         if rank(lsb) == 1 {
                             // white promotion
-                            self.moves[first_unused] =
-                                encode_move(lsb, lsb_attack, Some(Piece::WQ), PROMOTION_FLAG);
+                            self.moves[first_unused] = encode_move(
+                                lsb,
+                                lsb_attack,
+                                Some(PieceType::Queen),
+                                PROMOTION_FLAG,
+                            );
                             first_unused += 1;
                             self.moves[first_unused] =
-                                encode_move(lsb, lsb_attack, Some(Piece::WR), PROMOTION_FLAG);
+                                encode_move(lsb, lsb_attack, Some(PieceType::Rook), PROMOTION_FLAG);
                             first_unused += 1;
-                            self.moves[first_unused] =
-                                encode_move(lsb, lsb_attack, Some(Piece::WB), PROMOTION_FLAG);
+                            self.moves[first_unused] = encode_move(
+                                lsb,
+                                lsb_attack,
+                                Some(PieceType::Bishop),
+                                PROMOTION_FLAG,
+                            );
                             first_unused += 1;
-                            self.moves[first_unused] =
-                                encode_move(lsb, lsb_attack, Some(Piece::WN), PROMOTION_FLAG);
+                            self.moves[first_unused] = encode_move(
+                                lsb,
+                                lsb_attack,
+                                Some(PieceType::Knight),
+                                PROMOTION_FLAG,
+                            );
                             first_unused += 1;
                         } else if board.en_passant.is_some()
                             && lsb_attack == unsafe { board.en_passant.unwrap_unchecked() }
@@ -543,7 +567,7 @@ pub fn get_smallest_attack(b: &mut Board, square: Square) -> Move {
             if pawn_attackers > 0 {
                 let sq_from = unsafe { lsfb(pawn_attackers).unwrap_unchecked() };
                 return match rank(square) {
-                    7 => encode_move(sq_from, square, Some(Piece::WQ), PROMOTION_FLAG),
+                    7 => encode_move(sq_from, square, Some(PieceType::Queen), PROMOTION_FLAG),
                     //no point considering underpromotions
                     _ => encode_move(sq_from, square, None, NO_FLAG),
                 };
@@ -583,7 +607,7 @@ pub fn get_smallest_attack(b: &mut Board, square: Square) -> Move {
             if pawn_attackers > 0 {
                 let sq_from = unsafe { lsfb(pawn_attackers).unwrap_unchecked() };
                 return match rank(square) {
-                    0 => encode_move(sq_from, square, Some(Piece::WQ), PROMOTION_FLAG),
+                    0 => encode_move(sq_from, square, Some(PieceType::Queen), PROMOTION_FLAG),
                     //no point considering underpromotions
                     _ => encode_move(sq_from, square, None, NO_FLAG),
                 };
