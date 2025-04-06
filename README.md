@@ -20,7 +20,7 @@ I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lich
 - faster perft results
 - tune thresholds in search function
 - endgame tablebases
-- NNUE
+- stronger NNUE
 
 ## Usage:
 - [Download Rust](https://www.rust-lang.org/)
@@ -32,3 +32,4 @@ Here are some of the many resources without which this engine would be much less
 - [Chess Programming Wiki](https://www.chessprogramming.org/Main_Page)
 - [BBC Chess Engine](https://github.com/maksimKorzh/bbc) + videos
 - Open source chess projects such as Ethereal, Weiss and Cozy Chess, which have extremely clear and helpful documentation
+- [bullet](https://github.com/jw1912/bullet/tree/main), which I used to train the neural network
