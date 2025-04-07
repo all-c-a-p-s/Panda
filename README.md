@@ -4,7 +4,7 @@ Panda is a chess engine written in Rust (still a work in progress). I work on th
 - pandas are pretty cool
 - red pandas are also pretty cool, and they are orange (like Rust)
 
-![](logo.jpeg)
+![](logo4.png)
 
 ## What Makes Panda Interesting?
 
