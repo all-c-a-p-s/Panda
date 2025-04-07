@@ -11,3 +11,6 @@ build:
 
 run:
 	cargo run --release -- -C target-cpu=native --emit link=$(NAME)
+
+debug:
+	cargo run --emit link=$(NAME)
