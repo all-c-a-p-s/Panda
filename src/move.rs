@@ -1,15 +1,10 @@
-/*
-*
-* represent move as u16          hex constant
-* 0000 0000 0011 1111 square from        0x3f
-* 0000 1111 1100 0000 square to          0xfc0
-* 0011 0000 0000 0000 promoted piece     0xf000
-* 0100 0000 0000 0000 en passant flag    0x4000
-* 1000 0000 0000 0000 castling flag      0x8000
-* 1100 0000 0000 0000 promotion flag     0xc000
-*
-*/
-
+/// represent move as u16          hex constant
+/// 0000 0000 0011 1111 square from        0x3f
+/// 0000 1111 1100 0000 square to          0xfc0
+/// 0011 0000 0000 0000 promoted piece     0xf000
+/// 0100 0000 0000 0000 en passant flag    0x4000
+/// 1000 0000 0000 0000 castling flag      0x8000
+/// 1100 0000 0000 0000 promotion flag     0xc000
 use crate::board::*;
 use crate::helper::*;
 use crate::magic::*;
@@ -38,7 +33,6 @@ pub struct MoveList {
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct Move {
     pub data: u16,
-    //    pub score: i32, < storing an i32 in move struct slows down performance significantly
 }
 
 #[derive(Default)]
@@ -49,7 +43,6 @@ pub struct Commit {
     pub fifty_move_reset: u8,
     pub piece_captured: Option<Piece>,
     pub hash_key: u64,
-    pub made_move: bool,
     pub pinned: BitBoard,
     pub checkers: BitBoard,
 }
@@ -115,7 +108,7 @@ impl Move {
         {
             return false;
         }
-        piece_type(self.piece_moved(b)) == PAWN
+        piece_type(self.piece_moved(b)) == PieceType::Pawn
     }
 
     pub fn piece_captured(self, b: &Board) -> Piece {
@@ -169,7 +162,7 @@ pub fn encode_move(from: Square, to: Square, promoted_piece: Option<PieceType>, 
 //this gets the longest line in the direction of two squares
 //except for those two squares themselves
 //used for detecting pins in movegen
-const LINE_RAYS: [[BitBoard; 64]; 64] = {
+static LINE_RAYS: [[BitBoard; 64]; 64] = {
     const fn get_line_rays(sq1: Square, sq2: Square) -> BitBoard {
         let rays = BISHOP_EDGE_RAYS[sq1 as usize];
         if rays & set_bit(sq2, 0) > 0 {
@@ -339,6 +332,7 @@ impl Board {
 }
 
 impl Board {
+    #[allow(clippy::result_unit_err)]
     pub fn try_move(&mut self, m: Move) -> Result<Commit, ()> {
         if !self.is_legal(m) {
             return Err(());
@@ -353,12 +347,11 @@ impl Board {
             fifty_move_reset: self.fifty_move,
             piece_captured: None,
             hash_key: self.hash_key,
-            made_move: true,
             pinned: self.pinned,
             checkers: self.checkers,
         };
 
-        self.hash_key = hash_update(self.hash_key, &m, &self);
+        self.hash_key = hash_update(self.hash_key, &m, self);
         //MUST be done before any changes made on the board
 
         (self.checkers, self.pinned) = (0, 0);
@@ -377,7 +370,7 @@ impl Board {
             }
         };
 
-        if piece_type(piece_moved) == PAWN || victim.is_some() {
+        if piece_type(piece_moved) == PieceType::Pawn || victim.is_some() {
             self.fifty_move = 0;
         } else {
             self.fifty_move += 1;
@@ -481,7 +474,7 @@ impl Board {
                         self.bitboards[promoted_piece] ^= set_bit(to, 0);
                         self.pieces_array[to] = Some(promoted_piece);
 
-                        if piece_type(promoted_piece) == KNIGHT {
+                        if piece_type(promoted_piece) == PieceType::Knight {
                             self.checkers |= N_ATTACKS[enemy_king] & set_bit(to, 0);
                         }
 
@@ -618,7 +611,7 @@ impl Board {
         let piece_moved = unsafe { self.pieces_array[from].unwrap_unchecked() };
 
         match piece_type(piece_moved) {
-            PAWN => {
+            PieceType::Pawn => {
                 if m.is_en_passant() {
                     let taken = if piece_moved == Piece::WP {
                         unsafe { to.sub_unchecked(8) }
@@ -627,7 +620,7 @@ impl Board {
                     };
                     //exception here since you can take the pawn giving check en passant
                     (target_squares & set_bit(to, 0) > 0 || lsfb(self.checkers) == Some(taken))
-                        && check_en_passant(m, &self)
+                        && check_en_passant(m, self)
                 } else {
                     target_squares & set_bit(to, 0) > 0
                 }
@@ -648,7 +641,7 @@ impl Board {
             .unwrap_unchecked()
         };
         self.occupancies[BOTH] ^= set_bit(king_sq, 0);
-        let ok = !is_attacked(m.square_to(), self.side_to_move.opponent(), &self);
+        let ok = !is_attacked(m.square_to(), self.side_to_move.opponent(), self);
         self.occupancies[BOTH] ^= set_bit(king_sq, 0);
 
         ok

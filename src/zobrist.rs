@@ -52,8 +52,7 @@ pub const BLACK_TO_MOVE: u64 = init_hash_keys().3;
 pub fn hash(b: &Board) -> u64 {
     let mut hash_key: u64 = 0;
 
-    for square in 0..64 {
-        let piece = b.pieces_array[square];
+    for (square, &piece) in b.pieces_array.iter().enumerate() {
         if let Some(piece) = piece {
             hash_key ^= PIECE_KEYS[square][piece];
         }
@@ -78,7 +77,7 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
 
     let sq_to = m.square_to();
     let sq_from = m.square_from();
-    let piece = m.piece_moved(&b);
+    let piece = m.piece_moved(b);
 
     res ^= PIECE_KEYS[sq_from][piece];
     res ^= PIECE_KEYS[sq_to][piece];
@@ -190,7 +189,7 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
         res ^= PIECE_KEYS[sq_to][promoted_piece];
     }
 
-    if m.is_double_push(&b) {
+    if m.is_double_push(b) {
         match piece {
             Piece::WP => res ^= EP_KEYS[unsafe { sq_to.sub_unchecked(8) }],
             Piece::BP => res ^= EP_KEYS[unsafe { sq_to.add_unchecked(8) }],

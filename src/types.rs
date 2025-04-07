@@ -110,23 +110,49 @@ impl<T> IndexMut<Piece> for [T; 12] {
     }
 }
 
+impl<T> Index<PieceType> for [T; 6] {
+    type Output = T;
+
+    fn index(&self, index: PieceType) -> &Self::Output {
+        // SAFETY: the legal values for this type are all in bounds.
+        unsafe { self.get_unchecked(index as usize) }
+    }
+}
+
+impl<T> IndexMut<PieceType> for [T; 6] {
+    fn index_mut(&mut self, index: PieceType) -> &mut Self::Output {
+        // SAFETY: the legal values for this type are all in bounds.
+        unsafe { self.get_unchecked_mut(index as usize) }
+    }
+}
+
 impl Square {
+    /// # Safety
+    ///
+    /// must not pass in a value outside of [0, 63]
     pub const unsafe fn from(x: u8) -> Self {
         std::mem::transmute(x)
     }
 
-    //SAFETY: must not pass in a value greater than 64 - self as u8
+    /// # Safety
+    ///
+    /// must not pass in a value greater than 64 - self as u8
     pub const unsafe fn add_unchecked(self, x: u8) -> Self {
         Self::from(self as u8 + x)
     }
 
-    //SAFETY: must not pass in a value which is greater than self as u8
+    /// # Safety
+    ///
+    /// must not pass in a value which is greater than self as u8
     pub const unsafe fn sub_unchecked(self, x: u8) -> Self {
         Self::from(self as u8 - x)
     }
 }
 
 impl Piece {
+    /// # Safety
+    ///
+    /// must not pass a value outside of [0, 11]
     pub const unsafe fn from(x: u8) -> Self {
         std::mem::transmute(x)
     }
@@ -168,6 +194,9 @@ impl PieceType {
         }
     }
 
+    /// # Safety
+    ///
+    /// must not pass a value outside of [0, 5]
     pub const unsafe fn from(x: u8) -> Self {
         std::mem::transmute(x)
     }

@@ -14,7 +14,7 @@ pub struct Board {
     pub pieces_array: [Option<Piece>; 64], //used to speed up move generation
     pub occupancies: [BitBoard; 3],        //white, black, both
     pub castling: u8, //4 bits only should be used 0001 = wk, 0010 = wq, 0100 = bk, 1000 = bq
-    pub en_passant: Option<Square>, //ep square index
+    pub en_passant: Option<Square>,
     pub side_to_move: Colour,
     pub fifty_move: u8,
 
@@ -292,7 +292,7 @@ impl Board {
                     }
                     fen += "/";
                 }
-                if pc == None {
+                if pc.is_none() {
                     empty_count += 1;
                 } else {
                     if empty_count != 0 {
@@ -349,10 +349,9 @@ impl Board {
             _ => panic!("invalid castling rights"),
         };
 
-        if self.en_passant != None {
+        if let Some(ep) = self.en_passant {
             fen += " ";
-            //SAFETY: checked above that it is not None
-            fen += &coordinate(unsafe { self.en_passant.unwrap_unchecked() });
+            fen += &coordinate(ep);
         } else {
             fen += " -";
         };

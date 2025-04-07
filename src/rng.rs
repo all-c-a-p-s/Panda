@@ -15,7 +15,7 @@ pub fn random_hash_u64() -> u64 {
 
 // method suggested by Tord Romstad (SF developer)
 pub fn random_u64() -> u64 {
-    // reducde non-zero bits in slices of 6
+    // reduce non-zero bits in slices of 6
     let n1 = random_u32() as u64 & 0xFFFF;
     let n2 = random_u32() as u64 & 0xFFFF;
     let n3 = random_u32() as u64 & 0xFFFF;
@@ -37,6 +37,7 @@ const SEED: u64 = 0xF8D1C463A579BE02;
 
 //need a rng that I can call in a const fn
 impl XorShiftU64 {
+    #[allow(clippy::new_without_default)]
     pub const fn new() -> Self {
         Self { state: SEED }
     }

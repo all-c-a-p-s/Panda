@@ -33,7 +33,7 @@ fn is_terminal(eval: i32) -> bool {
     eval.abs() > INFINITY / 2
 }
 
-fn game_result(found_move: bool, board: &Board, history: &Vec<u64>) -> Option<f32> {
+fn game_result(found_move: bool, board: &Board, history: &[u64]) -> Option<f32> {
     if !found_move {
         match board.side_to_move {
             Colour::White => return Some(if board.checkers != 0 { 0.0 } else { 0.5 }),
@@ -41,9 +41,7 @@ fn game_result(found_move: bool, board: &Board, history: &Vec<u64>) -> Option<f3
         }
     }
 
-    if board.fifty_move == 100 {
-        Some(0.5)
-    } else if history.iter().filter(|x| **x == board.hash_key).count() == 2 {
+    if board.fifty_move == 100 || history.iter().filter(|x| **x == board.hash_key).count() == 2 {
         Some(0.5)
     } else {
         None
@@ -61,12 +59,12 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
     let mut history = vec![];
 
     #[allow(unused)]
-    let mut moves = MoveList::empty();
+    let mut movelist = MoveList::empty();
     #[allow(unused)]
     let mut result = UNKNOWN_RESULT;
 
     loop {
-        moves = MoveList::gen_moves::<false>(&mut board);
+        movelist = MoveList::gen_moves::<false>(&board);
         let mut found_move = false;
 
         let (mut s, mut chosen_move) = (0, NULL_MOVE);
@@ -75,9 +73,11 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
         let mut best = NULL_MOVE;
 
         if board.ply < OPENING_PLIES {
+            // in the opening do a very shallow search of all legal moves in the root
+            // then pick from the moves which are within some margin from the best one
             let mut scores = vec![];
 
-            for m in moves.moves {
+            for m in movelist.moves {
                 history.push(board.hash_key);
                 if m.is_null() {
                     break;
@@ -89,7 +89,8 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
 
                 found_move = true;
 
-                let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(50), 5000);
+                // node limit should be a multiple of 4096
+                let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10), 8192);
                 searcher.do_pruning = false;
 
                 let score = -searcher.negamax(&mut board, 3, -INFINITY, INFINITY, false);
@@ -105,8 +106,8 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
                 (s, chosen_move) = {
                     let candidates = scores
                         .iter()
-                        .filter(|x| best_score - OPENING_CP_MARGIN <= x.0)
-                        .map(|x| *x)
+                        .filter(|&x| best_score - OPENING_CP_MARGIN <= x.0)
+                        .copied()
                         .collect::<Vec<(i32, Move)>>();
 
                     let i = rand::random::<usize>() % candidates.len();
@@ -114,7 +115,9 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
                 };
             }
         } else {
-            let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10), 5000);
+            // otherwise simply do a time / nodes limited search (node limit should be a multiple
+            // of 4096)
+            let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10), 8192);
             let move_data = best_move(&mut board, 0, 0, 0, 10, &mut searcher, false);
 
             s = move_data.eval;
@@ -132,7 +135,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
 
         if s > 1000 && count(board.occupancies[BOTH]) < 6 {
             //adjudicate endgames because it won't actually win many of these
-            //if its searching to fixed low depth even though theyre completely winning
+            //if its searching to fixed low depth even though they're completely winning
 
             result = if board.side_to_move == Colour::White {
                 1.0
@@ -142,11 +145,12 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
             break;
         }
 
+        // i16::MAX condition is because the format of NNUE training data uses i16
         if board.ply > first_pick
             && (board.ply - first_pick) % pick_interval == 0
             && !best.is_capture(&board)
-            && s.abs() < i16::MAX as i32
             && board.checkers == 0
+            && s.abs() < i16::MAX as i32
         {
             let fen = board.fen();
 
@@ -161,11 +165,10 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
         }
 
         board.play_unchecked(chosen_move);
-        assert_eq!(board.nnue, nnue::Accumulator::from_board(&board));
     }
 
     for x in selected_fens.iter_mut() {
-        (*x).2 = result;
+        x.2 = result;
     }
 
     selected_fens
@@ -186,7 +189,7 @@ pub fn play_multiple_games(num_games: usize, num_threads: usize) -> Vec<(String,
             let mut results = Vec::new();
 
             for _ in 0..thread_games {
-                match std::panic::catch_unwind(|| play_one_game()) {
+                match std::panic::catch_unwind(play_one_game) {
                     Ok(game_results) => results.extend(game_results),
                     Err(_) => println!("ERROR: a game panicked (skipped)"),
                 }
@@ -210,11 +213,7 @@ pub fn play_multiple_games(num_games: usize, num_threads: usize) -> Vec<(String,
 }
 
 fn next_checkpoint(path: &str, duration: Duration) -> Result<i32, std::io::Error> {
-    let mut file = if let Ok(f) = std::fs::OpenOptions::new()
-        .write(true)
-        .append(true)
-        .open(path)
-    {
+    let mut file = if let Ok(f) = std::fs::OpenOptions::new().append(true).open(path) {
         f
     } else {
         std::fs::File::create(path)?
@@ -230,7 +229,7 @@ fn next_checkpoint(path: &str, duration: Duration) -> Result<i32, std::io::Error
 
     let start = Instant::now();
 
-    let pb = ProgressBar::new(duration.as_secs() as u64);
+    let pb = ProgressBar::new(duration.as_secs());
     pb.set_position(0);
 
     // Set a nice style for the progress bar

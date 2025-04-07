@@ -7,6 +7,7 @@ use crate::magic::*;
 use crate::movegen::*;
 use crate::r#move::*;
 use crate::transposition::*;
+use crate::uci::*;
 use crate::STARTPOS;
 
 use crate::types::*;
@@ -60,9 +61,10 @@ const UNDER_PROMOTION: i32 = -200_000;
 
 pub const MAX_GAME_PLY: usize = 1024;
 
-#[allow(unused)]
 const MIN_MOVE_TIME: usize = 1; //make sure move time is never 0
-const TIME_TO_MOVE: usize = 50;
+const MOVE_OVERHEAD: usize = 50;
+
+#[allow(unused)]
 const TIME_TO_START_SEARCH: usize = 0; //initialise big TT (if not using HashMap)
                                        //leave 100ms total margin
 
@@ -129,11 +131,26 @@ pub struct Searcher {
     pub tt_black: HashMap<u64, TTEntry>,
     pub ply: usize,
     pub nodes: usize,
-    pub end_time: Instant,
-    pub max_nodes: usize,
+    pub timer: Timer,
     pub moves_fully_searched: usize,
     pub do_pruning: bool,
     info: SearchInfo,
+}
+
+pub struct Timer {
+    stopped: bool,
+    max_nodes: usize,
+    end_time: Instant,
+}
+
+impl Default for Timer {
+    fn default() -> Self {
+        Self {
+            stopped: false,
+            max_nodes: 0,
+            end_time: Instant::now(),
+        }
+    }
 }
 
 struct NullMoveUndo {
@@ -179,9 +196,8 @@ fn make_null_move(b: &mut Board) -> NullMoveUndo {
 
     while let Some(sq) = lsfb(their_attackers) {
         let ray_between = RAY_BETWEEN[sq][our_king] & b.occupancies[BOTH];
-        match count(ray_between) {
-            1 => b.pinned |= ray_between,
-            _ => {}
+        if count(ray_between) == 1 {
+            b.pinned |= ray_between
         }
         their_attackers = pop_bit(sq, their_attackers);
     }
@@ -193,10 +209,10 @@ fn make_null_move(b: &mut Board) -> NullMoveUndo {
             pinned: pinned_reset,
         };
     }
-    return NullMoveUndo {
+    NullMoveUndo {
         ep: None,
         pinned: pinned_reset,
-    };
+    }
 }
 
 fn undo_null_move(b: &mut Board, undo: &NullMoveUndo) {
@@ -251,6 +267,12 @@ unsafe fn is_drawn(position: &Board) -> bool {
 
 impl Searcher {
     pub fn new(end_time: Instant, max_nodes: usize) -> Self {
+        let timer = Timer {
+            stopped: false,
+            end_time,
+            max_nodes,
+        };
+
         Searcher {
             pv_length: [0usize; 64],
             pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
@@ -258,18 +280,34 @@ impl Searcher {
             tt_black: HashMap::new(), //seems to work pretty well (avoids t1 errors)
             ply: 0,
             nodes: 0,
-            end_time,
-            max_nodes,
+            timer,
             moves_fully_searched: 0,
             do_pruning: true,
             info: SearchInfo::default(),
         }
     }
 
+    fn should_check_exit(&self) -> bool {
+        const CHECK_INTERVAL: usize = 4095;
+        self.nodes & CHECK_INTERVAL == 0
+    }
+
+    fn should_exit(&mut self) -> bool {
+        if self.timer.stopped {
+            return true;
+        } else if self.should_check_exit() {
+            self.timer.stopped =
+                Instant::now() > self.timer.end_time || self.nodes >= self.timer.max_nodes;
+            return self.timer.stopped;
+        }
+        false
+    }
+
     //The purpose of the singularity() function is to prove that a move is better than alternatives by
     //a significant margin. If this is true, we should extend it since it is more important. This
     //function determines how much we should extend by.
 
+    #[allow(clippy::too_many_arguments)]
     fn singularity(
         &mut self,
         position: &mut Board,
@@ -293,7 +331,7 @@ impl Searcher {
 
         self.info.excluded = None;
 
-        let extension = if !pv_node && excluded_eval < threshold - SINGULARITY_DE_MARGIN {
+        if !pv_node && excluded_eval < threshold - SINGULARITY_DE_MARGIN {
             Some(2)
         } else if excluded_eval < threshold {
             Some(1)
@@ -306,9 +344,7 @@ impl Searcher {
             Some(-1)
         } else {
             Some(0)
-        };
-
-        extension
+        }
     }
 
     pub fn negamax(
@@ -319,20 +355,8 @@ impl Searcher {
         beta: i32,
         cutnode: bool,
     ) -> i32 {
-        /*
-         return a score that can never be >= alpha if the search is cancelled
-         other engines return zero here but I don't see how this would work
-         in cases where 0 > alpha. Returning value that gets recursively passed
-         so that it is equal to -INFINITY for the engine should work imo because
-         if this happens on PV move it breaks during the main moves loop below
-         and so count of moves searched fully is zero -> discard result
-        */
-        if (Instant::now() > self.end_time || self.nodes >= self.max_nodes) && self.ply != 0 {
-            return match self.ply % 2 {
-                0 => -INFINITY,
-                1 => INFINITY,
-                _ => unreachable!(),
-            };
+        if self.should_exit() {
+            return 0;
         }
         let pv_node = beta - alpha != 1;
         let root = self.ply == 0;
@@ -340,7 +364,7 @@ impl Searcher {
 
         self.pv_length[self.ply] = self.ply;
 
-        if depth == 0 {
+        if depth <= 0 {
             //qsearch on leaf nodes
             return self.quiescence_search(position, alpha, beta);
         }
@@ -364,20 +388,14 @@ impl Searcher {
                 }
             }
 
-            /*
-             mate distance pruning:
-             check if line is so good/bad that being mated in the current ply
-             or mating in the next ply would not change alpha/beta
-            */
+            // mate distance pruning:
+            // check if line is so good/bad that being mated in the current ply
+            // or mating in the next ply would not change alpha/beta
             let r_alpha = cmp::max(alpha, -INFINITY + self.ply as i32);
             let r_beta = cmp::min(beta, INFINITY - self.ply as i32 - 1);
             if r_alpha >= r_beta {
                 return r_alpha;
             }
-
-            //TODO: investigate this - I assume atm we're completely ignoring the evals of all TT hits of lower
-            //depth but I think we can do better than this. For instance by accepting the eval if
-            //depth is similar and we are likely to have to re-search otherwise
 
             let hash_lookup = match position.side_to_move {
                 //hash lookup
@@ -400,7 +418,6 @@ impl Searcher {
             };
         }
 
-        //TODO: store static/low-depth evals in TT
         let tt_move = !best_move.is_null();
         let tt_move_capture = if best_move.is_null() {
             false
@@ -421,8 +438,6 @@ impl Searcher {
             if self.ply < MAX_SEARCH_DEPTH {
                 self.info.ss[self.ply] = SearchStackEntry { eval: static_eval };
             }
-            //TODO: write this to TT if we don't overwrite
-            //or get it from the TT
 
             //measuring whether the search is improving (better static eval than 2 tempi ago)
             //is useful in adjusting how we should prune/reduce. if the search is improving,
@@ -461,12 +476,10 @@ impl Searcher {
                     }
                 }
 
-                /*
-                 * Null move pruning: if we cannot improve our position with 2 moves in a row,
-                 * then the first of these moves is probably bad (exception is zugzwang)
-                 * the third condition is a technique I found in various strong engines
-                 * (SF, Obsidian etc.)
-                 * */
+                // Null move pruning: if we cannot improve our position with 2 moves in a row,
+                // then the first of these moves is probably bad (exception is zugzwang)
+                // the third condition is a technique I found in various strong engines
+                // (SF, Obsidian etc.)
                 if !position.is_kp_endgame()
                     && !position.last_move_null
                     && static_eval >= beta + 200 - 20 * (depth as i32)
@@ -487,35 +500,30 @@ impl Searcher {
                 }
             }
         }
-        /*
-         Internal Iterative Deepening:
-         pv node and no tt hit -> move ordering will be terrible
-         so do a shallower search to rectify move ordering
-         by fixing history tables and pv move
-         according to wiki this should make little difference on average
-         but should make the search more consistent
-         TODO: experiment with IIR instead of IID
-        */
+
+        // Internal Iterative Deepening:
+        // pv node and no tt hit -> move ordering will be terrible
+        // so do a shallower search to rectify move ordering
+        // by fixing history tables and pv move
+        // according to wiki this should make little difference on average
+        // but should make the search more consistent
         if pv_node && depth > 3 && best_move.is_null() {
             self.negamax(position, depth - 2, alpha, beta, !cutnode);
         }
 
-        /*
-         Generate pseudo-legal moves here because this should be faster in cases where
-         the search is pruned early, and so we don't actually have to check whether later
-         pseudo-legal moves are legal. The downside of this is that these can theoretically
-         interfere with move ordering, but my testing seems to show that this ultimately results
-         in a net performace gain due to higher NPS.
-        */
-        let mut child_nodes = MoveList::gen_moves::<false>(position);
-        child_nodes.order_moves(position, self, &best_move);
+        //
+        // Generate pseudo-legal moves here because this is faster in cases where
+        // the search is pruned early, and so we don't actually have to check whether later
+        // pseudo-legal moves are legal.
+        let mut move_list = MoveList::gen_moves::<false>(position);
+        move_list.order_moves(position, self, &best_move);
 
         let (mut moves_played, mut moves_seen) = (0, 0);
         //the former of these is for legal moves we actually search
         //the latter for pseudo-legal moves we consider
         let mut skip_quiets = false;
 
-        for m in child_nodes.moves {
+        for m in move_list.moves {
             if m.is_null() {
                 //no pseudolegal moves left in move list
                 break;
@@ -620,13 +628,11 @@ impl Searcher {
                 -self.negamax(position, new_depth, -beta, -alpha, false)
                 //normal search on pv move (no moves searched yet)
             } else {
-                /*
-                 non-pv move -> search with reduced window
-                 this assumes that our move ordering is good enough
-                 that we will be able to prove that these moves are bad
-                 often enough that it outweighs the cost of re-searching
-                 then if we are unable to prove so
-                */
+                // non-pv move -> search with reduced window
+                // this assumes that our move ordering is good enough
+                // that we will be able to prove that these moves are bad
+                // often enough that it outweighs the cost of re-searching
+                // then if we are unable to prove so
 
                 let mut r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
                     [cmp::min(depth, 31)][cmp::min(moves_played, 31)];
@@ -670,9 +676,8 @@ impl Searcher {
             position.undo_move(m, &commit);
             self.ply -= 1;
 
-            if Instant::now() > self.end_time && self.ply == 0 {
-                break;
-                //as above
+            if self.timer.stopped {
+                return 0;
             }
 
             unsafe {
@@ -702,7 +707,7 @@ impl Searcher {
                     //will be scored separately
                     self.update_search_tables(
                         position,
-                        &child_nodes,
+                        &move_list,
                         m,
                         tactical,
                         depth,
@@ -728,11 +733,13 @@ impl Searcher {
             };
         }
 
-        let hash_entry = TTEntry::new(depth, alpha, hash_flag, best_move);
-        match position.side_to_move {
-            Colour::White => self.tt_white.write(position.hash_key, hash_entry),
-            Colour::Black => self.tt_black.write(position.hash_key, hash_entry),
-        };
+        if !self.timer.stopped {
+            let hash_entry = TTEntry::new(depth, alpha, hash_flag, best_move);
+            match position.side_to_move {
+                Colour::White => self.tt_white.write(position.hash_key, hash_entry),
+                Colour::Black => self.tt_black.write(position.hash_key, hash_entry),
+            };
+        }
         alpha
     }
 
@@ -745,12 +752,8 @@ impl Searcher {
             }
         }
 
-        if (Instant::now() > self.end_time || self.nodes >= self.max_nodes) && self.ply != 0 {
-            return match self.ply % 2 {
-                0 => -INFINITY,
-                1 => INFINITY,
-                _ => unreachable!(),
-            };
+        if self.should_exit() {
+            return 0;
         }
 
         let mut hash_flag = EntryFlag::UpperBound;
@@ -829,7 +832,7 @@ impl Searcher {
             if eval + 200 <= alpha
                 && !c.static_exchange_evaluation(
                     position,
-                    SEE_VALUES[KNIGHT] - SEE_VALUES[BISHOP] - 1,
+                    SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1,
                 )
             {
                 continue;
@@ -844,6 +847,11 @@ impl Searcher {
             let eval = -self.quiescence_search(position, -beta, -alpha);
             position.undo_move(c, &commit);
             self.ply -= 1;
+
+            if self.timer.stopped {
+                return 0;
+            }
+
             if eval > alpha {
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
@@ -855,11 +863,13 @@ impl Searcher {
         }
 
         //write eval to hash table
-        let hash_entry = TTEntry::new(0, alpha, hash_flag, best_move);
-        match position.side_to_move {
-            Colour::White => self.tt_white.write(position.hash_key, hash_entry),
-            Colour::Black => self.tt_black.write(position.hash_key, hash_entry),
-        };
+        if !self.timer.stopped {
+            let hash_entry = TTEntry::new(0, alpha, hash_flag, best_move);
+            match position.side_to_move {
+                Colour::White => self.tt_white.write(position.hash_key, hash_entry),
+                Colour::Black => self.tt_black.write(position.hash_key, hash_entry),
+            };
+        }
         alpha
     }
 
@@ -916,6 +926,8 @@ impl Searcher {
         self.pv = [[NULL_MOVE; MAX_PLY]; MAX_PLY];
         self.ply = 0;
         self.moves_fully_searched = 0;
+
+        self.timer.stopped = false;
 
         //not clearing seems to be worse as even though the first few search depths are instant
         //the next depths don't have advantages of iterative deepening like pv and move ordering
@@ -1020,7 +1032,7 @@ impl Move {
         } + threshold;
 
         if self.is_promotion() {
-            balance += SEE_VALUES[QUEEN] - SEE_VALUES[PAWN];
+            balance += SEE_VALUES[PieceType::Queen] - SEE_VALUES[PieceType::Pawn];
         }
 
         if balance < 0 {
@@ -1085,15 +1097,17 @@ impl Move {
                 0,
             );
 
-            if piece_type(next_victim) == PAWN
-                || piece_type(next_victim) == BISHOP
-                || piece_type(next_victim) == QUEEN
+            if piece_type(next_victim) == PieceType::Pawn
+                || piece_type(next_victim) == PieceType::Bishop
+                || piece_type(next_victim) == PieceType::Queen
             {
                 //only diagonal moves can reveal new diagonal attackers
                 attackers |= get_bishop_attacks(sq_to as usize, occupancies) & bishop_attackers;
             }
 
-            if piece_type(next_victim) == ROOK || piece_type(next_victim) == QUEEN {
+            if piece_type(next_victim) == PieceType::Rook
+                || piece_type(next_victim) == PieceType::Queen
+            {
                 //same for rook attacks
                 attackers |= get_rook_attacks(sq_to as usize, occupancies) & rook_attackers;
             }
@@ -1153,7 +1167,7 @@ impl Move {
         } else if self == s.pv[0][s.ply] {
             PV_MOVE_SCORE
         } else if self.is_capture(b) {
-            let victim_type: usize =
+            let victim_type =
                 piece_type(unsafe { b.pieces_array[self.square_to()].unwrap_unchecked() });
             let attacker_type = piece_type(self.piece_moved(b));
             let winning_capture = self.static_exchange_evaluation(b, 0);
@@ -1173,7 +1187,7 @@ impl Move {
                 _ => unreachable!(),
             }
         } else if self.is_en_passant() {
-            MVV_LVA[PAWN][PAWN]
+            MVV_LVA[PieceType::Pawn][PieceType::Pawn]
         } else if s.info.killer_moves[0][s.ply] == self {
             FIRST_KILLER_MOVE //after captures
         } else if s.info.killer_moves[1][s.ply] == self {
@@ -1226,33 +1240,21 @@ pub struct MoveData {
     pub pv: String,
 }
 
-pub fn move_time(time: usize, increment: usize, moves_to_go: usize, ply: usize) -> usize {
-    if time < TIME_TO_MOVE {
-        //hopefully this never happens
-        return MIN_MOVE_TIME;
-    }
+pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize) -> usize {
+    let time_until_flag = time - MOVE_OVERHEAD;
+    let default_moves_to_go: usize = 40;
 
-    let time_until_flag = time - TIME_TO_MOVE;
-
-    let ideal_time = if moves_to_go == 0 {
-        (match ply {
-            0..=10 => time_until_flag / 45,
-            11..=16 => time_until_flag / 25,
-            _ => time_until_flag / 20,
-        } + increment
-            + TIME_TO_START_SEARCH)
+    let m = if moves_to_go == 0 {
+        default_moves_to_go
     } else {
-        (match ply {
-            0..=10 => (time_until_flag) as f32 / 40.0,
-            11..=16 => (time_until_flag) as f32 / (moves_to_go as f32),
-            _ => (time_until_flag) as f32 / cmp::max((moves_to_go as f32 / 2.0) as usize, 2) as f32,
-        }) as usize
-            + TIME_TO_START_SEARCH
-            + increment
+        usize::clamp(moves_to_go, 2, default_moves_to_go)
     };
 
-    //prevent that high increment > time left breaks this
-    cmp::max(cmp::min(ideal_time, time_until_flag), MIN_MOVE_TIME)
+    //note time - increment must be +ve since we got increment last turn
+    let ideal_time = time_until_flag / (m / 2) + increment;
+    let t = cmp::min(ideal_time, time_until_flag);
+
+    cmp::max(t, MIN_MOVE_TIME)
 }
 
 impl Move {
@@ -1274,7 +1276,6 @@ impl Move {
     }
 }
 
-//TODO: refactor: aspiration_window() needs to be its own function
 pub fn best_move(
     position: &mut Board,
     time_left: usize,
@@ -1291,14 +1292,21 @@ pub fn best_move(
                 .try_into()
                 .unwrap(),
         ),
-        k => Duration::from_millis(k as u64),
+        k => {
+            if k < MOVE_OVERHEAD {
+                Duration::from_millis(k as u64)
+            } else {
+                let t = cmp::max(MIN_MOVE_TIME, k - MOVE_OVERHEAD);
+                Duration::from_millis(t as u64)
+            }
+        }
     };
 
     let end_time = start + move_duration;
     //calculate time to cancel search
 
     s.reset_searcher();
-    s.end_time = end_time;
+    s.timer.end_time = end_time;
 
     let mut eval: i32 = 0;
     let mut previous_eval = eval; //used for cases where search cancelled after searching zero moves fully
@@ -1315,14 +1323,19 @@ pub fn best_move(
 
     let rt_table_reset = unsafe { REPETITION_TABLE };
 
-    while depth < MAX_SEARCH_DEPTH && start.elapsed() < move_duration {
+    while depth < MAX_SEARCH_DEPTH {
         unsafe { START_DEPTH = depth };
         eval = s.negamax(position, std::cmp::max(depth, 1), alpha, beta, false);
+
         if s.moves_fully_searched == 0 {
             //search cancelled before even pv was searched
             eval = previous_eval;
             s.pv = previous_pv;
             s.pv_length = previous_pv_length;
+        } else if s.timer.stopped {
+            eval = previous_eval;
+            //in this case our PV move is reliable but our eval returned will be 0
+            //so the best eval we can return is the previous one
         } else {
             // >= 1 move searched ok
             //this can sometimes cause it to report eval of -INFINITY if it falls
@@ -1336,30 +1349,14 @@ pub fn best_move(
             previous_pv_length = s.pv_length;
         }
 
+        //this will always print the eval from the penultimate iteration
+        //but it can print a new pv if the pv was updated in the search
         if show_thinking {
-            println!(
-                "info depth {} score cp {} nodes {} pv{} time {} nps {}",
-                depth,
-                eval,
-                s.nodes,
-                {
-                    let mut pv = String::new();
-                    for i in 0..s.pv_length[0] {
-                        pv += " ";
-                        pv += s.pv[0][i].uci().as_str();
-                    }
-                    pv
-                },
-                start.elapsed().as_millis(),
-                {
-                    let micros = start.elapsed().as_micros() as f64;
-                    if micros == 0.0 {
-                        0
-                    } else {
-                        ((s.nodes as f64 / micros) * 1_000_000.0) as u64
-                    }
-                }
-            );
+            print_thinking(depth, eval, &s, start);
+        }
+
+        if s.timer.stopped {
+            break;
         }
 
         s.moves_fully_searched = 0;
@@ -1388,8 +1385,7 @@ pub fn best_move(
     }
 
     for i in 0..s.pv_length[0] {
-        pv += coordinate(s.pv[0][i].square_from()).as_str();
-        pv += coordinate(s.pv[0][i].square_to()).as_str();
+        pv += s.pv[0][i].uci().as_str();
         pv += " ";
     }
 

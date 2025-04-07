@@ -5,7 +5,8 @@ use crate::*;
 
 use crate::types::*;
 
-const NUM_FEATURES: usize = 768;
+// ON or OFF for each piece / colour / square
+const NUM_FEATURES: usize = 6 * 2 * 64;
 const HL_SIZE: usize = 128;
 
 const CR_MIN: i16 = 0;

@@ -3,9 +3,6 @@ use std::collections::HashMap;
 
 use crate::BitBoard;
 
-#[allow(dead_code)]
-pub const MAX: u64 = u64::MAX;
-
 pub const A_FILE: BitBoard = 0x0101010101010101;
 pub const B_FILE: BitBoard = 0x0202020202020202;
 pub const C_FILE: BitBoard = 0x0404040404040404;
@@ -24,18 +21,12 @@ pub const RANK_6: BitBoard = 0x0000FF0000000000;
 pub const RANK_7: BitBoard = 0x00FF000000000000;
 pub const RANK_8: BitBoard = 0xFF00000000000000;
 
+//these are the indices used for the board's occupancy arrays
 pub const WHITE: usize = 0;
 pub const BLACK: usize = 1;
 pub const BOTH: usize = 2;
 
-//piece types of either colour
-pub const PAWN: usize = 0;
-pub const KNIGHT: usize = 1;
-pub const BISHOP: usize = 2;
-pub const ROOK: usize = 3;
-pub const QUEEN: usize = 4;
-pub const KING: usize = 5;
-
+//max number of legal moves possible in a position (that has been found)
 pub const MAX_MOVES: usize = 218;
 
 pub fn file_indices() -> HashMap<char, usize> {
@@ -133,10 +124,9 @@ pub const fn file(sq: Square) -> usize {
     sq as usize % 8
 }
 
-//TODO: new enum here
 #[inline(always)]
-pub const fn piece_type(piece: Piece) -> usize {
-    piece as usize % 6
+pub const fn piece_type(piece: Piece) -> PieceType {
+    unsafe { PieceType::from(piece as u8 % 6) }
 }
 
 pub fn print_bitboard(bitboard: BitBoard) {

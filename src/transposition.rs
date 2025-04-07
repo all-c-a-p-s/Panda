@@ -18,6 +18,16 @@ pub struct TTEntry {
     pub best_move: Move,
 }
 
+// TT implementation inspired by engine Black Marlin
+// the idea of the mask field is that it will be set to
+// (2^k - 1), where the capacity of the table = 2^k.
+// This means that the mask will have all bits less
+// significant than the kth bit set and all others zeroed.
+// Mask acts as a filter so that u64 hash key can get
+// indexed in a hash table of some size.
+
+// Somehow using a hashmap with default capacity still gives
+// higher NPS for me tho...
 pub struct TranspositionTable {
     pub tt: Box<[TTEntry]>, //using array = stack overflow
     pub size: usize,
@@ -30,19 +40,6 @@ pub struct LookupResult {
     pub depth: usize,
     pub flag: EntryFlag,
 }
-
-/*
- TT implementation inspired by engine Black Marlin
- the idea of the mask field is that it will be set to
- (2^k - 1), where the capacity of the table = 2^k.
- This means that the mask will have all bits less
- significant than the kth bit set and all others zeroed.
- Mask acts as a filter so that u64 hash key can get
- indexed in a hash table of some size.
-
- Somehow using a hashmap with default capacity still gives
- higher NPS for me tho...
-*/
 
 impl Default for TTEntry {
     fn default() -> Self {

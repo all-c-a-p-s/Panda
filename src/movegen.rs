@@ -517,7 +517,6 @@ impl MoveList {
         first_unused
     }
 
-    //TODO: generate moves by piece one at a time / staged move generation
     pub fn gen_moves<const CAPS_ONLY: bool>(board: &Board) -> Self {
         let mut moves = MoveList::empty();
 
@@ -695,7 +694,7 @@ pub static RAY_BETWEEN: [[BitBoard; 64]; 64] = {
 
 pub fn check_en_passant(m: Move, b: &Board) -> bool {
     //checks en passant edge case where en passant reveals check on the king
-    match m.piece_moved(&b) {
+    match m.piece_moved(b) {
         Piece::WP => {
             let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[BOTH]);
             relevant_blockers =

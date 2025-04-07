@@ -1,12 +1,7 @@
-#![allow(unused)]
-
 use crate::board::*;
 use crate::helper::*;
-use crate::magic::*;
 
 use crate::types::{Piece, Square};
-
-use crate::nnue::Accumulator;
 
 pub const MIRROR: [usize; 64] = {
     pub const fn relative_psqt_square(square: usize, c: Colour) -> usize {

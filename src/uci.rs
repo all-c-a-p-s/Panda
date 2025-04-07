@@ -25,7 +25,7 @@ pub fn recognise_command(command: &str) -> CommandType {
         "isready" => CommandType::IsReady,
         "position" => CommandType::Position,
         "go" => {
-            if words.len() == 0 {
+            if words.is_empty() {
                 panic!("invalid uci command");
             }
 
@@ -71,7 +71,7 @@ pub fn parse_move(input: &str, board: &Board) -> Move {
         return encode_move(sq_from, sq_to, None, CASTLING_FLAG);
     } else if board.en_passant.is_some()
         && board.en_passant.unwrap() == sq_to
-        && piece_type(piece) == PAWN
+        && piece_type(piece) == PieceType::Pawn
     {
         return encode_move(sq_from, sq_to, None, EN_PASSANT_FLAG);
     }
@@ -79,20 +79,16 @@ pub fn parse_move(input: &str, board: &Board) -> Move {
 }
 
 pub fn parse_uci(command: &str) {
-    match command {
-        "uci" => {
-            println!("uciok");
-            println!("id name Panda 1.0");
-            println!("id author Sebastiano Rebonato-Scott");
-        }
-        _ => {}
+    if command == "uci" {
+        println!("uciok");
+        println!("id name Panda 1.0");
+        println!("id author Sebastiano Rebonato-Scott");
     }
 }
 
 pub fn parse_isready(command: &str) {
-    match command {
-        "isready" => println!("readyok"),
-        _ => {}
+    if command == "isready" {
+        println!("readyok")
     }
 }
 
@@ -317,6 +313,32 @@ fn parse_perft(command: &str, position: &mut Board) {
     } else {
         eprintln!("expected integer depth in perft command (go perft <depth>)")
     }
+}
+
+pub fn print_thinking(depth: usize, eval: i32, s: &Searcher, start: Instant) {
+    println!(
+        "info depth {} score cp {} nodes {} pv{} time {} nps {}",
+        depth,
+        eval,
+        s.nodes,
+        {
+            let mut pv = String::new();
+            for i in 0..s.pv_length[0] {
+                pv += " ";
+                pv += s.pv[0][i].uci().as_str();
+            }
+            pv
+        },
+        start.elapsed().as_millis(),
+        {
+            let micros = start.elapsed().as_micros() as f64;
+            if micros == 0.0 {
+                0
+            } else {
+                ((s.nodes as f64 / micros) * 1_000_000.0) as u64
+            }
+        }
+    );
 }
 
 pub fn uci_loop() {
