@@ -50,6 +50,8 @@ const SEE_QSEARCH_MARGIN: i32 = 1;
 #[allow(unused)]
 const LMP_DEPTH: usize = 5;
 
+const DO_SINGULARITY_EXTENSION: bool = false;
+
 const HASH_MOVE_SCORE: i32 = 1_000_000;
 const PV_MOVE_SCORE: i32 = 500_000;
 const QUEEN_PROMOTION: i32 = 400_000;
@@ -593,7 +595,10 @@ impl Searcher {
             //A singular move is a move which seems to be forced or at least much stronger than
             //others. We should therefore extend to investigate it further.
 
-            let maybe_singular = !root
+            // after I implemented it I realised singularity extension currently loses elo for
+            // Panda, but I didn't want to throw away the code
+            let maybe_singular = DO_SINGULARITY_EXTENSION
+                && !root
                 && depth >= 8
                 && self.info.excluded.is_none()
                 && m == best_move
