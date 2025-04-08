@@ -168,7 +168,6 @@ fn reduction_ok(tactical: bool, in_check: bool) -> bool {
 //we have to update pinners but not checkers since NMP is never done while in check
 fn make_null_move(b: &mut Board) -> NullMoveUndo {
     b.side_to_move = b.side_to_move.opponent();
-    b.ply += 1;
     b.last_move_null = true;
 
     let pinned_reset = b.pinned;
@@ -222,7 +221,6 @@ fn undo_null_move(b: &mut Board, undo: &NullMoveUndo) {
         Colour::White => Colour::Black,
         Colour::Black => Colour::White,
     };
-    b.ply -= 1;
     b.last_move_null = false;
     b.en_passant = undo.ep;
     b.pinned = undo.pinned;
