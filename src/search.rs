@@ -71,7 +71,6 @@ const TIME_TO_START_SEARCH: usize = 0; //initialise big TT (if not using HashMap
                                        //leave 100ms total margin
 
 pub static mut REPETITION_TABLE: [u64; MAX_GAME_PLY] = [0u64; MAX_GAME_PLY];
-pub static mut START_DEPTH: usize = 0;
 
 #[derive(Copy, Clone)]
 struct SearchStackEntry {
@@ -501,17 +500,6 @@ impl Searcher {
             }
         }
 
-        // Internal Iterative Deepening:
-        // pv node and no tt hit -> move ordering will be terrible
-        // so do a shallower search to rectify move ordering
-        // by fixing history tables and pv move
-        // according to wiki this should make little difference on average
-        // but should make the search more consistent
-        if pv_node && depth > 3 && best_move.is_null() && !root {
-            self.negamax(position, depth - 2, alpha, beta, !cutnode);
-        }
-
-        //
         // Generate pseudo-legal moves here because this is faster in cases where
         // the search is pruned early, and so we don't actually have to check whether later
         // pseudo-legal moves are legal.
@@ -1397,7 +1385,6 @@ pub fn best_move(
     let mut delta = ASPIRATION_WINDOW;
 
     while depth < MAX_SEARCH_DEPTH {
-        unsafe { START_DEPTH = depth };
         eval = s.negamax(position, std::cmp::max(depth, 1), alpha, beta, false);
 
         if s.moves_fully_searched == 0 {
