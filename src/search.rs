@@ -507,7 +507,7 @@ impl Searcher {
         // by fixing history tables and pv move
         // according to wiki this should make little difference on average
         // but should make the search more consistent
-        if pv_node && depth > 3 && best_move.is_null() {
+        if pv_node && depth > 3 && best_move.is_null() && !root {
             self.negamax(position, depth - 2, alpha, beta, !cutnode);
         }
 
@@ -683,14 +683,10 @@ impl Searcher {
                 return 0;
             }
 
-            unsafe {
-                //the second condition is to be sure that this results from a full search
-                //and not a search initiated by IID
-                if self.ply == 0 && depth == START_DEPTH {
-                    self.moves_fully_searched += 1;
-                    //used to ensure in the iterative deepening search that
-                    //at least one move has been searched fully
-                }
+            if self.ply == 0 {
+                self.moves_fully_searched += 1;
+                //used to ensure in the iterative deepening search that
+                //at least one move has been searched fully
             }
 
             if eval > alpha {
@@ -1279,6 +1275,82 @@ impl Move {
     }
 }
 
+struct IterDeepData {
+    eval: i32,
+    pv: [[Move; MAX_PLY]; MAX_PLY],
+    pv_length: [usize; MAX_PLY],
+
+    delta: i32,
+    alpha: i32,
+    beta: i32,
+    depth: usize,
+
+    show_thinking: bool,
+    start_time: Instant,
+}
+
+impl IterDeepData {
+    fn new(start_time: Instant, show_thinking: bool) -> Self {
+        Self {
+            eval: 0,
+            pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
+            pv_length: [0; MAX_PLY],
+            delta: ASPIRATION_WINDOW,
+            alpha: -INFINITY,
+            beta: INFINITY,
+            depth: 1,
+            show_thinking,
+            start_time,
+        }
+    }
+}
+
+fn aspiration_window(position: &mut Board, s: &mut Searcher, id: &mut IterDeepData) -> i32 {
+    loop {
+        let eval = s.negamax(
+            position,
+            std::cmp::max(id.depth, 1),
+            id.alpha,
+            id.beta,
+            false,
+        );
+
+        if s.timer.stopped {
+            id.pv = s.pv;
+            id.pv_length = s.pv_length;
+            return 0;
+            //this return value will not actually be used
+        }
+
+        if eval <= id.alpha {
+            //fail low -> widen window down, do not update pv
+            id.alpha = std::cmp::max(id.alpha - id.delta, -INFINITY);
+
+            id.beta = (id.alpha + id.beta) / 2;
+            id.delta += id.delta / 2;
+        } else if eval >= id.beta {
+            //fail high -> widen window up
+            id.beta = std::cmp::min(id.beta + id.delta, INFINITY);
+            id.delta += id.delta / 2;
+        } else {
+            //within window -> just update pv and set up for next iteration
+            id.pv = s.pv;
+            id.pv_length = s.pv_length;
+
+            id.delta = ASPIRATION_WINDOW;
+
+            id.alpha = eval - id.delta;
+            id.beta = eval + id.delta;
+
+            if id.show_thinking {
+                print_thinking(id.depth, eval, &s, id.start_time);
+            }
+
+            return eval;
+        }
+    }
+}
+
 pub fn best_move(
     position: &mut Board,
     time_left: usize,
@@ -1324,8 +1396,6 @@ pub fn best_move(
 
     let mut delta = ASPIRATION_WINDOW;
 
-    let rt_table_reset = unsafe { REPETITION_TABLE };
-
     while depth < MAX_SEARCH_DEPTH {
         unsafe { START_DEPTH = depth };
         eval = s.negamax(position, std::cmp::max(depth, 1), alpha, beta, false);
@@ -1341,13 +1411,8 @@ pub fn best_move(
             //so the best eval we can return is the previous one
         } else {
             // >= 1 move searched ok
-            //this can sometimes cause it to report eval of -INFINITY if it falls
-            //out of aspiration window and then searches no moves fully
-            if eval != -INFINITY {
-                //note that -INFINITY can only happen in the case of aspiration window bug mentioned
-                //above, as mates will be -INFINITY + some ply that is at least one
-                previous_eval = eval;
-            }
+
+            previous_eval = eval;
             previous_pv = s.pv;
             previous_pv_length = s.pv_length;
         }
@@ -1363,7 +1428,6 @@ pub fn best_move(
         }
 
         s.moves_fully_searched = 0;
-        unsafe { REPETITION_TABLE = rt_table_reset };
 
         if eval <= alpha {
             //fell outside window -> re-search with same depth
