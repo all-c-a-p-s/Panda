@@ -1304,16 +1304,23 @@ fn aspiration_window(position: &mut Board, s: &mut Searcher, id: &mut IterDeepDa
         );
 
         if s.timer.stopped {
-            id.pv = s.pv;
-            id.pv_length = s.pv_length;
+            if s.moves_fully_searched > 0 {
+                id.pv = s.pv;
+                id.pv_length = s.pv_length;
+            }
             return 0;
             //this return value will not actually be used
         }
 
+        id.pv = s.pv;
+        id.pv_length = s.pv_length;
+        id.eval = eval;
+
+        s.moves_fully_searched = 0;
+
         if eval <= id.alpha {
             //fail low -> widen window down, do not update pv
             id.alpha = std::cmp::max(id.alpha - id.delta, -INFINITY);
-
             id.beta = (id.alpha + id.beta) / 2;
             id.delta += id.delta / 2;
         } else if eval >= id.beta {
@@ -1322,8 +1329,6 @@ fn aspiration_window(position: &mut Board, s: &mut Searcher, id: &mut IterDeepDa
             id.delta += id.delta / 2;
         } else {
             //within window -> just update pv and set up for next iteration
-            id.pv = s.pv;
-            id.pv_length = s.pv_length;
 
             id.delta = ASPIRATION_WINDOW;
 
@@ -1371,82 +1376,29 @@ pub fn best_move(
     s.reset_searcher();
     s.timer.end_time = end_time;
 
-    let mut eval: i32 = 0;
-    let mut previous_eval = eval; //used for cases where search cancelled after searching zero moves fully
+    let mut id = IterDeepData::new(start, show_thinking);
     let mut pv = String::new();
 
-    let mut previous_pv = s.pv;
-    let mut previous_pv_length = s.pv_length;
-
-    let mut alpha = -INFINITY;
-    let mut beta = INFINITY;
-    let mut depth = 1;
-
-    let mut delta = ASPIRATION_WINDOW;
-
-    while depth < MAX_SEARCH_DEPTH {
-        eval = s.negamax(position, std::cmp::max(depth, 1), alpha, beta, false);
-
-        if s.moves_fully_searched == 0 {
-            //search cancelled before even pv was searched
-            eval = previous_eval;
-            s.pv = previous_pv;
-            s.pv_length = previous_pv_length;
-        } else if s.timer.stopped {
-            eval = previous_eval;
-            //in this case our PV move is reliable but our eval returned will be 0
-            //so the best eval we can return is the previous one
-        } else {
-            // >= 1 move searched ok
-
-            previous_eval = eval;
-            previous_pv = s.pv;
-            previous_pv_length = s.pv_length;
-        }
-
-        //this will always print the eval from the penultimate iteration
-        //but it can print a new pv if the pv was updated in the search
-        if show_thinking {
-            print_thinking(depth, eval, &s, start);
-        }
+    while id.depth < MAX_SEARCH_DEPTH {
+        let eval = aspiration_window(position, s, &mut id);
 
         if s.timer.stopped {
             break;
         }
 
-        s.moves_fully_searched = 0;
-
-        if eval <= alpha {
-            //fell outside window -> re-search with same depth
-            alpha = std::cmp::max(alpha - delta, -INFINITY);
-
-            beta = (alpha + beta) / 2;
-            delta += delta / 2;
-            continue; //continue without incrementing depth
-        } else if eval >= beta {
-            beta = std::cmp::min(beta + delta, INFINITY);
-            delta += delta / 2;
-            continue;
-        }
-
-        delta = ASPIRATION_WINDOW;
-
-        //set up search for next iteration
-        alpha = eval - delta;
-        beta = eval + delta;
-
-        depth += 1;
+        id.eval = eval;
+        id.depth += 1;
     }
 
-    for i in 0..s.pv_length[0] {
-        pv += s.pv[0][i].uci().as_str();
+    for m in id.pv[0].iter().take(id.pv_length[0]) {
+        pv += m.uci().as_str();
         pv += " ";
     }
 
     MoveData {
-        m: s.pv[0][0],
+        m: id.pv[0][0],
         nodes: s.nodes,
-        eval,
+        eval: id.eval,
         pv,
     }
 }
