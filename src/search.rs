@@ -1312,10 +1312,6 @@ fn aspiration_window(position: &mut Board, s: &mut Searcher, id: &mut IterDeepDa
             //this return value will not actually be used
         }
 
-        id.pv = s.pv;
-        id.pv_length = s.pv_length;
-        id.eval = eval;
-
         s.moves_fully_searched = 0;
 
         if eval <= id.alpha {
@@ -1323,24 +1319,30 @@ fn aspiration_window(position: &mut Board, s: &mut Searcher, id: &mut IterDeepDa
             id.alpha = std::cmp::max(id.alpha - id.delta, -INFINITY);
             id.beta = (id.alpha + id.beta) / 2;
             id.delta += id.delta / 2;
-        } else if eval >= id.beta {
+            continue;
+        }
+
+        id.pv = s.pv;
+        id.pv_length = s.pv_length;
+
+        if eval >= id.beta {
             //fail high -> widen window up
             id.beta = std::cmp::min(id.beta + id.delta, INFINITY);
             id.delta += id.delta / 2;
-        } else {
-            //within window -> just update pv and set up for next iteration
-
-            id.delta = ASPIRATION_WINDOW;
-
-            id.alpha = eval - id.delta;
-            id.beta = eval + id.delta;
-
-            if id.show_thinking {
-                print_thinking(id.depth, eval, &s, id.start_time);
-            }
-
-            return eval;
+            continue;
         }
+        //within window -> just update pv and set up for next iteration
+
+        id.delta = ASPIRATION_WINDOW;
+
+        id.alpha = eval - id.delta;
+        id.beta = eval + id.delta;
+
+        if id.show_thinking {
+            print_thinking(id.depth, eval, &s, id.start_time);
+        }
+
+        return eval;
     }
 }
 
