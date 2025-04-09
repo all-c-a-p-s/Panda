@@ -43,7 +43,7 @@ const MODE: Mode = Mode::Uci;
 #[allow(unused)]
 const ONE_HOUR: u64 = 3600;
 const DATAGEN_PATH: &str = "/Users/seba/rs/bullet/datagen/set0003.txt";
-//running entry count: 11.7M
+//running entry count: 27.3M
 //this comment is here so I don't have to load the whole file into a string to count entries
 //instead I keep track of the number of entries added each session
 //for reference, 1M entries ~= 78MB (txt format)

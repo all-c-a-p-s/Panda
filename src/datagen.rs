@@ -118,7 +118,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
             // otherwise simply do a time / nodes limited search (node limit should be a multiple
             // of 4096)
             let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10), 8192);
-            let move_data = best_move(&mut board, 0, 0, 0, 10, &mut searcher, false);
+            let move_data = iterative_deepening(&mut board, 0, 0, 0, 10, &mut searcher, false);
 
             s = move_data.eval;
             chosen_move = move_data.m;

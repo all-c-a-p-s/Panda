@@ -47,7 +47,7 @@ pub const STARTPOS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -
 pub fn parse_move(input: &str, board: &Board) -> Move {
     let sq_from = unsafe { Square::from(square(&input[0..2]) as u8) };
     let sq_to = unsafe { Square::from(square(&input[2..4]) as u8) };
-    let piece = unsafe { board.pieces_array[sq_from].unwrap_unchecked() };
+    let piece = board.get_piece_at(sq_from);
     if input.len() == 5 {
         //only type of piece encoded because only 2 bits used in the move
         //and the flag is used to detect promotions
@@ -229,7 +229,7 @@ pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveDa
         return parse_special_go(command, position, s);
     } else if words[1] == "movetime" {
         movetime = words[2].parse().expect("failed to convert movetime to int");
-        return best_move(position, 0, 0, 0, movetime, s, true);
+        return iterative_deepening(position, 0, 0, 0, movetime, s, true);
     }
 
     let w_time = words[2].parse().expect("failed to convert wtime to int");
@@ -277,7 +277,7 @@ pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveDa
         Colour::Black => b_inc,
     };
 
-    best_move(
+    iterative_deepening(
         position,
         engine_time,
         engine_inc,

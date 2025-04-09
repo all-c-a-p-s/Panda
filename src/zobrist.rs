@@ -18,7 +18,6 @@ macro_rules! cfor {
     }
 }
 
-#[allow(unused_mut)]
 const fn init_hash_keys() -> ([[u64; 12]; 64], [u64; 64], [u64; 16], u64) {
     let mut rng = XorShiftU64::new();
     let mut piece_keys = [[0; 12]; 64];
@@ -114,7 +113,7 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
 
     if m.is_capture(b) {
         //not including en passant
-        let captured_piece = unsafe { b.pieces_array[sq_to].unwrap_unchecked() };
+        let captured_piece = b.get_piece_at(sq_to);
         res ^= PIECE_KEYS[sq_to][captured_piece];
         if captured_piece == Piece::WR && sq_to == Square::H1 && (b.castling & 0b00000001 > 0) {
             res ^= CASTLING_KEYS[b.castling as usize];

@@ -3,6 +3,7 @@ use crate::magic::*;
 use crate::movegen::*;
 use crate::nnue::*;
 use crate::types::{Piece, Square};
+use crate::zobrist::hash;
 
 pub(crate) type BitBoard = u64;
 pub(crate) const EMPTY: BitBoard = 0;
@@ -180,6 +181,7 @@ impl Board {
 
         new_board.occupancies[BOTH] = new_board.occupancies[WHITE] | new_board.occupancies[BLACK];
 
+        new_board.hash_key = hash(&new_board);
         new_board.compute_checkers_and_pins();
         new_board.nnue = Accumulator::from_board(&new_board);
 
@@ -399,5 +401,10 @@ impl Board {
             }
             their_attackers = pop_bit(sq, their_attackers);
         }
+    }
+
+    pub fn get_piece_at(&self, sq: Square) -> Piece {
+        //SAFETY: this must only be called when we know there is a piece on sq
+        unsafe { self.pieces_array[sq].unwrap_unchecked() }
     }
 }

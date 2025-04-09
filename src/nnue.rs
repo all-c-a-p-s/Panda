@@ -69,7 +69,7 @@ impl Accumulator {
 
         let mut occs = board.occupancies[BOTH];
         while let Some(sq) = lsfb(occs) {
-            a.set_weight::<ON>(unsafe { board.pieces_array[sq].unwrap_unchecked() }, sq);
+            a.set_weight::<ON>(board.get_piece_at(sq), sq);
             occs = pop_bit(sq, occs);
         }
 

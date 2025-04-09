@@ -94,8 +94,7 @@ impl Move {
     }
 
     pub fn piece_moved(self, b: &Board) -> Piece {
-        //SAFETY: if a piece is to be moved from a square then it must be there
-        unsafe { b.pieces_array[self.square_from()].unwrap_unchecked() }
+        b.get_piece_at(self.square_from())
     }
 
     pub fn is_capture(self, b: &Board) -> bool {
@@ -112,8 +111,7 @@ impl Move {
     }
 
     pub fn piece_captured(self, b: &Board) -> Piece {
-        //SAFETY: this is only called when we know the move is a capture
-        unsafe { b.pieces_array[self.square_to()].unwrap_unchecked() }
+        b.get_piece_at(self.square_to())
     }
 
     pub fn is_tactical(self, b: &Board) -> bool {
@@ -208,20 +206,16 @@ impl Board {
         let to = m.square_to();
         let from = m.square_from();
         let piece = match m.is_promotion() {
-            //SAFETY: there must be a piece on this square
-            false => unsafe { self.pieces_array[to].unwrap_unchecked() },
+            false => self.get_piece_at(to),
             true => match self.pieces_array[to] {
-                Some(Piece::WP) | Some(Piece::WN) | Some(Piece::WB) | Some(Piece::WR)
-                | Some(Piece::WQ) => Piece::WP,
-                Some(Piece::BP) | Some(Piece::BN) | Some(Piece::BB) | Some(Piece::BR)
-                | Some(Piece::BQ) => Piece::BP,
+                Some(Piece::WN) | Some(Piece::WB) | Some(Piece::WR) | Some(Piece::WQ) => Piece::WP,
+                Some(Piece::BN) | Some(Piece::BB) | Some(Piece::BR) | Some(Piece::BQ) => Piece::BP,
                 _ => unreachable!(),
             },
         }; //not m.piece_moved(&self) because board has been mutated
 
         if m.is_promotion() {
-            //SAFETY: there must be a piece on this square
-            let promoted_piece = unsafe { self.pieces_array[to].unwrap_unchecked() };
+            let promoted_piece = self.get_piece_at(to);
             self.bitboards[promoted_piece] = pop_bit(to, self.bitboards[promoted_piece]);
             self.pieces_array[to] = c.piece_captured; //remove promoted piece from pieces_array
             self.bitboards[piece] = set_bit(from, self.bitboards[piece]);
@@ -357,7 +351,7 @@ impl Board {
         (self.checkers, self.pinned) = (0, 0);
 
         let (from, to) = (m.square_from(), m.square_to());
-        let piece_moved = unsafe { self.pieces_array[from].unwrap_unchecked() };
+        let piece_moved = self.get_piece_at(from);
         let victim = self.pieces_array[to];
 
         let colour = self.side_to_move;
@@ -608,7 +602,7 @@ impl Board {
             _ => return false,
         };
 
-        let piece_moved = unsafe { self.pieces_array[from].unwrap_unchecked() };
+        let piece_moved = self.get_piece_at(from);
 
         match piece_type(piece_moved) {
             PieceType::Pawn => {

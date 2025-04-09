@@ -363,7 +363,7 @@ impl Searcher {
 
         self.pv_length[self.ply] = self.ply;
 
-        if depth <= 0 {
+        if depth == 0 {
             //qsearch on leaf nodes
             return self.quiescence_search(position, alpha, beta);
         }
@@ -396,6 +396,7 @@ impl Searcher {
                 return r_alpha;
             }
 
+            //TODO: use hash lookups of lower depth if we found mate
             let hash_lookup = match position.side_to_move {
                 //hash lookup
                 Colour::White => {
@@ -1227,21 +1228,32 @@ pub struct MoveData {
     pub pv: String,
 }
 
-pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize) -> usize {
+//returns ideal time window, hard deadline
+pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize) -> (usize, usize) {
+    if time < MOVE_OVERHEAD {
+        return (
+            cmp::max(time / 2, MIN_MOVE_TIME),
+            cmp::max(time / 2, MIN_MOVE_TIME),
+        );
+    }
+
     let time_until_flag = time - MOVE_OVERHEAD;
-    let default_moves_to_go: usize = 40;
 
     let m = if moves_to_go == 0 {
-        default_moves_to_go
+        40
     } else {
-        usize::clamp(moves_to_go, 2, default_moves_to_go)
+        moves_to_go.clamp(2, 40)
     };
 
     //note time - increment must be +ve since we got increment last turn
-    let ideal_time = time_until_flag / (m / 2) + increment;
+    let average_move_time = time_until_flag / m; // I guess this ignores increment so variable
+                                                 // name is a lie
+    let ideal_time = (average_move_time * 3) / 2 + increment;
     let t = cmp::min(ideal_time, time_until_flag);
 
-    cmp::max(t, MIN_MOVE_TIME)
+    let max_time = cmp::min(3 * t, (time_until_flag * 2) / 3);
+
+    (cmp::max(t, MIN_MOVE_TIME), max_time)
 }
 
 impl Move {
@@ -1275,10 +1287,11 @@ struct IterDeepData {
 
     show_thinking: bool,
     start_time: Instant,
+    soft_limit: Instant,
 }
 
 impl IterDeepData {
-    fn new(start_time: Instant, show_thinking: bool) -> Self {
+    fn new(start_time: Instant, show_thinking: bool, soft_limit: Instant) -> Self {
         Self {
             eval: 0,
             pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
@@ -1289,6 +1302,7 @@ impl IterDeepData {
             depth: 1,
             show_thinking,
             start_time,
+            soft_limit,
         }
     }
 }
@@ -1314,39 +1328,42 @@ fn aspiration_window(position: &mut Board, s: &mut Searcher, id: &mut IterDeepDa
 
         s.moves_fully_searched = 0;
 
+        if eval > id.alpha && eval < id.beta {
+            //within window -> just update pv and set up for next iteration
+            //note atm this must be a strict inequality since search is failing hard
+
+            id.pv = s.pv;
+            id.pv_length = s.pv_length;
+
+            id.delta = ASPIRATION_WINDOW;
+
+            id.alpha = eval - id.delta;
+            id.beta = eval + id.delta;
+
+            if id.show_thinking {
+                print_thinking(id.depth, eval, &s, id.start_time);
+            }
+
+            return eval;
+        }
+
         if eval <= id.alpha {
-            //fail low -> widen window down, do not update pv
+            //failed low -> widen window down, do not update pv
             id.alpha = std::cmp::max(id.alpha - id.delta, -INFINITY);
             id.beta = (id.alpha + id.beta) / 2;
             id.delta += id.delta / 2;
-            continue;
-        }
-
-        id.pv = s.pv;
-        id.pv_length = s.pv_length;
-
-        if eval >= id.beta {
-            //fail high -> widen window up
+        } else if eval >= id.beta {
+            //failed high -> widen window up, also update pv
             id.beta = std::cmp::min(id.beta + id.delta, INFINITY);
             id.delta += id.delta / 2;
-            continue;
+
+            id.pv = s.pv;
+            id.pv_length = s.pv_length;
         }
-        //within window -> just update pv and set up for next iteration
-
-        id.delta = ASPIRATION_WINDOW;
-
-        id.alpha = eval - id.delta;
-        id.beta = eval + id.delta;
-
-        if id.show_thinking {
-            print_thinking(id.depth, eval, &s, id.start_time);
-        }
-
-        return eval;
     }
 }
 
-pub fn best_move(
+pub fn iterative_deepening(
     position: &mut Board,
     time_left: usize,
     inc: usize,
@@ -1356,30 +1373,31 @@ pub fn best_move(
     show_thinking: bool,
 ) -> MoveData {
     let start = Instant::now();
-    let move_duration = match movetime {
-        0 => Duration::from_millis(
-            move_time(time_left, inc, moves_to_go, position.ply)
-                .try_into()
-                .unwrap(),
-        ),
+
+    // Soft-limit vs Hard-limit is an idea explained to me by the author of Sirius
+    // Soft limit: if you complete an iteration and the time taken > this, exit
+    // Hard limit: if you are currently searching (i.e. in the middle of the tree) and
+    //             time taken > this, then exit search
+    // in practice you should mostly exit at the soft-limit
+    let (soft_limit, hard_limit) = match movetime {
+        0 => move_time(time_left, inc, moves_to_go, position.ply),
+
         k => {
-            if k < MOVE_OVERHEAD {
-                Duration::from_millis(k as u64)
+            if k <= MOVE_OVERHEAD {
+                let t = cmp::max(MIN_MOVE_TIME, k / 2);
+                (t, t)
             } else {
                 let t = cmp::max(MIN_MOVE_TIME, k - MOVE_OVERHEAD);
-                Duration::from_millis(t as u64)
+                (t, t)
             }
         }
     };
 
-    let end_time = start + move_duration;
-    //calculate time to cancel search
-
     s.reset_searcher();
-    s.timer.end_time = end_time;
+    s.timer.end_time = start + Duration::from_millis(hard_limit as u64);
 
-    let mut id = IterDeepData::new(start, show_thinking);
-    let mut pv = String::new();
+    let soft_limit = Instant::now() + Duration::from_millis(soft_limit as u64);
+    let mut id = IterDeepData::new(start, show_thinking, soft_limit);
 
     while id.depth < MAX_SEARCH_DEPTH {
         let eval = aspiration_window(position, s, &mut id);
@@ -1390,12 +1408,18 @@ pub fn best_move(
 
         id.eval = eval;
         id.depth += 1;
+
+        if Instant::now() > id.soft_limit {
+            //not the same as above break statement because eval was updated
+            //which won't affect choice of move but will affect data we report
+            break;
+        }
     }
 
-    for m in id.pv[0].iter().take(id.pv_length[0]) {
-        pv += m.uci().as_str();
-        pv += " ";
-    }
+    let pv = id.pv[0]
+        .iter()
+        .take(id.pv_length[0])
+        .fold(String::new(), |acc, m| acc + (m.uci() + " ").as_str());
 
     MoveData {
         m: id.pv[0][0],
