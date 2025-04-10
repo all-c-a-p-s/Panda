@@ -345,8 +345,10 @@ impl Board {
             checkers: self.checkers,
         };
 
+        let castling_rights_before = self.castling;
         self.hash_key = hash_update(self.hash_key, &m, self);
         //MUST be done before any changes made on the board
+        //this updates everything EXCEPT castling which is done at the end
 
         (self.checkers, self.pinned) = (0, 0);
 
@@ -564,6 +566,10 @@ impl Board {
 
         self.side_to_move = self.side_to_move.opponent();
         self.ply += 1;
+
+        self.hash_key ^= CASTLING_KEYS[castling_rights_before as usize];
+        self.hash_key ^= CASTLING_KEYS[self.castling as usize];
+        //more efficient to do this here since we don't have to check all cases
 
         unsafe {
             REPETITION_TABLE[self.ply] = self.hash_key;

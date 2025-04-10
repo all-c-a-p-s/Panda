@@ -11,34 +11,36 @@ use crate::uci::*;
 use crate::STARTPOS;
 
 use crate::types::*;
+use crate::zobrist::{BLACK_TO_MOVE, EP_KEYS};
 
 use std::cmp;
+#[allow(unused_imports)]
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 pub const INFINITY: i32 = 1_000_000_000;
 pub const MAX_PLY: usize = 64;
 pub const MAX_SEARCH_DEPTH: usize = 32;
-pub const REDUCTION_LIMIT: usize = 2;
+pub const REDUCTION_LIMIT: u8 = 2;
 
-const FULL_DEPTH_MOVES: usize = 1;
+const FULL_DEPTH_MOVES: u8 = 1;
 
 const SINGULARITY_DE_MARGIN: i32 = 40;
 
 #[allow(dead_code)]
-const NULLMOVE_MAX_DEPTH: usize = 6;
+const NULLMOVE_MAX_DEPTH: u8 = 6;
 #[allow(dead_code)]
-const NULLMOVE_MIN_DEPTH: usize = 3;
+const NULLMOVE_MIN_DEPTH: u8 = 3;
 
 const ASPIRATION_WINDOW: i32 = 40;
 
 const RAZORING_MARGIN: i32 = 300;
-const MAX_RAZOR_DEPTH: usize = 4;
+const MAX_RAZOR_DEPTH: u8 = 4;
 
-const BETA_PRUNING_DEPTH: usize = 6;
-const BETA_PRUNING_MARGIN: usize = 80;
+const BETA_PRUNING_DEPTH: u8 = 6;
+const BETA_PRUNING_MARGIN: u8 = 80;
 
-const ALPHA_PRUNING_DEPTH: usize = 4;
+const ALPHA_PRUNING_DEPTH: u8 = 4;
 const ALPHA_PRUNING_MARGIN: i32 = 2000;
 
 const SEE_PRUNING_DEPTH: i32 = 4;
@@ -48,8 +50,9 @@ const SEE_NOISY_MARGIN: i32 = 70;
 const SEE_QSEARCH_MARGIN: i32 = 1;
 
 #[allow(unused)]
-const LMP_DEPTH: usize = 5;
+const LMP_DEPTH: u8 = 5;
 
+const IIR_DEPTH_MINIMUM: u8 = 6;
 const DO_SINGULARITY_EXTENSION: bool = false;
 
 const HASH_MOVE_SCORE: i32 = 1_000_000;
@@ -128,8 +131,7 @@ impl Default for SearchInfo {
 pub struct Searcher {
     pub pv_length: [usize; 64],
     pub pv: [[Move; MAX_PLY]; MAX_PLY],
-    pub tt_white: HashMap<u64, TTEntry>,
-    pub tt_black: HashMap<u64, TTEntry>,
+    pub tt: HashMap<u64, TTEntry>,
     pub ply: usize,
     pub nodes: usize,
     pub timer: Timer,
@@ -157,6 +159,7 @@ impl Default for Timer {
 struct NullMoveUndo {
     ep: Option<Square>,
     pinned: BitBoard,
+    hash_key: u64,
 }
 
 fn reduction_ok(tactical: bool, in_check: bool) -> bool {
@@ -166,6 +169,7 @@ fn reduction_ok(tactical: bool, in_check: bool) -> bool {
 //make null move for NMP
 //we have to update pinners but not checkers since NMP is never done while in check
 fn make_null_move(b: &mut Board) -> NullMoveUndo {
+    let hash_reset = b.hash_key;
     b.side_to_move = b.side_to_move.opponent();
     b.last_move_null = true;
 
@@ -202,16 +206,22 @@ fn make_null_move(b: &mut Board) -> NullMoveUndo {
         their_attackers = pop_bit(sq, their_attackers);
     }
 
+    b.hash_key ^= BLACK_TO_MOVE;
+
     if let Some(reset) = b.en_passant {
+        b.hash_key ^= EP_KEYS[reset];
         b.en_passant = None;
         return NullMoveUndo {
             ep: Some(reset),
             pinned: pinned_reset,
+            hash_key: hash_reset,
         };
     }
+
     NullMoveUndo {
         ep: None,
         pinned: pinned_reset,
+        hash_key: hash_reset,
     }
 }
 
@@ -222,7 +232,9 @@ fn undo_null_move(b: &mut Board, undo: &NullMoveUndo) {
     };
     b.last_move_null = false;
     b.en_passant = undo.ep;
+
     b.pinned = undo.pinned;
+    b.hash_key = undo.hash_key;
 }
 
 fn is_insufficient_material(b: &Board) -> bool {
@@ -275,8 +287,7 @@ impl Searcher {
         Searcher {
             pv_length: [0usize; 64],
             pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
-            tt_white: HashMap::new(), //128 MB
-            tt_black: HashMap::new(), //seems to work pretty well (avoids t1 errors)
+            tt: HashMap::new(),
             ply: 0,
             nodes: 0,
             timer,
@@ -313,7 +324,7 @@ impl Searcher {
         best_move: Move,
         commit: &Commit,
         tt_score: i32,
-        depth: usize,
+        depth: u8,
         pv_node: bool,
         _alpha: i32,
         beta: i32,
@@ -349,7 +360,7 @@ impl Searcher {
     pub fn negamax(
         &mut self,
         position: &mut Board,
-        depth: usize,
+        mut depth: u8,
         mut alpha: i32,
         beta: i32,
         cutnode: bool,
@@ -396,26 +407,24 @@ impl Searcher {
                 return r_alpha;
             }
 
-            //TODO: use hash lookups of lower depth if we found mate
-            let hash_lookup = match position.side_to_move {
-                //hash lookup
-                Colour::White => {
-                    self.tt_white
-                        .lookup(position.hash_key, alpha, beta, depth, &mut tt_score)
-                }
-                Colour::Black => {
-                    self.tt_black
-                        .lookup(position.hash_key, alpha, beta, depth, &mut tt_score)
-                }
-            };
+            if let Some(entry) = self.tt.lookup(position.hash_key) {
+                best_move = entry.best_move;
+                tt_score = entry.eval;
+                tt_depth = entry.depth;
+                tt_bound = entry.flag;
 
-            if let Some(k) = hash_lookup.eval {
-                return k;
-            } else if !hash_lookup.best_move.is_null() {
-                best_move = hash_lookup.best_move;
-                tt_depth = hash_lookup.depth;
-                tt_bound = hash_lookup.flag;
-            };
+                if !pv_node
+                    && depth <= entry.depth
+                    && match entry.flag {
+                        EntryFlag::Exact => true,
+                        EntryFlag::LowerBound => entry.eval >= beta,
+                        EntryFlag::UpperBound => entry.eval <= alpha,
+                        EntryFlag::Missing => false,
+                    }
+                {
+                    return entry.eval.clamp(alpha, beta);
+                }
+            }
         }
 
         let tt_move = !best_move.is_null();
@@ -454,19 +463,21 @@ impl Searcher {
                 //If eval >= beta + some margin, assume that we can achieve at least beta
                 if depth <= BETA_PRUNING_DEPTH
                     && static_eval
-                        - (BETA_PRUNING_MARGIN * cmp::max(depth - improving as usize, 0)) as i32
+                        - (BETA_PRUNING_MARGIN * cmp::max(depth - improving as u8, 0)) as i32
                         >= beta
                 {
                     return static_eval;
                 }
 
-                //eval is so bad that even a huge margin fails to raise alpha
+                // Alpha Pruning:
+                // eval is so bad that even a huge margin fails to raise alpha
                 if depth <= ALPHA_PRUNING_DEPTH && static_eval + ALPHA_PRUNING_MARGIN <= alpha {
                     return static_eval;
                 }
 
-                //eval is very low so only realistic way to increase it is with captures
-                //we only need to qsearch to evaluate the position
+                // Razoring:
+                // eval is very low so only realistic way to increase it is with captures
+                // we only need to qsearch to evaluate the position
                 if depth <= MAX_RAZOR_DEPTH
                     && static_eval + RAZORING_MARGIN * (depth as i32) <= alpha
                 {
@@ -476,10 +487,9 @@ impl Searcher {
                     }
                 }
 
-                // Null move pruning: if we cannot improve our position with 2 moves in a row,
-                // then the first of these moves is probably bad (exception is zugzwang)
-                // the third condition is a technique I found in various strong engines
-                // (SF, Obsidian etc.)
+                // Null move pruning:
+                // If we are still able to reach an eval >= beta if we give our opponent
+                // another move, then their previous move was probably bad
                 if !position.is_kp_endgame()
                     && !position.last_move_null
                     && static_eval >= beta + 200 - 20 * (depth as i32)
@@ -488,7 +498,7 @@ impl Searcher {
                     let undo = make_null_move(position);
                     self.ply += 1;
                     let r = 2 + depth as i32 / 4 + cmp::min((static_eval - beta) / 256, 3);
-                    let reduced_depth = cmp::max(depth as i32 - r, 1) as usize;
+                    let reduced_depth = cmp::max(depth as i32 - r, 1) as u8;
                     let null_move_eval =
                         -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
                     //minimal window used because all that matters is whether the search result is better than beta
@@ -499,6 +509,13 @@ impl Searcher {
                     }
                 }
             }
+        }
+
+        // IIR: if we don't have a TT hit then move ordering here will be terrible
+        // so its better to reduce and set up TT move for next iteration
+        // TODO: also test with just cutnode as that test seemed decent asw
+        if false && cutnode && depth >= IIR_DEPTH_MINIMUM && !tt_move {
+            depth -= 1;
         }
 
         // Generate pseudo-legal moves here because this is faster in cases where
@@ -541,7 +558,7 @@ impl Searcher {
                     continue;
                 }
                 let r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
-                    [cmp::min(depth, 31)][cmp::min(moves_seen, 31)]
+                    [cmp::min(depth, 31) as usize][cmp::min(moves_seen, 31) as usize]
                     + (!improving) as i32;
                 let lmr_depth = std::cmp::max(depth as i32 - 1 - r, 0);
 
@@ -610,10 +627,10 @@ impl Searcher {
             }
 
             let new_depth = i32::clamp(
-                depth as i32 + extension.unwrap() - 1,
+                depth as i32 - 1 + extension.unwrap(),
                 0,
                 MAX_SEARCH_DEPTH as i32,
-            ) as usize;
+            ) as u8;
 
             let eval = if moves_played == 1 {
                 //note that this is one because the variable is updated above
@@ -627,10 +644,10 @@ impl Searcher {
                 // then if we are unable to prove so
 
                 let mut r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
-                    [cmp::min(depth, 31)][cmp::min(moves_played, 31)];
+                    [cmp::min(depth, 31) as usize][cmp::min(moves_played, 31) as usize];
 
                 let mut reduction_eval = if moves_played
-                    > (FULL_DEPTH_MOVES + pv_node as usize + !tt_move as usize + root as usize)
+                    > (FULL_DEPTH_MOVES + pv_node as u8 + !tt_move as u8 + root as u8)
                     && depth >= REDUCTION_LIMIT
                     && reduction_ok(tactical, in_check)
                 {
@@ -643,8 +660,8 @@ impl Searcher {
                     //reduce more in cutnodes
                     r += cutnode as i32;
 
-                    let mut reduced_depth = cmp::max(new_depth as i32 - r, 1) as usize;
-                    reduced_depth = usize::clamp(reduced_depth, 1, new_depth);
+                    let mut reduced_depth = cmp::max(new_depth as i32 - r, 1) as u8;
+                    reduced_depth = reduced_depth.clamp(1, new_depth);
                     //avoid dropping into qsearch or extending
 
                     -self.negamax(position, reduced_depth, -alpha - 1, -alpha, true)
@@ -690,7 +707,7 @@ impl Searcher {
                 self.pv_length[self.ply] = self.pv_length[next_ply];
 
                 //search failed high
-                if alpha >= beta {
+                if eval >= beta {
                     //only write quiet moves into history table because captures
                     //will be scored separately
                     self.update_search_tables(
@@ -722,11 +739,9 @@ impl Searcher {
         }
 
         if !self.timer.stopped {
-            let hash_entry = TTEntry::new(depth, alpha, hash_flag, best_move);
-            match position.side_to_move {
-                Colour::White => self.tt_white.write(position.hash_key, hash_entry),
-                Colour::Black => self.tt_black.write(position.hash_key, hash_entry),
-            };
+            let hash_entry = TTEntry::new(depth, alpha, hash_flag, best_move, position.hash_key);
+
+            self.tt.write(position.hash_key, hash_entry);
         }
         alpha
     }
@@ -746,27 +761,19 @@ impl Searcher {
 
         let mut hash_flag = EntryFlag::UpperBound;
 
-        let mut _tt_score = 0;
-
-        let hash_lookup = match position.side_to_move {
-            //hash lookup
-            Colour::White => {
-                self.tt_white
-                    .lookup(position.hash_key, alpha, beta, 0, &mut _tt_score)
-            }
-            Colour::Black => {
-                self.tt_black
-                    .lookup(position.hash_key, alpha, beta, 0, &mut _tt_score)
-            } //lookups with depth zero because any TT entry will necessarily
-              //have had a quiescence search done so we will always take it
-        };
-
         let mut best_move = NULL_MOVE;
-        if let Some(k) = hash_lookup.eval {
-            return k;
-        } else if !hash_lookup.best_move.is_null() {
-            best_move = hash_lookup.best_move;
-        };
+
+        if let Some(entry) = self.tt.lookup(position.hash_key) {
+            best_move = entry.best_move;
+            if match entry.flag {
+                EntryFlag::Exact => true,
+                EntryFlag::LowerBound => entry.eval >= beta,
+                EntryFlag::UpperBound => entry.eval <= alpha,
+                EntryFlag::Missing => false,
+            } {
+                return entry.eval.clamp(alpha, beta);
+            }
+        }
 
         let eval = evaluate(position);
         //node count = every position that gets evaluated
@@ -852,11 +859,9 @@ impl Searcher {
 
         //write eval to hash table
         if !self.timer.stopped {
-            let hash_entry = TTEntry::new(0, alpha, hash_flag, best_move);
-            match position.side_to_move {
-                Colour::White => self.tt_white.write(position.hash_key, hash_entry),
-                Colour::Black => self.tt_black.write(position.hash_key, hash_entry),
-            };
+            let hash_entry = TTEntry::new(0, alpha, hash_flag, best_move, position.hash_key);
+
+            self.tt.write(position.hash_key, hash_entry);
         }
         alpha
     }
@@ -867,12 +872,12 @@ impl Searcher {
         moves: &MoveList,
         cutoff_move: Move,
         tactical: bool,
-        depth: usize,
-        moves_played: usize,
+        depth: u8,
+        moves_played: u8,
     ) {
         if !tactical {
             self.update_killer_moves(cutoff_move, tactical);
-            self.update_history_table(b, moves, cutoff_move, depth, moves_played)
+            self.update_history_table(b, moves, cutoff_move, depth, moves_played as usize)
         }
     }
 
@@ -889,7 +894,7 @@ impl Searcher {
         b: &Board,
         moves: &MoveList,
         cutoff_move: Move,
-        depth: usize,
+        depth: u8,
         moves_played: usize,
     ) {
         //penalise all moves that have been checked and have not caused beta cutoff
@@ -920,8 +925,7 @@ impl Searcher {
         //not clearing seems to be worse as even though the first few search depths are instant
         //the next depths don't have advantages of iterative deepening like pv and move ordering
         //heuristics
-        self.tt_white = HashMap::new();
-        self.tt_black = HashMap::new();
+        self.tt.clear();
 
         //reset move ordering heuristics
         self.info.killer_moves = [[NULL_MOVE; MAX_PLY]; 2];
@@ -1283,7 +1287,7 @@ struct IterDeepData {
     delta: i32,
     alpha: i32,
     beta: i32,
-    depth: usize,
+    depth: u8,
 
     show_thinking: bool,
     start_time: Instant,
@@ -1374,6 +1378,8 @@ pub fn iterative_deepening(
 ) -> MoveData {
     let start = Instant::now();
 
+    //TODO: no aspiration window for first few depths
+
     // Soft-limit vs Hard-limit is an idea explained to me by the author of Sirius
     // Soft limit: if you complete an iteration and the time taken > this, exit
     // Hard limit: if you are currently searching (i.e. in the middle of the tree) and
@@ -1399,7 +1405,7 @@ pub fn iterative_deepening(
     let soft_limit = Instant::now() + Duration::from_millis(soft_limit as u64);
     let mut id = IterDeepData::new(start, show_thinking, soft_limit);
 
-    while id.depth < MAX_SEARCH_DEPTH {
+    while (id.depth as usize) < MAX_SEARCH_DEPTH {
         let eval = aspiration_window(position, s, &mut id);
 
         if s.timer.stopped {

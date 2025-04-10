@@ -38,8 +38,7 @@ const fn init_hash_keys() -> ([[u64; 12]; 64], [u64; 64], [u64; 16], u64) {
         let r = rng.next();
         castling_keys[i] = r;
     });
-    let key = rng.next();
-    let btm = key;
+    let btm = rng.next();
     (piece_keys, ep_keys, castling_keys, btm)
 }
 
@@ -70,6 +69,8 @@ pub fn hash(b: &Board) -> u64 {
     hash_key
 }
 
+/// This updates everything about the hash key EXCEPT castling rights,
+/// which it is more efficient to simply do after making the move
 pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
     //call with board state before move was made
     let mut res = hash_key;
@@ -85,62 +86,10 @@ pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
         res ^= EP_KEYS[sq];
     }
 
-    if piece == Piece::WK {
-        res ^= CASTLING_KEYS[b.castling as usize];
-        res ^= CASTLING_KEYS[(b.castling & 0b00001100) as usize];
-    } else if piece == Piece::BK {
-        res ^= CASTLING_KEYS[b.castling as usize];
-        res ^= CASTLING_KEYS[(b.castling & 0b00000011) as usize];
-    }
-
-    if piece == Piece::WR && sq_from == Square::H1 && (b.castling & 0b00000001 > 0) {
-        res ^= CASTLING_KEYS[b.castling as usize];
-        let new_castling = b.castling ^ 0b00000001;
-        res ^= CASTLING_KEYS[new_castling as usize];
-    } else if piece == Piece::WR && sq_from == Square::A1 && (b.castling & 0b00000010 > 0) {
-        res ^= CASTLING_KEYS[b.castling as usize];
-        let new_castling = b.castling ^ 0b00000010;
-        res ^= CASTLING_KEYS[new_castling as usize];
-    } else if piece == Piece::BR && sq_from == Square::H8 && (b.castling & 0b00000100 > 0) {
-        res ^= CASTLING_KEYS[b.castling as usize];
-        let new_castling = b.castling ^ 0b00000100;
-        res ^= CASTLING_KEYS[new_castling as usize];
-    } else if piece == Piece::BR && sq_from == Square::A8 && (b.castling & 0b00001000 > 0) {
-        res ^= CASTLING_KEYS[b.castling as usize];
-        let new_castling = b.castling ^ 0b00001000;
-        res ^= CASTLING_KEYS[new_castling as usize];
-    }
-
     if m.is_capture(b) {
         //not including en passant
         let captured_piece = b.get_piece_at(sq_to);
         res ^= PIECE_KEYS[sq_to][captured_piece];
-        if captured_piece == Piece::WR && sq_to == Square::H1 && (b.castling & 0b00000001 > 0) {
-            res ^= CASTLING_KEYS[b.castling as usize];
-            let new_castling = b.castling ^ 0b00000001;
-            res ^= CASTLING_KEYS[new_castling as usize];
-        } else if captured_piece == Piece::WR
-            && sq_to == Square::A1
-            && (b.castling & 0b00000010 > 0)
-        {
-            res ^= CASTLING_KEYS[b.castling as usize];
-            let new_castling = b.castling ^ 0b00000010;
-            res ^= CASTLING_KEYS[new_castling as usize];
-        } else if captured_piece == Piece::BR
-            && sq_to == Square::H8
-            && (b.castling & 0b000000100 > 0)
-        {
-            res ^= CASTLING_KEYS[b.castling as usize];
-            let new_castling = b.castling ^ 0b00000100;
-            res ^= CASTLING_KEYS[new_castling as usize];
-        } else if captured_piece == Piece::BR
-            && sq_to == Square::A8
-            && (b.castling & 0b00001000 > 0)
-        {
-            res ^= CASTLING_KEYS[b.castling as usize];
-            let new_castling = b.castling ^ 0b00001000;
-            res ^= CASTLING_KEYS[new_castling as usize];
-        }
     }
 
     if m.is_castling() {

@@ -315,7 +315,7 @@ fn parse_perft(command: &str, position: &mut Board) {
     }
 }
 
-pub fn print_thinking(depth: usize, eval: i32, s: &Searcher, start: Instant) {
+pub fn print_thinking(depth: u8, eval: i32, s: &Searcher, start: Instant) {
     println!(
         "info depth {} score cp {} nodes {} pv{} time {} nps {}",
         depth,
