@@ -513,8 +513,7 @@ impl Searcher {
 
         // IIR: if we don't have a TT hit then move ordering here will be terrible
         // so its better to reduce and set up TT move for next iteration
-        // TODO: also test with just cutnode as that test seemed decent asw
-        if false && cutnode && depth >= IIR_DEPTH_MINIMUM && !tt_move {
+        if (pv_node || cutnode) && depth >= IIR_DEPTH_MINIMUM && !tt_move {
             depth -= 1;
         }
 
