@@ -10,6 +10,8 @@ Panda is a chess engine written in Rust (still a work in progress). I work on th
 
 In terms of strength, Panda is pretty unremarkable - currently somewhere around 2700. One fairly original idea is that it considers uncertainty in evaluation of a position instead of just returning one evaluation like most engines do. The intention is that this makes it value practical chances (i.e. expected score from the game) over just maximising its evaluation. Although its current NNUE evaluation doesn't use these, it was trained on data which used this technique. However, the purpose of this project is mainly just for me to practice Rust and to combine two of my hobbies (programming and chess).
 
+By far the coolest game I've seen it play is [this one](https://www.chess.com/analysis/library/22UV4Zu2Bg) against a really cool MCTS engine called [Javelin](https://github.com/TomaszJaworski777/Javelin).
+
 ## Lichess Bot
 
 I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lichess bot for Panda. Unfortunately it probably won't be online that much because I'm hosting it locally.
