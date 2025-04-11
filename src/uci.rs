@@ -17,6 +17,25 @@ pub enum CommandType {
     D, //not an actual UCI command but can be used to debug and display the board
 }
 
+impl Move {
+    pub fn uci(self) -> String {
+        let mut res = String::new();
+        res += coordinate(self.square_from()).as_str();
+        res += coordinate(self.square_to()).as_str();
+
+        if self.is_promotion() {
+            res += match self.promoted_piece() {
+                PieceType::Knight => "n",
+                PieceType::Bishop => "b",
+                PieceType::Rook => "r",
+                PieceType::Queen => "q",
+                _ => unreachable!(),
+            }
+        }
+        res
+    }
+}
+
 pub fn recognise_command(command: &str) -> CommandType {
     let words = command.split_whitespace().collect::<Vec<&str>>();
     match words[0] {

@@ -6,6 +6,7 @@ pub mod magic;
 pub mod r#move;
 pub mod movegen;
 pub mod nnue;
+pub mod ordering;
 pub mod perft;
 pub mod rng;
 pub mod search;
