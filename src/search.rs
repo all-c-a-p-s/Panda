@@ -705,27 +705,17 @@ impl Searcher {
                 }
                 self.pv_length[self.ply] = self.pv_length[next_ply];
 
-                //search failed high
-                if eval >= beta {
-                    //only write quiet moves into history table because captures
-                    //will be scored separately
-                    self.update_search_tables(
-                        position,
-                        &move_list,
-                        m,
-                        tactical,
-                        depth,
-                        moves_played,
-                    );
-                    hash_flag = EntryFlag::LowerBound;
-                    break;
-                }
-
                 hash_flag = EntryFlag::Exact;
                 best_move = m;
-                //NOTE: it is important that this is not above the beta cutoff
-                //becuse not all moves have necessarily been searched to cause
-                //the cutoff (one refutation)
+            }
+
+            //search failed high
+            if eval >= beta {
+                //only write quiet moves into history table because captures
+                //will be scored separately
+                self.update_search_tables(position, &move_list, m, tactical, depth, moves_played);
+                hash_flag = EntryFlag::LowerBound;
+                break;
             }
         }
 
