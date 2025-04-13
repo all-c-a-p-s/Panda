@@ -77,7 +77,7 @@ pub fn get_attackers(square: Square, colour: Colour, b: &Board, occupancies: Bit
 }
 
 impl MoveList {
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         MoveList {
             moves: [NULL_MOVE; MAX_MOVES],
         }
@@ -645,38 +645,38 @@ pub fn get_smallest_attack(b: &mut Board, square: Square) -> Move {
     NULL_MOVE
 }
 
-pub const fn in_between(mut sq1: Square, mut sq2: Square) -> BitBoard {
-    if sq1 as usize == sq2 as usize {
-        return 0u64;
-    } else if sq1 as usize > sq2 as usize {
-        let temp = sq2;
-        sq2 = sq1;
-        sq1 = temp;
-    }
-
-    let dx = file(sq2) as i8 - file(sq1) as i8;
-    let dy = rank(sq2) as i8 - rank(sq1) as i8;
-
-    let orthogonal = dx == 0 || dy == 0;
-    let diagonal = dx.abs() == dy.abs();
-
-    if !(orthogonal || diagonal) {
-        return 0u64;
-    }
-
-    let (dx, dy) = (dx.signum(), dy.signum());
-    let (dx, dy) = (dx, dy * 8);
-
-    let mut res = 0u64;
-
-    while ((sq1 as i8 + dx + dy) as usize) < sq2 as usize {
-        res |= set_bit(unsafe { Square::from((sq1 as i8 + dx + dy) as u8) }, 0);
-        sq1 = unsafe { Square::from((sq1 as i8 + dx + dy) as u8) };
-    }
-    res
-}
-
 pub static RAY_BETWEEN: [[BitBoard; 64]; 64] = {
+    const fn in_between(mut sq1: Square, mut sq2: Square) -> BitBoard {
+        if sq1 as usize == sq2 as usize {
+            return 0u64;
+        } else if sq1 as usize > sq2 as usize {
+            let temp = sq2;
+            sq2 = sq1;
+            sq1 = temp;
+        }
+
+        let dx = file(sq2) as i8 - file(sq1) as i8;
+        let dy = rank(sq2) as i8 - rank(sq1) as i8;
+
+        let orthogonal = dx == 0 || dy == 0;
+        let diagonal = dx.abs() == dy.abs();
+
+        if !(orthogonal || diagonal) {
+            return 0u64;
+        }
+
+        let (dx, dy) = (dx.signum(), dy.signum());
+        let (dx, dy) = (dx, dy * 8);
+
+        let mut res = 0u64;
+
+        while ((sq1 as i8 + dx + dy) as usize) < sq2 as usize {
+            res |= set_bit(unsafe { Square::from((sq1 as i8 + dx + dy) as u8) }, 0);
+            sq1 = unsafe { Square::from((sq1 as i8 + dx + dy) as u8) };
+        }
+        res
+    }
+
     let mut res = [[0u64; 64]; 64];
     let mut from = 0;
     while from < 64 {

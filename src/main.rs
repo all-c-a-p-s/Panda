@@ -15,8 +15,6 @@ pub mod types;
 pub mod uci;
 pub mod zobrist;
 
-use std::io::Write;
-
 use std::error::Error;
 
 use crate::board::*;
@@ -41,11 +39,10 @@ enum Mode {
     Uci,
 }
 
-const MODE: Mode = Mode::Uci;
-
 #[allow(unused)]
 const ONE_HOUR: u64 = 3600;
-const DATAGEN_PATH: &str = "/Users/seba/rs/bullet/datagen/set0003.txt";
+#[allow(unused)]
+const DATAGEN_PATH: &str = "/Users/seba/rs/bullet/datagen/set0004.txt";
 //running entry count: 27.3M
 //this comment is here so I don't have to load the whole file into a string to count entries
 //instead I keep track of the number of entries added each session
@@ -55,45 +52,29 @@ fn main() -> Result<(), Box<dyn Error>> {
     std::env::set_var("RUST_BACKTRACE", "1");
     init_all();
 
-    match MODE {
+    let args: Vec<String> = std::env::args().collect();
+    let mode_command = args.last().unwrap();
+
+    let mode = match mode_command.as_str() {
+        "datagen" => Mode::Datagen,
+        "profile" => Mode::Profile,
+        "debug" => Mode::Debug,
+        _ => Mode::Uci,
+    };
+
+    match mode {
         Mode::Uci => uci_loop(),
         Mode::Profile => full_perft(),
-        Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(ONE_HOUR * 40))?,
+        Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(ONE_HOUR / 3))?,
         Mode::Debug => {
-            fn parse_line(line: &str) -> Option<(String, i16, f32)> {
-                let parts = line.split("|").map(|x| x.trim()).collect::<Vec<_>>();
-                let fen = parts[0].to_string();
-                let eval = match parts[1].parse::<i16>() {
-                    Ok(k) => k,
-                    Err(_) => return None,
-                };
-                let wdl = match parts[2].parse::<f32>() {
-                    Ok(k) => k,
-                    Err(_) => return None,
-                };
-
-                Some((fen, eval, wdl))
-            }
-
-            let path = "/Users/seba/rs/bullet/datagen/set0003_fixed.txt";
-            let mut file = if let Ok(f) = std::fs::OpenOptions::new().append(true).open(path) {
-                f
-            } else {
-                std::fs::File::create(path)?
-            };
-
-            let s = std::fs::read_to_string(DATAGEN_PATH)?;
-
-            let data = s.lines().filter_map(parse_line);
-
-            let mut count = 0;
-            for x in data {
-                writeln!(file, "{} | {} | {:.1}", x.0, x.1, x.2)?;
-                count += 1;
-                if count % 100_000 == 0 {
-                    println!("{}", count);
-                }
-            }
+            let mut pos =
+                Board::from("r2qk2r/2pbppbp/1pn2np1/pB4B1/P2Pp3/1NP3NP/1P3PP1/R2QK2R b KQkq - 3 2");
+            let mut searcher = Searcher::new(
+                std::time::Instant::now() + std::time::Duration::from_millis(10),
+                8192,
+            );
+            let move_data = iterative_deepening(&mut pos, 0, 0, 0, 10, &mut searcher, false);
+            println!("{}", move_data.m.uci());
         }
     };
 

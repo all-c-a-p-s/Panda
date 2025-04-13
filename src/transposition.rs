@@ -17,7 +17,7 @@ pub struct TTEntry {
     pub eval: i32,       //32b
     pub flag: EntryFlag, //8b
     pub best_move: Move, //16b
-    pub hash_key: u64,
+    pub hash_key: u64,   //64b = 128b total
 }
 
 pub struct TranspositionTable {

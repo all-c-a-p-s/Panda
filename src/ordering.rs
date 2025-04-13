@@ -23,69 +23,12 @@ const MVV_LVA: [[i32; 6]; 6] = [
     [0, 0, 0, 0, 0, 0],             //victim king
 ];
 
-pub fn see_test() {
-    let position1 = Board::from("8/7k/8/4p3/8/5N2/K7/8 w - - 0 1");
-    let m = encode_move(Square::F3, Square::E5, None, NO_FLAG);
-    let res1 = m.static_exchange_evaluation(&position1, 0);
-    assert!(res1, "first see test position failed");
-
-    let position2 = Board::from("8/2b4k/8/4p3/8/5N2/K7/8 w - - 0 1");
-    let m = encode_move(Square::F3, Square::E5, None, NO_FLAG);
-    let res2 = m.static_exchange_evaluation(&position2, 0);
-    assert!(!res2, "second see test position failed");
-
-    let position3 = Board::from("8/2b4k/8/4p3/8/5N2/K7/4R3 w - - 0 1");
-    let m = encode_move(Square::F3, Square::E5, None, NO_FLAG);
-    let res3 = m.static_exchange_evaluation(&position3, 0);
-    assert!(res3, "third see test position failed");
-
-    let position4 = Board::from("4q3/2b4k/8/4p3/8/5N2/K7/4R3 w - - 0 1");
-    let m = encode_move(Square::F3, Square::E5, None, NO_FLAG);
-    let res4 = m.static_exchange_evaluation(&position4, 0);
-    assert!(!res4, "fourth see test position failed");
-
-    let position5 = Board::from("4q3/2b4k/8/4p3/8/5N2/K7/Q3R3 w - - 0 1");
-    let m = encode_move(Square::F3, Square::E5, None, NO_FLAG);
-    let res5 = m.static_exchange_evaluation(&position5, 0);
-    assert!(res5, "fifth see test position failed");
-
-    //test start position with no captures
-    let position6 = Board::from(STARTPOS);
-    let m = encode_move(Square::E2, Square::E4, None, NO_FLAG);
-    let res6 = m.static_exchange_evaluation(&position6, 0);
-    assert!(res6, "sixth see test position failed");
-
-    let position7 = Board::from("4k3/8/2n2b2/8/3P4/2P5/8/3K4 b - - 0 1");
-    let m = encode_move(Square::C6, Square::D4, None, NO_FLAG);
-    let res7 = m.static_exchange_evaluation(&position7, 0);
-    assert!(!res7, "seventh see test position failed");
-
-    //test sliding attack updates
-    let position8 = Board::from("3q3k/3r4/3r4/3p4/8/3R4/3R4/3Q3K w - - 0 1");
-    let m = encode_move(Square::D3, Square::D5, None, NO_FLAG);
-    let res8 = m.static_exchange_evaluation(&position8, 0);
-    assert!(!res8, "eighth see test position failed");
-
-    let position9 = Board::from("7k/8/3r4/3p4/4P3/5B2/8/7K w - - 0 1");
-    let m = encode_move(Square::E4, Square::D5, None, NO_FLAG);
-    let res9 = m.static_exchange_evaluation(&position9, 0);
-    assert!(res9, "ninth see test position failed");
-
-    println!("see test passed");
-}
-
 //same as MG evaluation weights (haven't updated these in a while)
 pub const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, INFINITY];
 
 impl Move {
     pub fn static_exchange_evaluation(self, b: &Board, threshold: i32) -> bool {
-        /*
-         Iterative approach to SEE inspired by engine Ethereal. This is much faster
-         than the recursive implementation I tried to make becuase most of the attack
-         bitboards won't change during the SEE search so it's faster to keep them and
-         only update slider attack bitboards when it's possible that they changed.
-         This also avoids using make_move() and undo_move().
-        */
+        // Iterative approach to SEE inspired by Ethereal.
         let sq_from = self.square_from();
         let sq_to = self.square_to();
 

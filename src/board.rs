@@ -12,8 +12,8 @@ pub(crate) const EMPTY: BitBoard = 0;
 pub struct Board {
     //Fundamental board state
     pub bitboards: [BitBoard; 12],
-    pub pieces_array: [Option<Piece>; 64], //used to speed up move generation
-    pub occupancies: [BitBoard; 3],        //white, black, both
+    pub pieces_array: [Option<Piece>; 64],
+    pub occupancies: [BitBoard; 3], //white, black, both
     pub castling: u8, //4 bits only should be used 0001 = wk, 0010 = wq, 0100 = bk, 1000 = bq
     pub en_passant: Option<Square>,
     pub side_to_move: Colour,
@@ -212,7 +212,7 @@ impl Board {
                             10 => squares += "q",
                             11 => squares += "k",
 
-                            _ => panic!("this is impossible"),
+                            _ => unreachable!(),
                         };
                         empty = false;
                         break;

@@ -76,7 +76,7 @@ pub const ROOK_EDGE_RAYS: [BitBoard; 64] = {
     table
 };
 
-//includes edge of baord
+//includes edge of board
 const fn bishop_edge_rays(square: usize) -> BitBoard {
     let mut attacks: BitBoard = 0;
     let square_rank: usize = square / 8;

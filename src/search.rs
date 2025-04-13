@@ -51,6 +51,7 @@ const LMP_DEPTH: u8 = 5;
 
 const IIR_DEPTH_MINIMUM: u8 = 6;
 const DO_SINGULARITY_EXTENSION: bool = false;
+const DO_SINGULARITY_DE: bool = false;
 
 pub const MAX_GAME_PLY: usize = 1024;
 
@@ -73,7 +74,7 @@ pub struct SearchInfo {
     lmr_table: LMRTable,
     pub history_table: [[i32; 64]; 12],
     pub killer_moves: [[Move; MAX_PLY]; 2],
-    pub excluded: Option<Move>,
+    pub excluded: [Option<Move>; MAX_PLY],
 }
 
 struct LMRTable {
@@ -111,7 +112,7 @@ impl Default for SearchInfo {
             lmr_table: LMRTable::default(),
             history_table: [[0i32; 64]; 12],
             killer_moves: [[NULL_MOVE; 64]; 2],
-            excluded: None,
+            excluded: [None; 64],
         }
     }
 }
@@ -323,13 +324,13 @@ impl Searcher {
         //undo move already made on board
         let threshold = std::cmp::max(tt_score - (depth as i32 * 2 + 20), -INFINITY);
 
-        self.info.excluded = Some(best_move);
+        self.info.excluded[self.ply] = Some(best_move);
 
-        let excluded_eval = self.negamax(position, depth / 2, threshold, threshold - 1, cutnode);
+        let excluded_eval = self.negamax(position, depth / 2, threshold - 1, threshold, cutnode);
 
-        self.info.excluded = None;
+        self.info.excluded[self.ply] = None;
 
-        if !pv_node && excluded_eval < threshold - SINGULARITY_DE_MARGIN {
+        if DO_SINGULARITY_DE && !pv_node && excluded_eval < threshold - SINGULARITY_DE_MARGIN {
             Some(2)
         } else if excluded_eval < threshold {
             Some(1)
@@ -377,8 +378,8 @@ impl Searcher {
                                        //this is useful in cases where it cannot return the eval of the hash lookup
                                        //due to the bounds, but it can use the best_move field for move ordering
 
-        //don't probe TB in singular search
-        if !root && self.info.excluded.is_none() {
+        //don't probe TT in singular search
+        if !root && self.info.excluded[self.ply].is_none() {
             //check 50 move rule, repetition and insufficient material
             unsafe {
                 if is_drawn(position) {
@@ -430,7 +431,7 @@ impl Searcher {
         let mut improving = false;
 
         //avoid static pruning when in check or in singular search
-        if !in_check && self.info.excluded.is_none() && self.do_pruning {
+        if !in_check && self.info.excluded[self.ply].is_none() && self.do_pruning {
             let static_eval = evaluate(position);
             if self.ply < MAX_SEARCH_DEPTH {
                 self.info.ss[self.ply] = SearchStackEntry { eval: static_eval };
@@ -516,12 +517,14 @@ impl Searcher {
         //the latter for pseudo-legal moves we consider
         let mut skip_quiets = false;
 
-        for m in move_list.moves {
+        #[allow(unused)]
+        for (i, &m) in move_list.moves.iter().enumerate() {
             if m.is_null() {
                 //no pseudolegal moves left in move list
                 break;
-            } else if let Some(n) = self.info.excluded {
+            } else if let Some(n) = self.info.excluded[self.ply] {
                 if n == m {
+                    moves_seen += 1;
                     continue;
                 }
             }
@@ -540,7 +543,7 @@ impl Searcher {
 
             //Early Pruning: try to prune moves before we search them properly
             //by showing that they're not worth investigating
-            if !root && not_mated && self.do_pruning {
+            if !root && not_mated {
                 if quiet && skip_quiets && !is_killer {
                     continue;
                 }
@@ -591,7 +594,7 @@ impl Searcher {
             let maybe_singular = DO_SINGULARITY_EXTENSION
                 && !root
                 && depth >= 8
-                && self.info.excluded.is_none()
+                && self.info.excluded[self.ply].is_none()
                 && m == best_move
                 && tt_depth >= depth - 3
                 && tt_bound != EntryFlag::UpperBound;
@@ -676,7 +679,7 @@ impl Searcher {
                 return 0;
             }
 
-            if self.ply == 0 {
+            if root {
                 self.moves_fully_searched += 1;
                 //used to ensure in the iterative deepening search that
                 //at least one move has been searched fully
@@ -684,15 +687,7 @@ impl Searcher {
 
             if eval > alpha {
                 alpha = eval;
-
-                let next_ply = self.ply + 1;
-                self.pv[self.ply][self.ply] = m;
-                for j in next_ply..self.pv_length[next_ply] {
-                    self.pv[self.ply][j] = self.pv[next_ply][j];
-                    //copy from next row in pv table
-                }
-                self.pv_length[self.ply] = self.pv_length[next_ply];
-
+                self.update_pv(m);
                 hash_flag = EntryFlag::Exact;
                 best_move = m;
             }
@@ -720,6 +715,7 @@ impl Searcher {
 
             self.tt.write(position.hash_key, hash_entry);
         }
+
         alpha
     }
 
@@ -841,6 +837,16 @@ impl Searcher {
             self.tt.write(position.hash_key, hash_entry);
         }
         alpha
+    }
+
+    pub fn update_pv(&mut self, m: Move) {
+        let next_ply = self.ply + 1;
+        self.pv[self.ply][self.ply] = m;
+        for i in next_ply..self.pv_length[next_ply] {
+            self.pv[self.ply][i] = self.pv[next_ply][i];
+            //copy from next row in pv table
+        }
+        self.pv_length[self.ply] = self.pv_length[next_ply];
     }
 
     pub fn update_search_tables(
@@ -1075,6 +1081,7 @@ pub fn iterative_deepening(
         let eval = aspiration_window(position, s, &mut id);
 
         if s.timer.stopped {
+            assert_ne!(id.depth, 0);
             break;
         }
 

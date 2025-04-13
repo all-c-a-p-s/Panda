@@ -4,7 +4,7 @@ use crate::helper::*;
 use crate::types::{Piece, Square};
 
 pub const MIRROR: [usize; 64] = {
-    pub const fn relative_psqt_square(square: usize, c: Colour) -> usize {
+    const fn relative_psqt_square(square: usize, c: Colour) -> usize {
         match c {
             Colour::White => {
                 //piece-square tables have a1 on bottom left -> a8 at index 0
