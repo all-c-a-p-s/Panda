@@ -1,5 +1,5 @@
 # Panda
-Panda is a chess engine written in Rust (still a work in progress). I work on this project for fun when I have the time. It is called Panda because:
+Panda is a chess engine written in Rust (still a work in progress). I like working on this project for fun when I have free time. It is called Panda because:
 - pandas are black and white like a chess board
 - pandas are pretty cool
 - red pandas are also pretty cool, and they are orange (like Rust)
@@ -8,13 +8,20 @@ Panda is a chess engine written in Rust (still a work in progress). I work on th
 
 ## What Makes Panda Interesting?
 
-In terms of strength, Panda is pretty unremarkable - currently somewhere around 2900. One fairly original idea is that it considers uncertainty in evaluation of a position instead of just returning one evaluation like most engines do. The intention is that this makes it value practical chances (i.e. expected score from the game) over just maximising its evaluation. Although its current NNUE evaluation doesn't use these, it was trained on data which used this technique. However, the purpose of this project is mainly just for me to practice Rust and to combine two of my hobbies (programming and chess).
+In terms of strength, Panda is pretty unremarkable - currently somewhere around 2900. Panda certainly doesn't have any techniques which are revolutionary, but I like adding my own ideas and methods on top of the common algorithms. One thing which is unique to Panda is its data generation method, in which it plays games against itself and then uses a custom algorithm to backtrack through the search tree, re-evaluating positions based on the information which was subsequently gained by playing out the rest of the game.
 
-By far the coolest game I've seen it play is [this one](https://www.chess.com/analysis/library/22UV4Zu2Bg) against a really cool MCTS engine called [Javelin](https://github.com/TomaszJaworski777/Javelin).
+By far the most exciting game I've seen it play is [this one](https://www.chess.com/analysis/library/22UV4Zu2Bg) against a really cool MCTS engine called [Javelin](https://github.com/TomaszJaworski777/Javelin).
+
+## Features
+- UCI compliant (no GUI)
+- magic bitboard move generation
+- Alpha-Beta search with various enhancements
+- NNUE with architecture (768->256)x2 -> 1 trained on self-play
+- custom datagen method
 
 ## Lichess Bot
 
-I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lichess bot for Panda. Unfortunately it probably won't be online that much because I'm hosting it locally.
+I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lichess bot for Panda. Unfortunately, it isn't online very often since I host it locally.
 
 [Panda Lichess Bot](https://lichess.org/@/BotNickal)
 
@@ -31,7 +38,8 @@ I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lich
 
 ## Acknowledgements
 Here are some of the many resources without which this engine would be much less strong:
-- [Chess Programming Wiki](https://www.chessprogramming.org/Main_Page)
-- [BBC Chess Engine](https://github.com/maksimKorzh/bbc) + videos
-- Open source chess projects such as Ethereal, Weiss and Cozy Chess, which have extremely clear and helpful documentation
-- [bullet](https://github.com/jw1912/bullet/tree/main), which I used to train the neural network
+- [BBC Chess Engine](https://github.com/maksimKorzh/bbc) + videos, which explain magic bitboards very clearly
+- [Weiss](https://github.com/TerjeKir/weiss), which has incredibly clear code in its search function
+- [Ethereal](https://github.com/AndyGrant/Ethereal) - Panda's SEE implementation is entirely based on Ethereal's
+- [Carp](https://github.com/dede1751/carp) - extremely clear Rust code, which is always useful to read when I'm struggling to understand something
+- [bullet](https://github.com/jw1912/bullet/tree/main), which I use to train Panda's networks
