@@ -204,7 +204,7 @@ impl Game {
     fn backtrack(&mut self) {
         use rand::Rng;
         fn wdl(x: i32) -> f32 {
-            1.0 / (1.0 + ((-x as f32) * 255.0 / 400.0).exp())
+            1.0 / (1.0 + ((-x as f32) * 2.55 / 400.0).exp())
         }
 
         for ply in (OPENING_PLIES..self.positions.len()).rev() {
