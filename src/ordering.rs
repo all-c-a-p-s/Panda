@@ -27,7 +27,7 @@ const MVV_LVA: [[i32; 6]; 6] = [
 pub const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, INFINITY];
 
 impl Move {
-    pub fn static_exchange_evaluation(self, b: &Board, threshold: i32) -> bool {
+    pub fn see(self, b: &Board, threshold: i32) -> bool {
         // Iterative approach to SEE inspired by Ethereal.
         let sq_from = self.square_from();
         let sq_to = self.square_to();
@@ -185,7 +185,7 @@ impl Move {
             let victim_type =
                 piece_type(unsafe { b.pieces_array[self.square_to()].unwrap_unchecked() });
             let attacker_type = piece_type(self.piece_moved(b));
-            let winning_capture = self.static_exchange_evaluation(b, 0);
+            let winning_capture = self.see(b, 0);
             match winning_capture {
                 true => WINNING_CAPTURE + MVV_LVA[victim_type][attacker_type],
                 false => LOSING_CAPTURE + MVV_LVA[victim_type][attacker_type],

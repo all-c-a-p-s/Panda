@@ -90,15 +90,8 @@ impl TranspositionTable {
 
 impl TT for TranspositionTable {
     fn lookup(&self, hash_key: u64) -> Option<TTEntry> {
-        if let Some(entry) = self.get(hash_key) {
-            if entry.hash_key == hash_key {
-                Some(entry)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+        self.get(hash_key)
+            .filter(|&entry| entry.hash_key == hash_key)
     }
 
     fn write(&mut self, hash: u64, entry: TTEntry) {

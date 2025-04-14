@@ -4,6 +4,7 @@ use crate::movegen::*;
 use crate::nnue::*;
 use crate::types::{Piece, Square};
 use crate::zobrist::hash;
+use crate::MAX_GAME_PLY;
 
 pub(crate) type BitBoard = u64;
 pub(crate) const EMPTY: BitBoard = 0;
@@ -23,6 +24,7 @@ pub struct Board {
     pub ply: usize,
     pub last_move_null: bool,
     pub hash_key: u64,
+    pub history: [u64; MAX_GAME_PLY],
 
     //Used in movegen
     pub checkers: BitBoard,
@@ -78,6 +80,7 @@ impl Board {
             ply: 0,
             last_move_null: false,
             hash_key: 0,
+            history: [0; MAX_GAME_PLY],
             checkers: 0,
             pinned: 0,
             nnue: Accumulator::default(),

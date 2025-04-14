@@ -188,7 +188,7 @@ impl Game {
         loop {
             let r = g.next();
             if let Ok(q) = r {
-                if q == false {
+                if !q {
                     break;
                 }
             } else {
@@ -284,7 +284,7 @@ impl Display for Node {
         })
         .as_str();
 
-        write!(f, "{}\n", s)
+        writeln!(f, "{}", s)
     }
 }
 
@@ -336,7 +336,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
         .skip(OPENING_PLIES)
     {
         let quiet = n.position.checkers == 0 && !n.choice.unwrap().is_capture(&n.position);
-        let within_bounds = n.value.abs() < i16::max_value() as i32;
+        let within_bounds = n.value.abs() < i16::MAX as i32;
         let enough_pieces = n.position.occupancies[BOTH].count_ones() > 3;
 
         let value = match n.position.side_to_move {

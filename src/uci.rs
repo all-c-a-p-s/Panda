@@ -1,7 +1,6 @@
 use std::time::Instant;
 
 use crate::types::*;
-use crate::zobrist::*;
 use crate::*;
 
 pub enum CommandType {
@@ -117,9 +116,6 @@ pub fn reset(b: &mut Board) {
 
 pub fn parse_position(command: &str, b: &mut Board) {
     reset(b);
-    b.hash_key = hash(b);
-    //^ is necessary becuse reset doesn't update hash key
-    unsafe { REPETITION_TABLE[b.ply] = b.hash_key }
     let words = command.split_whitespace().collect::<Vec<&str>>();
     if words.len() < 2 {
         panic!("invalid position command");
@@ -133,7 +129,6 @@ pub fn parse_position(command: &str, b: &mut Board) {
                     let Ok(_) = b.try_move(m) else {
                         panic!("Illegal move: {}", m.uci());
                     };
-                    unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
                 }
             }
         }
@@ -153,7 +148,6 @@ pub fn parse_position(command: &str, b: &mut Board) {
                 let Ok(_) = b.try_move(m) else {
                     panic!("invalid move {}", m.uci());
                 };
-                unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
             }
         }
         _ => {}
@@ -163,9 +157,6 @@ pub fn parse_position(command: &str, b: &mut Board) {
 pub fn parse_special_go(command: &str, b: &mut Board, s: &mut Searcher) -> MoveData {
     //special combination of go and position command by lichess bot api
     reset(b);
-    b.hash_key = hash(b);
-    //^ is necessary becuse reset doesn't update hash key
-    unsafe { REPETITION_TABLE[b.ply] = b.hash_key }
     let words = command.split_whitespace().collect::<Vec<&str>>();
     if words.len() < 2 {
         panic!("invalid position command");
@@ -176,30 +167,27 @@ pub fn parse_special_go(command: &str, b: &mut Board, s: &mut Searcher) -> MoveD
     match words[1] {
         "startpos" => {
             if words.len() != 2 {
-                #[allow(clippy::needless_range_loop)]
-                for i in 3..words.len() {
-                    if words[i].chars().collect::<Vec<char>>()[0] == 'w' {
+                for (i, &w) in words.iter().enumerate().skip(3) {
+                    if w.chars().collect::<Vec<char>>()[0] == 'w' {
                         end_of_moves = i;
                         break;
                     }
                     //parse moves
-                    let m = parse_move(words[i], b);
+                    let m = parse_move(w, b);
                     let Ok(_) = b.try_move(m) else {
                         panic!("invalid move {}", m.uci());
                     };
-                    unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
                 }
             }
         }
         "fen" => {
             let mut fen_string = String::new();
-            #[allow(clippy::needless_range_loop)]
-            for i in 2..words.len() {
-                if words[i].chars().collect::<Vec<char>>()[0] == 'w' {
+            for (i, &w) in words.iter().enumerate().skip(2) {
+                if w.chars().collect::<Vec<char>>()[0] == 'w' {
                     end_of_moves = i;
                     break;
                 }
-                fen_string += words[i];
+                fen_string += w;
                 if i != words.len() - 1 {
                     fen_string += " ";
                 }
@@ -207,17 +195,15 @@ pub fn parse_special_go(command: &str, b: &mut Board, s: &mut Searcher) -> MoveD
             *b = Board::from(&fen_string)
         }
         "moves" => {
-            #[allow(clippy::needless_range_loop)]
-            for i in 2..words.len() {
-                if words[i].chars().collect::<Vec<char>>()[0] == 'w' {
+            for (i, &w) in words.iter().enumerate().skip(2) {
+                if w.chars().collect::<Vec<char>>()[0] == 'w' {
                     end_of_moves = i;
                     break;
                 }
-                let m = parse_move(words[i], b);
+                let m = parse_move(w, b);
                 let Ok(_) = b.try_move(m) else {
                     panic!("invalid move {}", m.uci());
                 };
-                unsafe { REPETITION_TABLE[b.ply] = b.hash_key }; //hash to avoid repetitions
             }
         }
         _ => panic!("invalid position command"),

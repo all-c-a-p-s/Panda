@@ -10,7 +10,6 @@ use crate::helper::*;
 use crate::magic::*;
 use crate::movegen::*;
 use crate::zobrist::*;
-use crate::REPETITION_TABLE;
 
 use crate::types::*;
 
@@ -319,9 +318,7 @@ impl Board {
         self.checkers = c.checkers;
         self.ply -= 1;
 
-        unsafe {
-            REPETITION_TABLE[self.ply + 1] = 0u64;
-        }
+        self.history[self.ply + 1] = 0;
     }
 }
 
@@ -571,9 +568,7 @@ impl Board {
         self.hash_key ^= CASTLING_KEYS[self.castling as usize];
         //more efficient to do this here since we don't have to check all cases
 
-        unsafe {
-            REPETITION_TABLE[self.ply] = self.hash_key;
-        }
+        self.history[self.ply] = self.hash_key;
 
         commit
     }

@@ -62,8 +62,6 @@ const MOVE_OVERHEAD: usize = 50;
 const TIME_TO_START_SEARCH: usize = 0; //initialise big TT (if not using HashMap)
                                        //leave 100ms total margin
 
-pub static mut REPETITION_TABLE: [u64; MAX_GAME_PLY] = [0u64; MAX_GAME_PLY];
-
 #[derive(Copy, Clone)]
 struct SearchStackEntry {
     eval: i32,
@@ -246,22 +244,21 @@ fn is_insufficient_material(b: &Board) -> bool {
     //could cause some bug in theory lol
 }
 
-unsafe fn is_drawn(position: &Board) -> bool {
+fn is_drawn(position: &Board) -> bool {
     if position.fifty_move == 100 {
         return true;
     }
-    #[allow(static_mut_refs)]
-    unsafe {
-        for key in REPETITION_TABLE.iter().take(position.ply - 1) {
-            //take ply - 1 because the start position (with 0 ply) is included
-            if *key == position.hash_key {
-                return true;
-                //return true on one repetition because otherwise the third
-                //repetition will not be reached because the search will stop
-                //after a tt hit on the second repetition
-            }
+
+    for key in position.history.iter().take(position.ply - 1) {
+        //take ply - 1 because the start position (with 0 ply) is included
+        if *key == position.hash_key {
+            return true;
+            //return true on one repetition because otherwise the third
+            //repetition will not be reached because the search will stop
+            //after a tt hit on the second repetition
         }
     }
+
     is_insufficient_material(position)
 }
 
@@ -365,7 +362,7 @@ impl Searcher {
 
         if depth == 0 {
             //qsearch on leaf nodes
-            return self.quiescence_search(position, alpha, beta);
+            return self.qsearch(position, alpha, beta);
         }
 
         let mut hash_flag = EntryFlag::UpperBound;
@@ -381,10 +378,8 @@ impl Searcher {
         //don't probe TT in singular search
         if !root && self.info.excluded[self.ply].is_none() {
             //check 50 move rule, repetition and insufficient material
-            unsafe {
-                if is_drawn(position) {
-                    return 0;
-                }
+            if is_drawn(position) {
+                return 0;
             }
 
             // mate distance pruning:
@@ -470,7 +465,7 @@ impl Searcher {
                 if depth <= MAX_RAZOR_DEPTH
                     && static_eval + RAZORING_MARGIN * (depth as i32) <= alpha
                 {
-                    let score = self.quiescence_search(position, alpha, beta);
+                    let score = self.qsearch(position, alpha, beta);
                     if score > alpha {
                         return score;
                     }
@@ -562,7 +557,7 @@ impl Searcher {
                     };
                     let threshold = margin * depth as i32;
                     //prune if move fails to beat SEE threshold
-                    if !m.static_exchange_evaluation(position, threshold) {
+                    if !m.see(position, threshold) {
                         continue;
                     }
                 }
@@ -719,13 +714,11 @@ impl Searcher {
         alpha
     }
 
-    pub fn quiescence_search(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
+    pub fn qsearch(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
 
-        unsafe {
-            if is_drawn(position) {
-                return 0;
-            }
+        if is_drawn(position) {
+            return 0;
         }
 
         if self.should_exit() {
@@ -792,13 +785,13 @@ impl Searcher {
                 return beta;
             }
 
-            if !c.static_exchange_evaluation(position, SEE_QSEARCH_MARGIN) {
+            if !c.see(position, SEE_QSEARCH_MARGIN) {
                 //prune moves that fail see by threshold
                 continue;
             }
 
             if eval + 200 <= alpha
-                && !c.static_exchange_evaluation(
+                && !c.see(
                     position,
                     SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1,
                 )
@@ -812,7 +805,7 @@ impl Searcher {
 
             self.ply += 1;
 
-            let eval = -self.quiescence_search(position, -beta, -alpha);
+            let eval = -self.qsearch(position, -beta, -alpha);
             position.undo_move(c, &commit);
             self.ply -= 1;
 
@@ -1017,7 +1010,7 @@ fn aspiration_window(position: &mut Board, s: &mut Searcher, id: &mut IterDeepDa
             id.beta = eval + id.delta;
 
             if id.show_thinking {
-                print_thinking(id.depth, eval, &s, id.start_time);
+                print_thinking(id.depth, eval, s, id.start_time);
             }
 
             return eval;
