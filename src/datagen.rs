@@ -67,13 +67,13 @@ impl Node {
 
     // this function merely needs to determine the value of the node, not of its moves
     fn value(&mut self) -> i32 {
-        let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10), 8192);
+        let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10), 16384);
         let move_data = iterative_deepening(&mut self.position, 0, 0, 0, 10, &mut searcher, false);
         move_data.eval
     }
 
     pub fn choose_move(&mut self) {
-        let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10), 8192);
+        let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10), 16384);
         let move_data = iterative_deepening(&mut self.position, 0, 0, 0, 10, &mut searcher, false);
 
         self.choice = Some(move_data.m);
@@ -250,11 +250,13 @@ impl Game {
 
                 if it.count() != 1 {
                     p.choose_second();
-                    pos.play_unchecked(p.choice.unwrap());
-                    let mut n = Node::from_position(&pos);
-                    let s = -n.value();
+                    if !p.choice.unwrap().is_null() {
+                        pos.play_unchecked(p.choice.unwrap());
+                        let mut n = Node::from_position(&pos);
+                        let s = -n.value();
 
-                    p.value = std::cmp::max(v_b, s);
+                        p.value = std::cmp::max(v_b, s);
+                    }
                 }
             }
         }

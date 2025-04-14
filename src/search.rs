@@ -50,7 +50,7 @@ const SEE_QSEARCH_MARGIN: i32 = 1;
 const LMP_DEPTH: u8 = 5;
 
 const IIR_DEPTH_MINIMUM: u8 = 6;
-const DO_SINGULARITY_EXTENSION: bool = false;
+const DO_SINGULARITY_EXTENSION: bool = true;
 const DO_SINGULARITY_DE: bool = false;
 
 pub const MAX_GAME_PLY: usize = 1024;

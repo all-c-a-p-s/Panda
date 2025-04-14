@@ -66,16 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Mode::Uci => uci_loop(),
         Mode::Profile => full_perft(),
         Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(ONE_HOUR / 3))?,
-        Mode::Debug => {
-            let mut pos =
-                Board::from("r2qk2r/2pbppbp/1pn2np1/pB4B1/P2Pp3/1NP3NP/1P3PP1/R2QK2R b KQkq - 3 2");
-            let mut searcher = Searcher::new(
-                std::time::Instant::now() + std::time::Duration::from_millis(10),
-                8192,
-            );
-            let move_data = iterative_deepening(&mut pos, 0, 0, 0, 10, &mut searcher, false);
-            println!("{}", move_data.m.uci());
-        }
+        Mode::Debug => {}
     };
 
     Ok(())
