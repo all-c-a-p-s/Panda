@@ -19,7 +19,6 @@ use std::time::{Duration, Instant};
 
 pub const INFINITY: i32 = 1_000_000_000;
 pub const MAX_PLY: usize = 64;
-pub const MAX_SEARCH_DEPTH: usize = 128;
 pub const REDUCTION_LIMIT: u8 = 2;
 
 const FULL_DEPTH_MOVES: u8 = 1;
@@ -255,6 +254,8 @@ impl Thread<'_> {
     ) -> i32 {
         if self.should_exit() {
             return 0;
+        } else if self.ply == MAX_PLY - 1 {
+            return evaluate(position);
         }
         let pv_node = beta - alpha != 1;
         let root = self.ply == 0;
@@ -330,7 +331,7 @@ impl Thread<'_> {
         //avoid static pruning when in check or in singular search
         if !in_check && self.info.excluded[self.ply].is_none() && self.do_pruning {
             let static_eval = evaluate(position);
-            if self.ply < MAX_SEARCH_DEPTH {
+            if self.ply < MAX_PLY {
                 self.info.ss[self.ply] = SearchStackEntry { eval: static_eval };
             }
 
@@ -432,7 +433,7 @@ impl Thread<'_> {
 
             let tactical = m.is_tactical(position);
             let quiet = !tactical;
-            let not_mated = alpha > -INFINITY + MAX_SEARCH_DEPTH as i32;
+            let not_mated = alpha > -INFINITY + MAX_PLY as i32;
             //must be done before making the move on the board
 
             let is_killer = m == self.info.killer_moves[0][self.ply]
@@ -513,11 +514,8 @@ impl Thread<'_> {
                 //we unmade the move while calling the singularity() function
             }
 
-            let new_depth = i32::clamp(
-                depth as i32 - 1 + extension.unwrap(),
-                0,
-                MAX_SEARCH_DEPTH as i32,
-            ) as u8;
+            let new_depth =
+                i32::clamp(depth as i32 - 1 + extension.unwrap(), 0, MAX_PLY as i32) as u8;
 
             let eval = if moves_played == 1 {
                 //note that this is one because the variable is updated above
@@ -625,6 +623,8 @@ impl Thread<'_> {
 
         if self.should_exit() {
             return 0;
+        } else if self.ply == MAX_PLY - 1 {
+            return evaluate(position);
         }
 
         let mut hash_flag = EntryFlag::UpperBound;
@@ -916,7 +916,7 @@ pub fn iterative_deepening(
     let soft_limit = Instant::now() + Duration::from_millis(soft_limit as u64);
     let mut id = IterDeepData::new(start, show_thinking, soft_limit);
 
-    while (id.depth as usize) < MAX_SEARCH_DEPTH {
+    while (id.depth as usize) < MAX_PLY {
         let eval = aspiration_window(position, s, &mut id);
 
         if s.is_stopped() {

@@ -43,8 +43,8 @@ enum Mode {
 #[allow(unused)]
 const ONE_HOUR: u64 = 3600;
 #[allow(unused)]
-const DATAGEN_PATH: &str = "/Users/seba/rs/bullet/datagen/set0004.txt";
-//running entry count: 27.3M
+const DATAGEN_PATH: &str = "/Users/seba/rs/bullet/datagen/set-backtracking-001.txt";
+//running entry count: 1.77M
 //this comment is here so I don't have to load the whole file into a string to count entries
 //instead I keep track of the number of entries added each session
 //for reference, 1M entries ~= 78MB (txt format)
@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     match mode {
         Mode::Uci => uci_loop(),
         Mode::Profile => full_perft(),
-        Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(ONE_HOUR / 3))?,
+        Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(ONE_HOUR * 100))?,
         Mode::Debug => {}
     };
 

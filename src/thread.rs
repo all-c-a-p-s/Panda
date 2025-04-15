@@ -41,7 +41,7 @@ pub struct SearchStackEntry {
 }
 
 pub struct SearchInfo {
-    pub ss: [SearchStackEntry; MAX_SEARCH_DEPTH],
+    pub ss: [SearchStackEntry; MAX_PLY],
     pub lmr_table: LMRTable,
     pub history_table: [[i32; 64]; 12],
     pub killer_moves: [[Move; MAX_PLY]; 2],
@@ -79,7 +79,7 @@ impl Default for LMRTable {
 impl Default for SearchInfo {
     fn default() -> Self {
         Self {
-            ss: [SearchStackEntry::default(); MAX_SEARCH_DEPTH],
+            ss: [SearchStackEntry::default(); MAX_PLY],
             lmr_table: LMRTable::default(),
             history_table: [[0i32; 64]; 12],
             killer_moves: [[NULL_MOVE; 64]; 2],
@@ -128,7 +128,7 @@ impl<'a> Thread<'a> {
         };
 
         Thread {
-            pv_length: [0usize; 64],
+            pv_length: [0; MAX_PLY],
             pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
             tt: TTRef::new(tt),
             ply: 0,
@@ -154,6 +154,8 @@ impl<'a> Searcher<'a> {
             tt,
         }
     }
+    //comment is for threads variable which is unused in datagen mode
+    #[allow(unused)]
     pub fn start_search(
         &self,
         position: &mut Board,
@@ -190,6 +192,19 @@ impl<'a> Searcher<'a> {
 
         let mut main_thread = Thread::new(end_time, max_nodes, self.tt, &stop);
 
+        //datagen is already multi-threaded so only search on one thread
+        #[cfg(feature = "datagen")]
+        {
+            return iterative_deepening(
+                &mut position.clone(),
+                soft_limit,
+                hard_limit,
+                &mut main_thread,
+                false,
+            );
+        }
+
+        #[cfg(not(feature = "datagen"))]
         std::thread::scope(|s| {
             let main_handle = s.spawn(|| {
                 let move_data = iterative_deepening(

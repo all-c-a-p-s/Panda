@@ -69,23 +69,21 @@ impl Node {
     }
 
     // this function merely needs to determine the value of the node, not of its moves
-    fn value(&mut self) -> i32 {
-        let tt = TranspositionTable::in_megabytes(16);
-        let s = Searcher::new(&tt);
-        let move_data = s.start_search(&mut self.position, 0, 0, 0, 10, 16384, 1);
+    fn value(&mut self, tt: &TranspositionTable) -> i32 {
+        let s = Searcher::new(tt);
+        let move_data = s.start_search(&mut self.position, 0, 0, 0, 10, 8192, 1);
         move_data.eval
     }
 
-    pub fn choose_move(&mut self) {
-        let tt = TranspositionTable::in_megabytes(16);
-        let s = Searcher::new(&tt);
-        let move_data = s.start_search(&mut self.position, 0, 0, 0, 10, 16384, 1);
+    pub fn choose_move(&mut self, tt: &TranspositionTable) {
+        let s = Searcher::new(tt);
+        let move_data = s.start_search(&mut self.position, 0, 0, 0, 10, 8192, 1);
 
         self.choice = Some(move_data.m);
         self.value = move_data.eval;
     }
 
-    pub fn choose_opening_move(&mut self) {
+    pub fn choose_opening_move(&mut self, tt: &TranspositionTable) {
         let movelist = MoveList::gen_moves::<false>(&self.position);
 
         let (mut s, mut chosen_move) = (0, NULL_MOVE);
@@ -105,11 +103,10 @@ impl Node {
                 continue;
             };
 
-            let tt = TranspositionTable::in_megabytes(16);
-            let searcher = Searcher::new(&tt);
-            let move_data = searcher.start_search(&mut self.position, 0, 0, 0, 10, 16384, 1);
+            let stop = AtomicBool::new(false);
+            let mut t = Thread::new(Instant::now() + Duration::from_millis(1), 4096, &tt, &stop);
 
-            let score = -move_data.eval;
+            let score = -t.negamax(&mut self.position, 4, -INFINITY, INFINITY, false);
             scores.push((score, m));
             best_score = best_score.max(score);
 
@@ -132,10 +129,9 @@ impl Node {
     }
 
     // must be called when choice is not None and when choice is not the only legal move
-    pub fn choose_second(&mut self) {
+    pub fn choose_second(&mut self, tt: &TranspositionTable) {
         let m = self.choice.unwrap();
 
-        let tt = TranspositionTable::in_megabytes(16);
         let stop = AtomicBool::new(false);
 
         let mut t = Thread::new(Instant::now() + Duration::from_millis(10), 8192, &tt, &stop);
@@ -152,7 +148,7 @@ impl Game {
         Self { positions: vec![n] }
     }
 
-    fn next(&mut self) -> Result<bool, ()> {
+    fn next(&mut self, tt: &TranspositionTable) -> Result<bool, ()> {
         let mut pos = self.positions.last().unwrap().position;
         let movelist = MoveList::gen_legal(&mut pos);
         let repetition_table = self
@@ -175,9 +171,9 @@ impl Game {
         }
 
         if pos.ply < OPENING_PLIES {
-            leaf.choose_opening_move();
+            leaf.choose_opening_move(tt);
         } else {
-            leaf.choose_move();
+            leaf.choose_move(tt);
         }
 
         if leaf.choice.unwrap().is_null() {
@@ -192,9 +188,11 @@ impl Game {
     }
 
     pub fn generate() -> Option<Self> {
+        let tt = TranspositionTable::in_megabytes(16);
+
         let mut g = Self::new();
         loop {
-            let r = g.next();
+            let r = g.next(&tt);
             if let Ok(q) = r {
                 if !q {
                     break;
@@ -203,13 +201,13 @@ impl Game {
                 return None;
             }
         }
-        g.backtrack();
+        g.backtrack(&tt);
         Some(g)
     }
 
     // the purpose of the backtracking algorithm is to try to use the information we gained by
     // playing the game to more accurately score the nodes in the game
-    fn backtrack(&mut self) {
+    fn backtrack(&mut self, tt: &TranspositionTable) {
         use rand::Rng;
         fn wdl(x: i32) -> f32 {
             1.0 / (1.0 + ((-x as f32) * 2.55 / 400.0).exp())
@@ -257,11 +255,11 @@ impl Game {
                 let it = movelist.moves.iter().filter(|x| !x.is_null());
 
                 if it.count() != 1 {
-                    p.choose_second();
+                    p.choose_second(tt);
                     if !p.choice.unwrap().is_null() {
                         pos.play_unchecked(p.choice.unwrap());
                         let mut n = Node::from_position(&pos);
-                        let s = -n.value();
+                        let s = -n.value(tt);
 
                         p.value = std::cmp::max(v_b, s);
                     }
