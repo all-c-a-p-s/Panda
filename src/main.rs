@@ -10,6 +10,7 @@ pub mod ordering;
 pub mod perft;
 pub mod rng;
 pub mod search;
+pub mod thread;
 pub mod transposition;
 pub mod types;
 pub mod uci;

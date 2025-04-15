@@ -1,5 +1,7 @@
 use std::time::Instant;
 
+use crate::thread::*;
+use crate::transposition::*;
 use crate::types::*;
 use crate::*;
 
@@ -11,9 +13,24 @@ pub enum CommandType {
     Position,
     Perft,
     Go,
+    SetOption,
     Stop,
     Quit,
     D, //not an actual UCI command but can be used to debug and display the board
+}
+
+pub struct UciOptions {
+    pub hash_size: usize,
+    pub threads: usize,
+}
+
+impl Default for UciOptions {
+    fn default() -> Self {
+        Self {
+            hash_size: 256,
+            threads: 4,
+        }
+    }
 }
 
 impl Move {
@@ -53,6 +70,7 @@ pub fn recognise_command(command: &str) -> CommandType {
                 CommandType::Go
             }
         }
+        "setoption" => CommandType::SetOption,
         "stop" => CommandType::Stop,
         "quit" => CommandType::Quit,
         "d" => CommandType::D,
@@ -154,7 +172,12 @@ pub fn parse_position(command: &str, b: &mut Board) {
     };
 }
 
-pub fn parse_special_go(command: &str, b: &mut Board, s: &mut Searcher) -> MoveData {
+pub fn parse_special_go(
+    command: &str,
+    b: &mut Board,
+    tt: &TranspositionTable,
+    opts: &UciOptions,
+) -> MoveData {
     //special combination of go and position command by lichess bot api
     reset(b);
     let words = command.split_whitespace().collect::<Vec<&str>>();
@@ -217,13 +240,19 @@ pub fn parse_special_go(command: &str, b: &mut Board, s: &mut Searcher) -> MoveD
         fake_go_command += " ";
     }
 
-    parse_go(fake_go_command.as_str(), b, s)
+    parse_go(fake_go_command.as_str(), b, tt, opts)
 }
 
-pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveData {
+pub fn parse_go(
+    command: &str,
+    position: &mut Board,
+    tt: &TranspositionTable,
+    opts: &UciOptions,
+) -> MoveData {
     let words = command.split_whitespace().collect::<Vec<&str>>();
     //go wtime x btime x winc x binc x movestogo x
 
+    let max_nodes = INFINITY as usize;
     let mut movetime = 0;
     // if go command sets move time for engine
 
@@ -231,10 +260,11 @@ pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveDa
 
     if words[1] == "moves" {
         //special command lichess-bot protocol uses
-        return parse_special_go(command, position, s);
+        return parse_special_go(command, position, tt, opts);
     } else if words[1] == "movetime" {
         movetime = words[2].parse().expect("failed to convert movetime to int");
-        return iterative_deepening(position, 0, 0, 0, movetime, s, true);
+        let s = Searcher::new(&tt);
+        return s.start_search(position, 0, 0, 0, movetime, max_nodes, opts.threads);
     }
 
     let w_time = words[2].parse().expect("failed to convert wtime to int");
@@ -263,7 +293,7 @@ pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveDa
                 .parse()
                 .expect("failed to convert movestogo to int");
         }
-        _ => return parse_special_go(command, position, s),
+        _ => return parse_special_go(command, position, tt, opts),
     };
 
     if words.len() > 9 {
@@ -282,14 +312,15 @@ pub fn parse_go(command: &str, position: &mut Board, s: &mut Searcher) -> MoveDa
         Colour::Black => b_inc,
     };
 
-    iterative_deepening(
+    let s = Searcher::new(&tt);
+    s.start_search(
         position,
         engine_time,
         engine_inc,
         moves_to_go,
         movetime,
-        s,
-        true,
+        max_nodes,
+        opts.threads,
     )
 }
 
@@ -320,7 +351,21 @@ fn parse_perft(command: &str, position: &mut Board) {
     }
 }
 
-pub fn print_thinking(depth: u8, eval: i32, s: &Searcher, start: Instant) {
+fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable) {
+    let words = command.split_whitespace().collect::<Vec<_>>();
+    match words[..] {
+        ["setoption", "name", "Hash", "value", a] => {
+            opts.hash_size = a.parse().expect("hash size should be a +ve integer");
+            tt.resize(opts.hash_size);
+        }
+        ["setoption", "name", "Threads", "value", b] => {
+            opts.threads = b.parse().expect("thread count should be a +ve integer")
+        }
+        _ => {}
+    }
+}
+
+pub fn print_thinking(depth: u8, eval: i32, s: &Thread, start: Instant) {
     println!(
         "info depth {} score cp {} nodes {} pv{} time {} nps {}",
         depth,
@@ -348,7 +393,10 @@ pub fn print_thinking(depth: u8, eval: i32, s: &Searcher, start: Instant) {
 
 pub fn uci_loop() {
     let mut board = Board::from(STARTPOS);
-    let mut s = Searcher::new(Instant::now(), usize::MAX);
+    let mut tt = TranspositionTable::in_megabytes(256);
+
+    let mut opts = UciOptions::default();
+
     loop {
         let mut buffer = String::new();
         let ok = std::io::stdin().read_line(&mut buffer);
@@ -368,7 +416,7 @@ pub fn uci_loop() {
             CommandType::IsReady => parse_isready(buffer.as_str()),
             CommandType::Position => parse_position(buffer.as_str(), &mut board),
             CommandType::Go => {
-                let move_data = parse_go(buffer.as_str(), &mut board, &mut s);
+                let move_data = parse_go(buffer.as_str(), &mut board, &tt, &opts);
                 if move_data.m.is_null() {
                     break;
                 }
@@ -392,6 +440,7 @@ pub fn uci_loop() {
                 });
             }
             CommandType::Perft => parse_perft(buffer.as_str(), &mut board),
+            CommandType::SetOption => set_options(buffer.as_str(), &mut opts, &mut tt),
             CommandType::UciNewGame => board = Board::from(STARTPOS),
             _ => {}
         }

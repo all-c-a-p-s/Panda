@@ -2,9 +2,12 @@ use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
 use std::fmt::{self, Display};
 use std::io::Write;
+use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::thread::*;
+use crate::transposition::TranspositionTable;
 use crate::*;
 
 const OPENING_CP_MARGIN: i32 = 20;
@@ -67,14 +70,16 @@ impl Node {
 
     // this function merely needs to determine the value of the node, not of its moves
     fn value(&mut self) -> i32 {
-        let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10), 16384);
-        let move_data = iterative_deepening(&mut self.position, 0, 0, 0, 10, &mut searcher, false);
+        let tt = TranspositionTable::in_megabytes(16);
+        let s = Searcher::new(&tt);
+        let move_data = s.start_search(&mut self.position, 0, 0, 0, 10, 16384, 1);
         move_data.eval
     }
 
     pub fn choose_move(&mut self) {
-        let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10), 16384);
-        let move_data = iterative_deepening(&mut self.position, 0, 0, 0, 10, &mut searcher, false);
+        let tt = TranspositionTable::in_megabytes(16);
+        let s = Searcher::new(&tt);
+        let move_data = s.start_search(&mut self.position, 0, 0, 0, 10, 16384, 1);
 
         self.choice = Some(move_data.m);
         self.value = move_data.eval;
@@ -100,11 +105,11 @@ impl Node {
                 continue;
             };
 
-            // node limit should be a multiple of 4096
-            let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10), 8192);
-            searcher.do_pruning = false;
+            let tt = TranspositionTable::in_megabytes(16);
+            let searcher = Searcher::new(&tt);
+            let move_data = searcher.start_search(&mut self.position, 0, 0, 0, 10, 16384, 1);
 
-            let score = -searcher.negamax(&mut self.position, 3, -INFINITY, INFINITY, false);
+            let score = -move_data.eval;
             scores.push((score, m));
             best_score = best_score.max(score);
 
@@ -130,9 +135,12 @@ impl Node {
     pub fn choose_second(&mut self) {
         let m = self.choice.unwrap();
 
-        let mut searcher = Searcher::new(Instant::now() + Duration::from_millis(10), 8192);
-        searcher.info.excluded[0] = Some(m);
-        let move_data = iterative_deepening(&mut self.position, 0, 0, 0, 10, &mut searcher, false);
+        let tt = TranspositionTable::in_megabytes(16);
+        let stop = AtomicBool::new(false);
+
+        let mut t = Thread::new(Instant::now() + Duration::from_millis(10), 8192, &tt, &stop);
+        t.info.excluded[0] = Some(m);
+        let move_data = iterative_deepening(&mut self.position, 10, 10, &mut t, false);
         self.choice = Some(move_data.m);
     }
 }

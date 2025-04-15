@@ -1,6 +1,7 @@
 use crate::movegen::*;
 use crate::r#move::*;
 use crate::search::*;
+use crate::thread::*;
 use crate::types::*;
 use crate::*;
 
@@ -159,7 +160,7 @@ impl Move {
         b.side_to_move != colour
     }
 
-    pub fn score_move(self, b: &mut Board, s: &Searcher, hash_move: &Move) -> i32 {
+    pub fn score_move(self, b: &mut Board, s: &Thread, hash_move: &Move) -> i32 {
         /*
           MOVE ORDER:
         - TT Move
@@ -220,7 +221,7 @@ pub struct MoveOrderEntry<'a> {
 }
 
 impl MoveList {
-    pub fn order_moves(&mut self, board: &mut Board, s: &Searcher, best_move: &Move) {
+    pub fn order_moves(&mut self, board: &mut Board, s: &Thread, best_move: &Move) {
         let mut ordered_moves = [MoveOrderEntry {
             m: &NULL_MOVE,
             score: -INFINITY,

@@ -30,6 +30,7 @@ pub struct MoveList {
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
+#[repr(C)]
 pub struct Move {
     pub data: u16,
 }

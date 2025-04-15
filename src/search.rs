@@ -5,6 +5,7 @@ use crate::magic::*;
 use crate::movegen::*;
 use crate::ordering::*;
 use crate::r#move::*;
+use crate::thread::*;
 use crate::transposition::*;
 use crate::types::*;
 use crate::uci::*;
@@ -13,11 +14,12 @@ use crate::zobrist::{BLACK_TO_MOVE, EP_KEYS};
 use std::cmp;
 #[allow(unused_imports)]
 use std::collections::HashMap;
+use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
 
 pub const INFINITY: i32 = 1_000_000_000;
 pub const MAX_PLY: usize = 64;
-pub const MAX_SEARCH_DEPTH: usize = 32;
+pub const MAX_SEARCH_DEPTH: usize = 128;
 pub const REDUCTION_LIMIT: u8 = 2;
 
 const FULL_DEPTH_MOVES: u8 = 1;
@@ -55,93 +57,9 @@ const DO_SINGULARITY_DE: bool = false;
 
 pub const MAX_GAME_PLY: usize = 1024;
 
-const MIN_MOVE_TIME: usize = 1; //make sure move time is never 0
-const MOVE_OVERHEAD: usize = 50;
-
 #[allow(unused)]
 const TIME_TO_START_SEARCH: usize = 0; //initialise big TT (if not using HashMap)
                                        //leave 100ms total margin
-
-#[derive(Copy, Clone)]
-struct SearchStackEntry {
-    eval: i32,
-}
-
-pub struct SearchInfo {
-    ss: [SearchStackEntry; MAX_SEARCH_DEPTH],
-    lmr_table: LMRTable,
-    pub history_table: [[i32; 64]; 12],
-    pub killer_moves: [[Move; MAX_PLY]; 2],
-    pub excluded: [Option<Move>; MAX_PLY],
-}
-
-struct LMRTable {
-    reduction_table: [[[i32; 32]; 32]; 2],
-}
-
-impl Default for SearchStackEntry {
-    fn default() -> Self {
-        Self { eval: -INFINITY }
-    }
-}
-
-impl Default for LMRTable {
-    fn default() -> Self {
-        //formula for reductions from Weiss chess engine
-        let mut reduction_table = [[[0; 32]; 32]; 2];
-        for depth in 0..32 {
-            for played in 0..32 {
-                reduction_table[0][depth][played] =
-                    (0.33 + f64::ln(depth as f64) * f64::ln(played as f64) / 3.20) as i32;
-                //tactical move
-                reduction_table[1][depth][played] =
-                    (1.64 + f64::ln(depth as f64) * f64::ln(played as f64) / 2.80) as i32;
-                //quiet move
-            }
-        }
-        LMRTable { reduction_table }
-    }
-}
-
-impl Default for SearchInfo {
-    fn default() -> Self {
-        Self {
-            ss: [SearchStackEntry::default(); MAX_SEARCH_DEPTH],
-            lmr_table: LMRTable::default(),
-            history_table: [[0i32; 64]; 12],
-            killer_moves: [[NULL_MOVE; 64]; 2],
-            excluded: [None; 64],
-        }
-    }
-}
-
-pub struct Searcher {
-    pub pv_length: [usize; 64],
-    pub pv: [[Move; MAX_PLY]; MAX_PLY],
-    pub tt: HashMap<u64, TTEntry>,
-    pub ply: usize,
-    pub nodes: usize,
-    pub timer: Timer,
-    pub moves_fully_searched: usize,
-    pub do_pruning: bool,
-    pub info: SearchInfo,
-}
-
-pub struct Timer {
-    stopped: bool,
-    max_nodes: usize,
-    end_time: Instant,
-}
-
-impl Default for Timer {
-    fn default() -> Self {
-        Self {
-            stopped: false,
-            max_nodes: 0,
-            end_time: Instant::now(),
-        }
-    }
-}
 
 struct NullMoveUndo {
     ep: Option<Square>,
@@ -262,41 +180,25 @@ fn is_drawn(position: &Board) -> bool {
     is_insufficient_material(position)
 }
 
-impl Searcher {
-    pub fn new(end_time: Instant, max_nodes: usize) -> Self {
-        let timer = Timer {
-            stopped: false,
-            end_time,
-            max_nodes,
-        };
-
-        Searcher {
-            pv_length: [0usize; 64],
-            pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
-            tt: HashMap::new(),
-            ply: 0,
-            nodes: 0,
-            timer,
-            moves_fully_searched: 0,
-            do_pruning: true,
-            info: SearchInfo::default(),
-        }
-    }
-
+impl Thread<'_> {
     fn should_check_exit(&self) -> bool {
         const CHECK_INTERVAL: usize = 4095;
         self.nodes & CHECK_INTERVAL == 0
     }
 
     fn should_exit(&mut self) -> bool {
-        if self.timer.stopped {
+        if self.stop.load(Relaxed) {
             return true;
         } else if self.should_check_exit() {
-            self.timer.stopped =
-                Instant::now() > self.timer.end_time || self.nodes >= self.timer.max_nodes;
-            return self.timer.stopped;
+            let done = Instant::now() > self.timer.end_time || self.nodes >= self.timer.max_nodes;
+            self.stop.store(done, Relaxed);
+            return done;
         }
         false
+    }
+
+    fn is_stopped(&self) -> bool {
+        self.stop.load(Relaxed)
     }
 
     //The purpose of the singularity() function is to prove that a move is better than alternatives by
@@ -670,7 +572,7 @@ impl Searcher {
             position.undo_move(m, &commit);
             self.ply -= 1;
 
-            if self.timer.stopped {
+            if self.is_stopped() {
                 return 0;
             }
 
@@ -705,7 +607,7 @@ impl Searcher {
             };
         }
 
-        if !self.timer.stopped {
+        if !self.is_stopped() {
             let hash_entry = TTEntry::new(depth, alpha, hash_flag, best_move, position.hash_key);
 
             self.tt.write(position.hash_key, hash_entry);
@@ -809,7 +711,7 @@ impl Searcher {
             position.undo_move(c, &commit);
             self.ply -= 1;
 
-            if self.timer.stopped {
+            if self.is_stopped() {
                 return 0;
             }
 
@@ -824,7 +726,7 @@ impl Searcher {
         }
 
         //write eval to hash table
-        if !self.timer.stopped {
+        if !self.is_stopped() {
             let hash_entry = TTEntry::new(0, alpha, hash_flag, best_move, position.hash_key);
 
             self.tt.write(position.hash_key, hash_entry);
@@ -888,20 +790,13 @@ impl Searcher {
         }
     }
 
-    pub fn reset_searcher(&mut self) {
+    pub fn reset_thread(&mut self) {
         //try to keep tt, history and killer moves
         self.nodes = 0;
         self.pv_length = [0; 64];
         self.pv = [[NULL_MOVE; MAX_PLY]; MAX_PLY];
         self.ply = 0;
         self.moves_fully_searched = 0;
-
-        self.timer.stopped = false;
-
-        //not clearing seems to be worse as even though the first few search depths are instant
-        //the next depths don't have advantages of iterative deepening like pv and move ordering
-        //heuristics
-        self.tt.clear();
 
         //reset move ordering heuristics
         self.info.killer_moves = [[NULL_MOVE; MAX_PLY]; 2];
@@ -914,34 +809,6 @@ pub struct MoveData {
     pub nodes: usize,
     pub eval: i32,
     pub pv: String,
-}
-
-//returns ideal time window, hard deadline
-pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize) -> (usize, usize) {
-    if time < MOVE_OVERHEAD {
-        return (
-            cmp::max(time / 2, MIN_MOVE_TIME),
-            cmp::max(time / 2, MIN_MOVE_TIME),
-        );
-    }
-
-    let time_until_flag = time - MOVE_OVERHEAD;
-
-    let m = if moves_to_go == 0 {
-        40
-    } else {
-        moves_to_go.clamp(2, 40)
-    };
-
-    //note time - increment must be +ve since we got increment last turn
-    let average_move_time = time_until_flag / m; // I guess this ignores increment so variable
-                                                 // name is a lie
-    let ideal_time = (average_move_time * 3) / 2 + increment;
-    let t = cmp::min(ideal_time, time_until_flag);
-
-    let max_time = cmp::min(3 * t, (time_until_flag * 2) / 3);
-
-    (cmp::max(t, MIN_MOVE_TIME), max_time)
 }
 
 struct IterDeepData {
@@ -976,7 +843,7 @@ impl IterDeepData {
     }
 }
 
-fn aspiration_window(position: &mut Board, s: &mut Searcher, id: &mut IterDeepData) -> i32 {
+fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData) -> i32 {
     loop {
         let eval = s.negamax(
             position,
@@ -986,7 +853,7 @@ fn aspiration_window(position: &mut Board, s: &mut Searcher, id: &mut IterDeepDa
             false,
         );
 
-        if s.timer.stopped {
+        if s.is_stopped() {
             if s.moves_fully_searched > 0 {
                 id.pv = s.pv;
                 id.pv_length = s.pv_length;
@@ -1034,37 +901,16 @@ fn aspiration_window(position: &mut Board, s: &mut Searcher, id: &mut IterDeepDa
 
 pub fn iterative_deepening(
     position: &mut Board,
-    time_left: usize,
-    inc: usize,
-    moves_to_go: usize,
-    movetime: usize,
-    s: &mut Searcher,
+    soft_limit: usize,
+    hard_limit: usize,
+    s: &mut Thread,
     show_thinking: bool,
 ) -> MoveData {
     let start = Instant::now();
 
     //TODO: no aspiration window for first few depths
 
-    // Soft-limit vs Hard-limit is an idea explained to me by the author of Sirius
-    // Soft limit: if you complete an iteration and the time taken > this, exit
-    // Hard limit: if you are currently searching (i.e. in the middle of the tree) and
-    //             time taken > this, then exit search
-    // in practice you should mostly exit at the soft-limit
-    let (soft_limit, hard_limit) = match movetime {
-        0 => move_time(time_left, inc, moves_to_go, position.ply),
-
-        k => {
-            if k <= MOVE_OVERHEAD {
-                let t = cmp::max(MIN_MOVE_TIME, k / 2);
-                (t, t)
-            } else {
-                let t = cmp::max(MIN_MOVE_TIME, k - MOVE_OVERHEAD);
-                (t, t)
-            }
-        }
-    };
-
-    s.reset_searcher();
+    s.reset_thread();
     s.timer.end_time = start + Duration::from_millis(hard_limit as u64);
 
     let soft_limit = Instant::now() + Duration::from_millis(soft_limit as u64);
@@ -1073,7 +919,7 @@ pub fn iterative_deepening(
     while (id.depth as usize) < MAX_SEARCH_DEPTH {
         let eval = aspiration_window(position, s, &mut id);
 
-        if s.timer.stopped {
+        if s.is_stopped() {
             assert_ne!(id.depth, 0);
             break;
         }
