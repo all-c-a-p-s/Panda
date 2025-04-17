@@ -118,6 +118,8 @@ pub fn parse_uci(command: &str) {
     if command == "uci" {
         println!("uciok");
         println!("id name Panda 1.0");
+        println!("option name Threads type spin default 1 min 1 max 256");
+        println!("option name Hash type spin default 16 min 1 max 1048576");
         println!("id author Sebastiano Rebonato-Scott");
     }
 }

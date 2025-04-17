@@ -669,16 +669,13 @@ impl Thread<'_> {
 
         captures.order_moves(position, self, &best_move);
 
-        //TODO: try skipping quiets after we've proved we're not mated and we've seen a few
-
         for c in captures.moves {
             if c.is_null() {
                 //no more pseudo-legal moves
                 break;
             }
 
-            let worst_case = SEE_VALUES
-                [piece_type(unsafe { position.pieces_array[c.square_to()].unwrap_unchecked() })]
+            let worst_case = SEE_VALUES[piece_type(position.get_piece_at(c.square_to()))]
                 - SEE_VALUES[piece_type(c.piece_moved(position))];
 
             if eval + worst_case > beta {
