@@ -42,4 +42,4 @@ Here are some of the many resources without which this engine would be much less
 - [Weiss](https://github.com/TerjeKir/weiss), which has incredibly clear code in its search function
 - [Ethereal](https://github.com/AndyGrant/Ethereal) - Panda's SEE implementation is entirely based on Ethereal's
 - [Carp](https://github.com/dede1751/carp) - extremely clear Rust code, which is always useful to read when I'm struggling to understand something
-- [bullet](https://github.com/jw1912/bullet/tree/main), which I use to train Panda's networks
+- Jamie Whiting for creating [bullet](https://github.com/jw1912/bullet/tree/main), which I use to train Panda's networks, and [akimbo](https://github.com/jw1912/akimbo/tree/main), which Panda's Lazy SMP implementation is inspired by
