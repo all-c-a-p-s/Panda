@@ -153,7 +153,11 @@ fn is_insufficient_material(b: &Board) -> bool {
     {
         return false;
     }
-    if count(b.bitboards[Piece::WB]) >= 2 || count(b.bitboards[Piece::BB]) >= 2 {
+    if count(b.bitboards[Piece::WB]) >= 2
+        || count(b.bitboards[Piece::BB]) >= 2
+        || count(b.bitboards[Piece::WB]) >= 1 && count(b.bitboards[Piece::WN]) >= 1
+        || count(b.bitboards[Piece::BB]) >= 1 && count(b.bitboards[Piece::BN]) >= 1
+    {
         return false;
     }
     count(b.bitboards[Piece::WN]) <= 2 && count(b.bitboards[Piece::BN]) <= 2
