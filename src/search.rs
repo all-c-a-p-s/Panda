@@ -44,7 +44,6 @@ const ALPHA_PRUNING_MARGIN: i32 = 2000;
 const SEE_PRUNING_DEPTH: i32 = 4;
 const SEE_QUIET_MARGIN: i32 = 100;
 const SEE_NOISY_MARGIN: i32 = 70;
-#[allow(unused)]
 const SEE_QSEARCH_MARGIN: i32 = 1;
 
 #[allow(unused)]
@@ -921,7 +920,6 @@ pub fn iterative_deepening(
         let eval = aspiration_window(position, s, &mut id);
 
         if s.is_stopped() {
-            assert_ne!(id.depth, 0);
             break;
         }
 

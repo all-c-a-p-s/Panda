@@ -144,8 +144,9 @@ impl TranspositionTable {
         self.tt.iter().for_each(|entry| entry.zero());
     }
 
-    pub fn resize(&mut self, size: usize) {
-        self.size = size << (20 / size_of::<TTEntry>());
+    pub fn resize(&mut self, mbs: usize) {
+        let x = (mbs.max(1) as f32).log2() as usize;
+        self.size = 1 << (x + 16);
         self.mask = self.size - 1;
         self.tt.resize_with(self.size, TTEntryInternal::default);
     }
