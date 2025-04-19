@@ -28,7 +28,7 @@ struct Network {
     output_bias: i16,
 }
 
-static MODEL: Network = unsafe { mem::transmute(*include_bytes!("./nets/quantised_128.bin")) };
+static MODEL: Network = unsafe { mem::transmute(*include_bytes!("./nets/quantised_128_20.bin")) };
 
 type SideAccumulator = [i16; HL_SIZE];
 

@@ -44,7 +44,7 @@ enum Mode {
 const ONE_HOUR: u64 = 3600;
 #[allow(unused)]
 const DATAGEN_PATH: &str = "/Users/seba/rs/bullet/datagen/set-backtracking-001.txt";
-//running entry count: 56.8M
+//running entry count: 72.7M
 //this comment is here so I don't have to load the whole file into a string to count entries
 //instead I keep track of the number of entries added each session
 //for reference, 1M entries ~= 78MB (txt format)
