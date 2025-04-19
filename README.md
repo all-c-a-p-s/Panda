@@ -16,7 +16,7 @@ By far the most exciting game I've seen it play is [this one](https://www.chess.
 - UCI compliant (no GUI)
 - magic bitboard move generation
 - Alpha-Beta search with various enhancements
-- NNUE with architecture (768->128)x2 -> 1, trained on self-play
+- NNUE with architecture (768->256)x2 -> 1, trained on self-play
 - custom datagen method
 
 ## Lichess Bot
