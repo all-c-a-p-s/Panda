@@ -156,6 +156,7 @@ impl<'a> Searcher<'a> {
     }
     //comment is for threads variable which is unused in datagen mode
     #[allow(unused)]
+    #[allow(clippy::too_many_arguments)]
     pub fn start_search(
         &self,
         position: &mut Board,
@@ -207,19 +208,17 @@ impl<'a> Searcher<'a> {
         #[cfg(not(feature = "datagen"))]
         std::thread::scope(|s| {
             let main_handle = s.spawn(|| {
-                let move_data = iterative_deepening(
+                iterative_deepening(
                     &mut position.clone(),
                     soft_limit,
                     hard_limit,
                     &mut main_thread,
                     true,
-                );
-
-                return move_data;
+                )
             });
 
             for _ in 0..threads - 1 {
-                let mut pos = position.clone();
+                let mut pos = *position;
                 let mut worker = Thread::new(end_time, max_nodes, self.tt, &stop);
                 s.spawn(move || {
                     iterative_deepening(&mut pos, soft_limit, hard_limit, &mut worker, false)

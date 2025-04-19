@@ -265,7 +265,7 @@ pub fn parse_go(
         return parse_special_go(command, position, tt, opts);
     } else if words[1] == "movetime" {
         movetime = words[2].parse().expect("failed to convert movetime to int");
-        let s = Searcher::new(&tt);
+        let s = Searcher::new(tt);
         return s.start_search(position, 0, 0, 0, movetime, max_nodes, opts.threads);
     }
 
@@ -314,7 +314,7 @@ pub fn parse_go(
         Colour::Black => b_inc,
     };
 
-    let s = Searcher::new(&tt);
+    let s = Searcher::new(tt);
     s.start_search(
         position,
         engine_time,

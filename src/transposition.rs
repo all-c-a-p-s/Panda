@@ -18,7 +18,7 @@ pub struct TTRef<'a> {
 impl std::ops::Deref for TTRef<'_> {
     type Target = TranspositionTable;
     fn deref(&self) -> &Self::Target {
-        &self.tt
+        self.tt
     }
 }
 
@@ -87,6 +87,7 @@ impl TTEntry {
         }
     }
 
+    #[allow(clippy::wrong_self_convention)]
     fn to_u64s(&self) -> (u64, u64) {
         let key = self.hash_key;
 
@@ -144,7 +145,7 @@ impl TranspositionTable {
     }
 
     pub fn resize(&mut self, size: usize) {
-        self.size = size << 20 / size_of::<TTEntry>();
+        self.size = size << (20 / size_of::<TTEntry>());
         self.mask = self.size - 1;
         self.tt.resize_with(self.size, TTEntryInternal::default);
     }

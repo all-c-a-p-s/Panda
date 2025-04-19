@@ -104,7 +104,7 @@ impl Node {
             };
 
             let stop = AtomicBool::new(false);
-            let mut t = Thread::new(Instant::now() + Duration::from_millis(1), 4096, &tt, &stop);
+            let mut t = Thread::new(Instant::now() + Duration::from_millis(1), 4096, tt, &stop);
 
             let score = -t.negamax(&mut self.position, 4, -INFINITY, INFINITY, false);
             scores.push((score, m));
@@ -134,7 +134,7 @@ impl Node {
 
         let stop = AtomicBool::new(false);
 
-        let mut t = Thread::new(Instant::now() + Duration::from_millis(10), 8192, &tt, &stop);
+        let mut t = Thread::new(Instant::now() + Duration::from_millis(10), 8192, tt, &stop);
         t.info.excluded[0] = Some(m);
         let move_data = iterative_deepening(&mut self.position, 10, 10, &mut t, false);
         self.choice = Some(move_data.m);

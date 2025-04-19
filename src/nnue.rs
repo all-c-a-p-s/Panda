@@ -7,7 +7,7 @@ use crate::types::*;
 
 // ON or OFF for each piece / colour / square
 const NUM_FEATURES: usize = 6 * 2 * 64;
-const HL_SIZE: usize = 128;
+const HL_SIZE: usize = 256;
 
 const CR_MIN: i16 = 0;
 const CR_MAX: i16 = 255;
@@ -28,7 +28,7 @@ struct Network {
     output_bias: i16,
 }
 
-static MODEL: Network = unsafe { mem::transmute(*include_bytes!("./nets/quantised_128_20.bin")) };
+static MODEL: Network = unsafe { mem::transmute(*include_bytes!("./nets/quantised_256.bin")) };
 
 type SideAccumulator = [i16; HL_SIZE];
 
