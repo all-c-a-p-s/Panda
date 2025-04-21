@@ -23,7 +23,7 @@ By far the most exciting game I've seen it play is [this one](https://www.chess.
 
 I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lichess bot for Panda. Unfortunately, it isn't online very often since I host it locally.
 
-[Panda Lichess Bot](https://lichess.org/@/BotNickal)
+[Panda Lichess Bot](https://lichess.org/@/RedPandaBot)
 
 ## Todo:
 - faster perft results
