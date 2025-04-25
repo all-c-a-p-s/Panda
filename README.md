@@ -19,6 +19,13 @@ By far the most exciting game I've seen it play is [this one](https://www.chess.
 - NNUE with architecture (768->256)x2 -> 1, trained on self-play
 - custom datagen method
 
+## Stats
+<div align="center">
+
+|                           Version                            |     Release Date    | [CCRL 40/15](https://www.computerchess.org.uk/ccrl/4040/) | [CCRL Blitz](https://computerchess.org.uk/ccrl/404/) | Notes |
+| :-----------------------------------------------------------:|:-------------------:|:----:|:----:|:---------------------------:|
+| [1.0](https://github.com/all-c-a-p-s/Panda/releases/tag/1.0) |  20th    April 2024 | 3134 |  -   |       First Release         |
+
 ## Lichess Bot
 
 I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lichess bot for Panda. Unfortunately, it isn't online very often since I host it locally.
