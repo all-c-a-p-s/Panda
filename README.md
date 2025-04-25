@@ -20,8 +20,6 @@ By far the most exciting game I've seen it play is [this one](https://www.chess.
 - custom datagen method
 
 ## Stats
-<div align="center">
-
 |                           Version                            |     Release Date    | [CCRL 40/15](https://www.computerchess.org.uk/ccrl/4040/) | [CCRL Blitz](https://computerchess.org.uk/ccrl/404/) | Notes |
 | :-----------------------------------------------------------:|:-------------------:|:----:|:----:|:---------------------------:|
 | [1.0](https://github.com/all-c-a-p-s/Panda/releases/tag/1.0) |  20th    April 2024 | 3134 |  -   |       First Release         |
