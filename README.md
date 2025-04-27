@@ -1,4 +1,10 @@
 <h1 align="center">Panda</h1>
+<style>
+img {
+  border: 5px solid #555;
+}
+</style>
+
 <p align="center">
 <img src="https://github.com/all-c-a-p-s/Panda/blob/main/panda_logo_small.png">
 </p>
@@ -35,19 +41,19 @@ I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lich
 
 [Panda Lichess Bot](https://lichess.org/@/RedPandaBot)
 
-## Todo:
+## Todo
 - faster perft results
 - tune thresholds in search function
 - endgame tablebases
 - stronger NNUE
 
-## Usage:
+## Usage
 - [Download Rust](https://www.rust-lang.org/)
 - clone the repo for dev build, or get the latest published version from [Releases](https://github.com/all-c-a-p-s/Panda/releases)
 - Build and run the project using ```make run``` or build to an executable using ```make build```
 - connect to a UCI gui such as [CuteChess](https://cutechess.com/)
 
-## Acknowledgements
+## Credits
 Here are some of the many resources without which this engine would be much less strong:
 - [BBC Chess Engine](https://github.com/maksimKorzh/bbc) + videos, which explain magic bitboards very clearly
 - [Weiss](https://github.com/TerjeKir/weiss), which has incredibly clear code in its search function
