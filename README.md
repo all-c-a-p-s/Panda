@@ -1,12 +1,7 @@
 <h1 align="center">Panda</h1>
-<style>
-img {
-  border: 5px solid #555;
-}
-</style>
 
 <p align="center">
-<img src="https://github.com/all-c-a-p-s/Panda/blob/main/panda_logo_small.png">
+<kbd><img src="https://github.com/all-c-a-p-s/Panda/blob/main/panda_logo_small.png"></kbd>
 </p>
 
 Panda is a chess engine written in Rust (still a work in progress). I like working on this project for fun when I have free time. It is called Panda because:
