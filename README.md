@@ -1,8 +1,8 @@
 # Panda
 
-<p align="center">
-  <img src="https://github.com/all-c-a-p-s/Panda/blob/main/panda_logo_small.png" alt="Panda Logo"/>
-
+|![](panda_logo_small.png)|
+|:--:|
+|*Logo by Alex Brunetti*|
 
 Panda is a chess engine written in Rust (still a work in progress). I like working on this project for fun when I have free time. It is called Panda because:
 - pandas are black and white like a chess board
@@ -14,8 +14,6 @@ Panda is a chess engine written in Rust (still a work in progress). I like worki
 | :-----------------------------------------------------------:|:-------------------:|:----:|:----:|:---------------------------:|
 | [1.0](https://github.com/all-c-a-p-s/Panda/releases/tag/1.0) |  20th    April 2024 | 3134 |  -   |       First Release         |
 
-
-</p>
 
 
 ## What Makes Panda Interesting?
