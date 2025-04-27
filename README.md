@@ -1,4 +1,4 @@
-# Panda
+<h1 align="center">Panda</h1>
 
 |![](panda_logo_small.png)|
 |:--:|
