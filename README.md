@@ -43,8 +43,9 @@ I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lich
 
 ## Usage:
 - [Download Rust](https://www.rust-lang.org/)
+- clone the repo for dev build, or get the latest published version from [Releases](https://github.com/all-c-a-p-s/Panda/releases)
 - Build and run the project using ```make run``` or build to an executable using ```make build```
-- connect to a UCI gui such as CuteChess or Arena
+- connect to a UCI gui such as [CuteChess](https://cutechess.com/)
 
 ## Acknowledgements
 Here are some of the many resources without which this engine would be much less strong:
@@ -53,3 +54,4 @@ Here are some of the many resources without which this engine would be much less
 - [Ethereal](https://github.com/AndyGrant/Ethereal) - Panda's SEE implementation is entirely based on Ethereal's
 - [Carp](https://github.com/dede1751/carp) - extremely clear Rust code, which is always useful to read when I'm struggling to understand something
 - Jamie Whiting for creating [bullet](https://github.com/jw1912/bullet/tree/main), which I use to train Panda's networks, and [akimbo](https://github.com/jw1912/akimbo/tree/main), which Panda's Lazy SMP implementation is inspired by
+- @mcthouacbb for several helpful suggestions
