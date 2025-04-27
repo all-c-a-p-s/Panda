@@ -1,4 +1,4 @@
-<h1 align="center">Panda</h1>
+<h1 align="center">Panda, a UCI Chess Engine</h1>
 <p align="center">
 <img src="https://github.com/all-c-a-p-s/Panda/blob/main/panda_logo_small.png">
 </p>
