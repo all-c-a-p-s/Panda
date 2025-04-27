@@ -10,6 +10,7 @@ Panda is a chess engine written in Rust (still a work in progress). I like worki
 - red pandas are also pretty cool, and they are orange (like Rust)
 
 </p>
+
 ## Stats
 |                           Version                            |     Release Date    | [CCRL 40/15](https://www.computerchess.org.uk/ccrl/4040/) | [CCRL Blitz](https://computerchess.org.uk/ccrl/404/) | Notes |
 | :-----------------------------------------------------------:|:-------------------:|:----:|:----:|:---------------------------:|
