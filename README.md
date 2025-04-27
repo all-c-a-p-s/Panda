@@ -1,4 +1,4 @@
-<h1 align="center">Panda, a UCI Chess Engine</h1>
+<h1 align="center">Panda</h1>
 <p align="center">
 <img src="https://github.com/all-c-a-p-s/Panda/blob/main/panda_logo_small.png">
 </p>
@@ -54,4 +54,4 @@ Here are some of the many resources without which this engine would be much less
 - [Ethereal](https://github.com/AndyGrant/Ethereal) - Panda's SEE implementation is entirely based on Ethereal's
 - [Carp](https://github.com/dede1751/carp) - extremely clear Rust code, which is always useful to read when I'm struggling to understand something
 - Jamie Whiting for creating [bullet](https://github.com/jw1912/bullet/tree/main), which I use to train Panda's networks, and [akimbo](https://github.com/jw1912/akimbo/tree/main), which Panda's Lazy SMP implementation is inspired by
-- @mcthouacbb for several helpful suggestions
+- [@mcthouacbb](https://github.com/mcthouacbb) for several helpful suggestions
