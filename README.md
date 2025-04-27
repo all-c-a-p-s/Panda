@@ -3,11 +3,6 @@
 <img src="https://github.com/all-c-a-p-s/Panda/blob/main/panda_logo_small.png">
 </p>
 
-
-![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-orange.svg?style=for-the-badge)
-
-
 Panda is a chess engine written in Rust (still a work in progress). I like working on this project for fun when I have free time. It is called Panda because:
 - pandas are black and white like a chess board
 - pandas are pretty cool
