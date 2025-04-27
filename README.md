@@ -49,7 +49,6 @@ I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lich
 - connect to a UCI gui such as [CuteChess](https://cutechess.com/)
 
 ## Credits
-Here are some of the many resources without which this engine would be much less strong:
 - [BBC Chess Engine](https://github.com/maksimKorzh/bbc) + videos, which explain magic bitboards very clearly
 - [Weiss](https://github.com/TerjeKir/weiss), which has incredibly clear code in its search function
 - [Ethereal](https://github.com/AndyGrant/Ethereal) - Panda's SEE implementation is entirely based on Ethereal's
