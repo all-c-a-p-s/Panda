@@ -1,4 +1,6 @@
-![](panda_logo_small.png)
+<p align="center">
+  <img src="https://github.com/all-c-a-p-s/Panda/blob/main/panda_logo_small.png" alt="Panda Logo"/>
+</p>
 
 
 # Panda
