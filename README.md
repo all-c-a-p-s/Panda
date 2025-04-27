@@ -2,12 +2,21 @@
 
 <p align="center">
   <img src="https://github.com/all-c-a-p-s/Panda/blob/main/panda_logo_small.png" alt="Panda Logo"/>
-</p>
+
 
 Panda is a chess engine written in Rust (still a work in progress). I like working on this project for fun when I have free time. It is called Panda because:
 - pandas are black and white like a chess board
 - pandas are pretty cool
 - red pandas are also pretty cool, and they are orange (like Rust)
+
+## Stats
+|                           Version                            |     Release Date    | [CCRL 40/15](https://www.computerchess.org.uk/ccrl/4040/) | [CCRL Blitz](https://computerchess.org.uk/ccrl/404/) | Notes |
+| :-----------------------------------------------------------:|:-------------------:|:----:|:----:|:---------------------------:|
+| [1.0](https://github.com/all-c-a-p-s/Panda/releases/tag/1.0) |  20th    April 2024 | 3134 |  -   |       First Release         |
+
+
+</p>
+
 
 ## What Makes Panda Interesting?
 
@@ -22,10 +31,6 @@ By far the most exciting game I've seen it play is [this one](https://www.chess.
 - NNUE with architecture (768->256)x2 -> 1, trained on self-play
 - custom datagen method
 
-## Stats
-|                           Version                            |     Release Date    | [CCRL 40/15](https://www.computerchess.org.uk/ccrl/4040/) | [CCRL Blitz](https://computerchess.org.uk/ccrl/404/) | Notes |
-| :-----------------------------------------------------------:|:-------------------:|:----:|:----:|:---------------------------:|
-| [1.0](https://github.com/all-c-a-p-s/Panda/releases/tag/1.0) |  20th    April 2024 | 3134 |  -   |       First Release         |
 
 ## Lichess Bot
 
