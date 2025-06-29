@@ -19,37 +19,30 @@ use std::time::{Duration, Instant};
 
 pub const INFINITY: i32 = 1_000_000_000;
 pub const MAX_PLY: usize = 64;
+
 pub const REDUCTION_LIMIT: u8 = 2;
 
 const FULL_DEPTH_MOVES: u8 = 1;
 
-const SINGULARITY_DE_MARGIN: i32 = 40;
+// name, type, val, min, max
 
-#[allow(dead_code)]
-const NULLMOVE_MAX_DEPTH: u8 = 6;
-#[allow(dead_code)]
-const NULLMOVE_MIN_DEPTH: u8 = 3;
+tuneable_params! {
+    SINGULARITY_DE_MARGIN, i32, 35, 10, 150;
+    ASPIRATION_WINDOW, i32, 28, 10, 70;
+    RAZORING_MARGIN, i32, 312, 100, 500;
+    MAX_RAZOR_DEPTH, u8, 4, 1, 12;
+    BETA_PRUNING_DEPTH, u8, 6, 1, 12;
+    BETA_PRUNING_MARGIN, u8, 77, 20, 200;
+    ALPHA_PRUNING_DEPTH, u8, 4, 1, 12;
+    ALPHA_PRUNING_MARGIN, i32, 2034, 500, 5000;
+    SEE_PRUNING_DEPTH, i32, 4, 1, 12;
+    SEE_QUIET_MARGIN, i32, 100, 50, 300;
+    SEE_NOISY_MARGIN, i32, 58, 20, 250;
+    SEE_QSEARCH_MARGIN, i32, 3, 1, 100;
+    LMP_DEPTH, u8, 5, 1, 12;
+    IIR_DEPTH_MINIMUM, u8, 6, 1, 12;
+}
 
-const ASPIRATION_WINDOW: i32 = 40;
-
-const RAZORING_MARGIN: i32 = 300;
-const MAX_RAZOR_DEPTH: u8 = 4;
-
-const BETA_PRUNING_DEPTH: u8 = 6;
-const BETA_PRUNING_MARGIN: u8 = 80;
-
-const ALPHA_PRUNING_DEPTH: u8 = 4;
-const ALPHA_PRUNING_MARGIN: i32 = 2000;
-
-const SEE_PRUNING_DEPTH: i32 = 4;
-const SEE_QUIET_MARGIN: i32 = 100;
-const SEE_NOISY_MARGIN: i32 = 70;
-const SEE_QSEARCH_MARGIN: i32 = 1;
-
-#[allow(unused)]
-const LMP_DEPTH: u8 = 5;
-
-const IIR_DEPTH_MINIMUM: u8 = 6;
 const DO_SINGULARITY_EXTENSION: bool = true;
 const DO_SINGULARITY_DE: bool = false;
 
@@ -231,7 +224,10 @@ impl Thread<'_> {
 
         self.info.excluded[self.ply] = None;
 
-        if DO_SINGULARITY_DE && !pv_node && excluded_eval < threshold - SINGULARITY_DE_MARGIN {
+        if DO_SINGULARITY_DE
+            && !pv_node
+            && excluded_eval < threshold - read_param!(SINGULARITY_DE_MARGIN)
+        {
             Some(2)
         } else if excluded_eval < threshold {
             Some(1)
@@ -351,9 +347,10 @@ impl Thread<'_> {
             if !pv_node {
                 //Beta Pruning / Reverse Futility Pruning:
                 //If eval >= beta + some margin, assume that we can achieve at least beta
-                if depth <= BETA_PRUNING_DEPTH
+                if depth <= read_param!(BETA_PRUNING_DEPTH)
                     && static_eval
-                        - (BETA_PRUNING_MARGIN * cmp::max(depth - improving as u8, 0)) as i32
+                        - (read_param!(BETA_PRUNING_MARGIN) * cmp::max(depth - improving as u8, 0))
+                            as i32
                         >= beta
                 {
                     return static_eval;
@@ -361,15 +358,17 @@ impl Thread<'_> {
 
                 // Alpha Pruning:
                 // eval is so bad that even a huge margin fails to raise alpha
-                if depth <= ALPHA_PRUNING_DEPTH && static_eval + ALPHA_PRUNING_MARGIN <= alpha {
+                if depth <= read_param!(ALPHA_PRUNING_DEPTH)
+                    && static_eval + read_param!(ALPHA_PRUNING_MARGIN) <= alpha
+                {
                     return static_eval;
                 }
 
                 // Razoring:
                 // eval is very low so only realistic way to increase it is with captures
                 // we only need to qsearch to evaluate the position
-                if depth <= MAX_RAZOR_DEPTH
-                    && static_eval + RAZORING_MARGIN * (depth as i32) <= alpha
+                if depth <= read_param!(MAX_RAZOR_DEPTH)
+                    && static_eval + read_param!(RAZORING_MARGIN) * (depth as i32) <= alpha
                 {
                     let score = self.qsearch(position, alpha, beta);
                     if score > alpha {
@@ -403,7 +402,7 @@ impl Thread<'_> {
 
         // IIR: if we don't have a TT hit then move ordering here will be terrible
         // so its better to reduce and set up TT move for next iteration
-        if (pv_node || cutnode) && depth >= IIR_DEPTH_MINIMUM && !tt_move {
+        if (pv_node || cutnode) && depth >= read_param!(IIR_DEPTH_MINIMUM) && !tt_move {
             depth -= 1;
         }
 
@@ -455,11 +454,11 @@ impl Thread<'_> {
 
                 //SEE Pruning: if a move fails SEE by a depth-dependent threshold,
                 //prune it
-                if lmr_depth <= SEE_PRUNING_DEPTH && moves_seen > 1 && !pv_node {
+                if lmr_depth <= read_param!(SEE_PRUNING_DEPTH) && moves_seen > 1 && !pv_node {
                     let margin = if tactical {
-                        SEE_NOISY_MARGIN
+                        read_param!(SEE_NOISY_MARGIN)
                     } else {
-                        SEE_QUIET_MARGIN
+                        read_param!(SEE_QUIET_MARGIN)
                     };
                     let threshold = margin * depth as i32;
                     //prune if move fails to beat SEE threshold
@@ -474,7 +473,7 @@ impl Thread<'_> {
                     true => depth * depth + 2,
                     false => depth * depth / 2,
                 };
-                if depth <= LMP_DEPTH && moves_seen > lmp_threshold && !in_check {
+                if depth <= read_param!(LMP_DEPTH) && moves_seen > lmp_threshold && !in_check {
                     skip_quiets = true;
                 }
             }
@@ -687,7 +686,7 @@ impl Thread<'_> {
                 return beta;
             }
 
-            if !c.see(position, SEE_QSEARCH_MARGIN) {
+            if !c.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
                 //prune moves that fail see by threshold
                 continue;
             }
@@ -832,7 +831,7 @@ impl IterDeepData {
             eval: 0,
             pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
             pv_length: [0; MAX_PLY],
-            delta: ASPIRATION_WINDOW,
+            delta: read_param!(ASPIRATION_WINDOW),
             alpha: -INFINITY,
             beta: INFINITY,
             depth: 1,
@@ -871,7 +870,7 @@ fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData
             id.pv = s.pv;
             id.pv_length = s.pv_length;
 
-            id.delta = ASPIRATION_WINDOW;
+            id.delta = read_param!(ASPIRATION_WINDOW);
 
             id.alpha = eval - id.delta;
             id.beta = eval + id.delta;

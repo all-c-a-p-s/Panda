@@ -151,3 +151,43 @@ pub fn print_bitboard(bitboard: BitBoard) {
     }
     println!("  a b c d e f g h");
 }
+
+// example macro usage here: https://play.rust-lang.org/?version=stable&mode=debug&edition=2024&gist=6931d3e71060f2320e9944f799c51755
+
+#[macro_export]
+macro_rules! tuneable_params {
+    ($($name:ident, $t: ty, $val:expr, $min:expr, $max:expr;)*) => {
+        pub fn list_params() {
+            $(
+                println!("option name {} type spin default {} min {} max {}",
+                    stringify!($name),
+                    $val,
+                    $min,
+                    $max,
+                );
+            )*
+        }
+
+        pub mod params {
+            $(
+                pub static mut $name: $t = $val;
+            )*
+        }
+    };
+}
+pub(crate) use tuneable_params;
+
+#[macro_export]
+macro_rules! read_param {
+    ($name:ident) => {
+        unsafe { params::$name }
+    };
+}
+pub(crate) use read_param;
+
+#[macro_export]
+macro_rules! set_param {
+    ($name:ident, $val:expr) => {
+        unsafe { params::$name = $val }
+    };
+}
