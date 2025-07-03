@@ -414,7 +414,30 @@ fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable
             ["IIR_DEPTH_MINIMUM", "value", x] => {
                 set_param!(IIR_DEPTH_MINIMUM, x.parse().expect("should be integer"))
             }
-
+            ["HASH_MOVE_SCORE", "value", x] => {
+                set_param!(HASH_MOVE_SCORE, x.parse().expect("should be integer"))
+            }
+            ["PV_MOVE_SCORE", "value", x] => {
+                set_param!(PV_MOVE_SCORE, x.parse().expect("should be integer"))
+            }
+            ["QUEEN_PROMOTION", "value", x] => {
+                set_param!(QUEEN_PROMOTION, x.parse().expect("should be integer"))
+            }
+            ["WINNING_CAPTURE", "value", x] => {
+                set_param!(WINNING_CAPTURE, x.parse().expect("should be integer"))
+            }
+            ["FIRST_KILLER_MOVE", "value", x] => {
+                set_param!(FIRST_KILLER_MOVE, x.parse().expect("should be integer"))
+            }
+            ["SECOND_KILLER_MOVE", "value", x] => {
+                set_param!(SECOND_KILLER_MOVE, x.parse().expect("should be integer"))
+            }
+            ["LOSING_CAPTURE", "value", x] => {
+                set_param!(LOSING_CAPTURE, x.parse().expect("should be integer"))
+            }
+            ["UNDER_PROMOTION", "value", x] => {
+                set_param!(UNDER_PROMOTION, x.parse().expect("should be integer"))
+            }
             _ => {}
         },
 

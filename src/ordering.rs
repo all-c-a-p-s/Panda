@@ -5,15 +5,6 @@ use crate::thread::*;
 use crate::types::*;
 use crate::*;
 
-const HASH_MOVE_SCORE: i32 = 1_000_000;
-const PV_MOVE_SCORE: i32 = 500_000;
-const QUEEN_PROMOTION: i32 = 400_000;
-const WINNING_CAPTURE: i32 = 300_000;
-const FIRST_KILLER_MOVE: i32 = 200_000;
-const SECOND_KILLER_MOVE: i32 = 100_000;
-const LOSING_CAPTURE: i32 = -100_000;
-const UNDER_PROMOTION: i32 = -200_000;
-
 const MVV_LVA: [[i32; 6]; 6] = [
     //most valuable victim least valuable attacker
     [205, 204, 203, 202, 201, 200], //victim pawn
@@ -178,36 +169,34 @@ impl Move {
             //important for this to come before checking hash move
             //otherwise null move can get given hash move score
         } else if self == *hash_move {
-            HASH_MOVE_SCORE
+            read_param!(HASH_MOVE_SCORE)
             //before pv move because this has been verified by >= search depth
-        } else if self == s.pv[0][s.ply] {
-            PV_MOVE_SCORE
         } else if self.is_capture(b) {
             let victim_type =
                 piece_type(unsafe { b.pieces_array[self.square_to()].unwrap_unchecked() });
             let attacker_type = piece_type(self.piece_moved(b));
             let winning_capture = self.see(b, 0);
             match winning_capture {
-                true => WINNING_CAPTURE + MVV_LVA[victim_type][attacker_type],
-                false => LOSING_CAPTURE + MVV_LVA[victim_type][attacker_type],
+                true => read_param!(WINNING_CAPTURE) + MVV_LVA[victim_type][attacker_type],
+                false => read_param!(LOSING_CAPTURE) + MVV_LVA[victim_type][attacker_type],
             }
         } else if self.is_promotion() {
             //maybe this should fo before checking if capture
             //because of promotions that are also captures
             match self.promoted_piece() {
                 //promotions sorted by likelihood to be good
-                PieceType::Queen => QUEEN_PROMOTION,
-                PieceType::Knight => UNDER_PROMOTION,
-                PieceType::Rook => UNDER_PROMOTION,
-                PieceType::Bishop => UNDER_PROMOTION,
+                PieceType::Queen => read_param!(QUEEN_PROMOTION),
+                PieceType::Knight => read_param!(UNDER_PROMOTION),
+                PieceType::Rook => read_param!(UNDER_PROMOTION),
+                PieceType::Bishop => read_param!(UNDER_PROMOTION),
                 _ => unreachable!(),
             }
         } else if self.is_en_passant() {
             MVV_LVA[PieceType::Pawn][PieceType::Pawn]
         } else if s.info.killer_moves[0][s.ply] == self {
-            FIRST_KILLER_MOVE //after captures
+            read_param!(FIRST_KILLER_MOVE) //after captures
         } else if s.info.killer_moves[1][s.ply] == self {
-            SECOND_KILLER_MOVE
+            read_param!(SECOND_KILLER_MOVE)
         } else {
             s.info.history_table[self.piece_moved(b)][self.square_to()]
         }
