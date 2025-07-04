@@ -417,9 +417,6 @@ fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable
             ["HASH_MOVE_SCORE", "value", x] => {
                 set_param!(HASH_MOVE_SCORE, x.parse().expect("should be integer"))
             }
-            ["PV_MOVE_SCORE", "value", x] => {
-                set_param!(PV_MOVE_SCORE, x.parse().expect("should be integer"))
-            }
             ["QUEEN_PROMOTION", "value", x] => {
                 set_param!(QUEEN_PROMOTION, x.parse().expect("should be integer"))
             }
