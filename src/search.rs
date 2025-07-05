@@ -48,16 +48,13 @@ tuneable_params! {
     SECOND_KILLER_MOVE, i32, 26188, 0, 999_999;
     LOSING_CAPTURE, i32, -374272, -1_000_000, 999_999;
     UNDER_PROMOTION, i32, -122827, -1_000_000, 999_999;
+    COUNTERMOVE_BONUS, i32, 50000, 0, 999999;
 }
 
 const DO_SINGULARITY_EXTENSION: bool = true;
 const DO_SINGULARITY_DE: bool = false;
 
 pub const MAX_GAME_PLY: usize = 1024;
-
-#[allow(unused)]
-const TIME_TO_START_SEARCH: usize = 0; //initialise big TT (if not using HashMap)
-                                       //leave 100ms total margin
 
 struct NullMoveUndo {
     ep: Option<Square>,
@@ -338,7 +335,11 @@ impl Thread<'_> {
         if !in_check && self.info.excluded[self.ply].is_none() && self.do_pruning {
             let static_eval = evaluate(position);
             if self.ply < MAX_PLY {
-                self.info.ss[self.ply] = SearchStackEntry { eval: static_eval };
+                self.info.ss[self.ply] = SearchStackEntry {
+                    eval: static_eval,
+                    previous_square: None,
+                    previous_piece: None,
+                };
             }
 
             //measuring whether the search is improving (better static eval than 2 tempi ago)
@@ -492,6 +493,10 @@ impl Thread<'_> {
             moves_played += 1;
             self.ply += 1;
             //update after pruning above
+
+            // update for countermove heuristic
+            self.info.ss[self.ply].previous_piece = Some(position.get_piece_at(m.square_to()));
+            self.info.ss[self.ply].previous_square = Some(m.square_to());
 
             //A singular move is a move which seems to be forced or at least much stronger than
             //others. We should therefore extend to investigate it further.
@@ -771,6 +776,14 @@ impl Thread<'_> {
             self.info.killer_moves[1][self.ply] = self.info.killer_moves[0][self.ply];
             self.info.killer_moves[0][self.ply] = cutoff_move;
         }
+    }
+
+    pub fn update_counter_moves(&mut self, cutoff_move: Move) {
+        self.info.ss[self.ply].previous_piece.inspect(|x| {
+            self.info.ss[self.ply].previous_square.inspect(|y| {
+                self.info.counter_moves[*x][*y] = cutoff_move;
+            });
+        });
     }
 
     pub fn update_history_table(

@@ -435,6 +435,9 @@ fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable
             ["UNDER_PROMOTION", "value", x] => {
                 set_param!(UNDER_PROMOTION, x.parse().expect("should be integer"))
             }
+            ["COUNTERMOVE_BONUS", "value", x] => {
+                set_param!(COUNTERMOVE_BONUS, x.parse().expect("should be integer"))
+            }
             _ => {}
         },
 

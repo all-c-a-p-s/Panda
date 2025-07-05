@@ -193,12 +193,24 @@ impl Move {
             }
         } else if self.is_en_passant() {
             MVV_LVA[PieceType::Pawn][PieceType::Pawn]
-        } else if s.info.killer_moves[0][s.ply] == self {
-            read_param!(FIRST_KILLER_MOVE) //after captures
-        } else if s.info.killer_moves[1][s.ply] == self {
-            read_param!(SECOND_KILLER_MOVE)
         } else {
-            s.info.history_table[self.piece_moved(b)][self.square_to()]
+            ({
+                let mut bonus = 0;
+                s.info.ss[s.ply].previous_piece.inspect(|x| {
+                    s.info.ss[s.ply].previous_square.inspect(|y| {
+                        if self == s.info.counter_moves[*x][*y] {
+                            bonus = read_param!(COUNTERMOVE_BONUS)
+                        }
+                    });
+                });
+                bonus
+            }) + if s.info.killer_moves[0][s.ply] == self {
+                read_param!(FIRST_KILLER_MOVE) //after captures
+            } else if s.info.killer_moves[1][s.ply] == self {
+                read_param!(SECOND_KILLER_MOVE)
+            } else {
+                s.info.history_table[self.piece_moved(b)][self.square_to()]
+            }
         }
     }
 }
