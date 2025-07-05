@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::time::{Duration, Instant};
+use types::{Piece, Square};
 
 use crate::transposition::*;
 use crate::*;
@@ -37,6 +38,8 @@ pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize)
 
 #[derive(Copy, Clone)]
 pub struct SearchStackEntry {
+    pub previous_piece: Option<Piece>,
+    pub previous_square: Option<Square>,
     pub eval: i32,
 }
 
@@ -44,6 +47,7 @@ pub struct SearchInfo {
     pub ss: [SearchStackEntry; MAX_PLY],
     pub lmr_table: LMRTable,
     pub history_table: [[i32; 64]; 12],
+    pub counter_moves: [[Move; 64]; 12],
     pub killer_moves: [[Move; MAX_PLY]; 2],
     pub excluded: [Option<Move>; MAX_PLY],
 }
@@ -54,7 +58,11 @@ pub struct LMRTable {
 
 impl Default for SearchStackEntry {
     fn default() -> Self {
-        Self { eval: -INFINITY }
+        Self {
+            eval: -INFINITY,
+            previous_piece: None,
+            previous_square: None,
+        }
     }
 }
 
@@ -82,6 +90,7 @@ impl Default for SearchInfo {
             ss: [SearchStackEntry::default(); MAX_PLY],
             lmr_table: LMRTable::default(),
             history_table: [[0i32; 64]; 12],
+            counter_moves: [[NULL_MOVE; 64]; 12],
             killer_moves: [[NULL_MOVE; 64]; 2],
             excluded: [None; 64],
         }
