@@ -27,7 +27,7 @@ const FULL_DEPTH_MOVES: u8 = 1;
 // name, type, val, min, max
 
 tuneable_params! {
-    SINGULARITY_DE_MARGIN, i32, 40, 10, 150;
+    SINGULARITY_DE_MARGIN, i32, 25, 10, 150;
     ASPIRATION_WINDOW, i32, 15, 10, 70;
     RAZORING_MARGIN, i32, 273, 100, 500;
     MAX_RAZOR_DEPTH, u8, 4, 1, 12;
@@ -52,7 +52,7 @@ tuneable_params! {
 }
 
 const DO_SINGULARITY_EXTENSION: bool = true;
-const DO_SINGULARITY_DE: bool = false;
+const DO_SINGULARITY_DE: bool = true;
 
 pub const MAX_GAME_PLY: usize = 1024;
 
@@ -231,6 +231,7 @@ impl Thread<'_> {
         if DO_SINGULARITY_DE
             && !pv_node
             && excluded_eval < threshold - read_param!(SINGULARITY_DE_MARGIN)
+            && self.double_extensions <= 6
         {
             Some(2)
         } else if excluded_eval < threshold {
@@ -526,6 +527,9 @@ impl Thread<'_> {
                 position.play_unchecked(best_move);
                 self.ply += 1;
                 //we unmade the move while calling the singularity() function
+                if extension == Some(2) {
+                    self.double_extensions += 1;
+                }
             }
 
             let new_depth =

@@ -108,6 +108,7 @@ pub struct Thread<'a> {
     pub moves_fully_searched: usize,
     pub do_pruning: bool,
     pub info: SearchInfo,
+    pub double_extensions: u8,
 }
 
 pub struct Timer {
@@ -147,6 +148,7 @@ impl<'a> Thread<'a> {
             moves_fully_searched: 0,
             do_pruning: true,
             info: SearchInfo::default(),
+            double_extensions: 0,
         }
     }
 }
