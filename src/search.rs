@@ -39,6 +39,7 @@ tuneable_params! {
     SEE_QUIET_MARGIN, i32, 51, 50, 300;
     SEE_NOISY_MARGIN, i32, 37, 20, 250;
     SEE_QSEARCH_MARGIN, i32, 22, 1, 100;
+    QSEARCH_FP_MARGIN, i32, 166, 1, 350;
     LMP_DEPTH, u8, 5, 1, 12;
     IIR_DEPTH_MINIMUM, u8, 9, 1, 12;
     HASH_MOVE_SCORE, i32, 1_000_000, 1_000_000, 1_000_000;
@@ -667,7 +668,6 @@ impl Thread<'_> {
             return beta;
         }
 
-        //don't need repetition detection as it's impossible to have repetition with captures
         let delta = 1000; //delta pruning - try to avoid wasting time on hopeless positions
         if eval < alpha - delta {
             return alpha;
@@ -707,7 +707,7 @@ impl Thread<'_> {
                 continue;
             }
 
-            if eval + 200 <= alpha
+            if eval + read_param!(QSEARCH_FP_MARGIN) <= alpha
                 && !c.see(
                     position,
                     SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1,
