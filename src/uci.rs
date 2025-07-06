@@ -438,6 +438,9 @@ fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable
             ["COUNTERMOVE_BONUS", "value", x] => {
                 set_param!(COUNTERMOVE_BONUS, x.parse().expect("should be integer"))
             }
+            ["QSEARCH_FP_MARGIN", "value", x] => {
+                set_param!(QSEARCH_FP_MARGIN, x.parse().expect("should be integer"))
+            }
             _ => {}
         },
 
