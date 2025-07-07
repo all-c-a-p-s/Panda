@@ -1,12 +1,16 @@
+use burn::backend::{Autodiff, NdArray};
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::time::{Duration, Instant};
 use types::{Piece, Square};
 
+use crate::nmm::*;
 use crate::transposition::*;
 use crate::*;
 
 const MIN_MOVE_TIME: usize = 1; //make sure move time is never 0
 const MOVE_OVERHEAD: usize = 50;
+
+pub type Backend = Autodiff<Autodiff<NdArray<f32>>>;
 
 //returns ideal time window, hard deadline
 pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize) -> (usize, usize) {
@@ -50,6 +54,8 @@ pub struct SearchInfo {
     pub counter_moves: [[Move; 64]; 12],
     pub killer_moves: [[Move; MAX_PLY]; 2],
     pub excluded: [Option<Move>; MAX_PLY],
+    pub policy: PolicyNet<Backend>,
+    pub config: PolicyNetConfig,
 }
 
 pub struct LMRTable {
@@ -86,6 +92,8 @@ impl Default for LMRTable {
 
 impl Default for SearchInfo {
     fn default() -> Self {
+        let config = PolicyNetConfig::default();
+        let device = Default::default();
         Self {
             ss: [SearchStackEntry::default(); MAX_PLY],
             lmr_table: LMRTable::default(),
@@ -93,6 +101,8 @@ impl Default for SearchInfo {
             counter_moves: [[NULL_MOVE; 64]; 12],
             killer_moves: [[NULL_MOVE; 64]; 2],
             excluded: [None; 64],
+            policy: PolicyNet::new(&device, &config),
+            config,
         }
     }
 }

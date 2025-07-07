@@ -3,6 +3,7 @@ use crate::eval::*;
 use crate::helper::*;
 use crate::magic::*;
 use crate::movegen::*;
+use crate::nmm::*;
 use crate::ordering::*;
 use crate::r#move::*;
 use crate::thread::*;
@@ -427,6 +428,8 @@ impl Thread<'_> {
         //the latter for pseudo-legal moves we consider
         let mut skip_quiets = false;
 
+        let mut moves_tried = vec![];
+
         #[allow(unused)]
         for (i, &m) in move_list.moves.iter().enumerate() {
             if m.is_null() {
@@ -494,6 +497,7 @@ impl Thread<'_> {
 
             moves_played += 1;
             self.ply += 1;
+            moves_tried.push(m);
             //update after pruning above
 
             // update for countermove heuristic
@@ -611,6 +615,7 @@ impl Thread<'_> {
                 //only write quiet moves into history table because captures
                 //will be scored separately
                 self.update_search_tables(position, &move_list, m, tactical, depth, moves_played);
+                self.update_policy(&moves_tried, position);
                 hash_flag = EntryFlag::LowerBound;
                 break;
             }
@@ -757,6 +762,46 @@ impl Thread<'_> {
             //copy from next row in pv table
         }
         self.pv_length[self.ply] = self.pv_length[next_ply];
+    }
+
+    pub fn update_policy(&mut self, moves_tried: &Vec<Move>, position: &Board) {
+        println!(
+            "Began updating policy with total of {} moves",
+            moves_tried.len()
+        );
+        //where last move is the cutoff move
+        let cutoff_move = moves_tried[moves_tried.len() - 1];
+        println!("move {:?} produced cutoff", cutoff_move);
+
+        let is = make_input_state(position, moves_tried[moves_tried.len() - 1]);
+        let targets = make_targets::<Backend>(1.0, &Default::default());
+        let t = is.into_tensor(&Default::default());
+
+        println!("Successfully created tensors");
+
+        let cfg = TrainingConfig::default();
+
+        self.info
+            .policy
+            .step(t, targets, cfg.optimizer.clone(), &cfg);
+
+        if moves_tried.len() > 1 {
+            for &m in moves_tried.iter().take(moves_tried.len() - 1) {
+                println!("move {:?} failed to produce cutoff", m);
+
+                let is = make_input_state(position, m);
+                let targets = make_targets::<Backend>(-1.0, &Default::default());
+                let t = is.into_tensor(&Default::default());
+
+                let cfg = TrainingConfig::default();
+
+                self.info
+                    .policy
+                    .step(t, targets, cfg.optimizer.clone(), &cfg)
+            }
+        }
+
+        println!("Finished updating policy");
     }
 
     pub fn update_search_tables(
