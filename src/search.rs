@@ -314,7 +314,7 @@ impl Thread<'_> {
                         EntryFlag::Missing => false,
                     }
                 {
-                    return entry.eval.clamp(alpha, beta);
+                    return entry.eval;
                 }
             }
         }
@@ -427,6 +427,8 @@ impl Thread<'_> {
         //the latter for pseudo-legal moves we consider
         let mut skip_quiets = false;
 
+        let mut best_score = -INFINITY;
+
         #[allow(unused)]
         for (i, &m) in move_list.moves.iter().enumerate() {
             if m.is_null() {
@@ -445,7 +447,7 @@ impl Thread<'_> {
 
             let tactical = m.is_tactical(position);
             let quiet = !tactical;
-            let not_mated = alpha > -INFINITY + MAX_PLY as i32;
+            let not_mated = best_score > -INFINITY + MAX_PLY as i32;
             //must be done before making the move on the board
 
             let is_killer = m == self.info.killer_moves[0][self.ply]
@@ -599,6 +601,8 @@ impl Thread<'_> {
                 //at least one move has been searched fully
             }
 
+            best_score = best_score.max(eval);
+
             if eval > alpha {
                 alpha = eval;
                 self.update_pv(m);
@@ -625,12 +629,13 @@ impl Thread<'_> {
         }
 
         if !self.is_stopped() {
-            let hash_entry = TTEntry::new(depth, alpha, hash_flag, best_move, position.hash_key);
+            let hash_entry =
+                TTEntry::new(depth, best_score, hash_flag, best_move, position.hash_key);
 
             self.tt.write(position.hash_key, hash_entry);
         }
 
-        alpha
+        best_score
     }
 
     pub fn qsearch(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
@@ -658,22 +663,22 @@ impl Thread<'_> {
                 EntryFlag::UpperBound => entry.eval <= alpha,
                 EntryFlag::Missing => false,
             } {
-                return entry.eval.clamp(alpha, beta);
+                return entry.eval;
             }
         }
 
-        let eval = evaluate(position);
+        let mut best_score = evaluate(position);
         //node count = every position that gets evaluated
-        if eval >= beta {
+        if best_score >= beta {
             return beta;
         }
 
         let delta = 1000; //delta pruning - try to avoid wasting time on hopeless positions
-        if eval < alpha - delta {
+        if best_score < alpha - delta {
             return alpha;
         }
 
-        alpha = cmp::max(alpha, eval);
+        alpha = cmp::max(alpha, best_score);
 
         let in_check = position.checkers != 0;
 
@@ -696,7 +701,7 @@ impl Thread<'_> {
             let worst_case = SEE_VALUES[piece_type(position.get_piece_at(c.square_to()))]
                 - SEE_VALUES[piece_type(c.piece_moved(position))];
 
-            if eval + worst_case > beta {
+            if best_score + worst_case > beta {
                 //prune in the case that our move > beta even if we lose the piece
                 //that we just moved
                 return beta;
@@ -707,7 +712,7 @@ impl Thread<'_> {
                 continue;
             }
 
-            if eval + read_param!(QSEARCH_FP_MARGIN) <= alpha
+            if best_score + read_param!(QSEARCH_FP_MARGIN) <= alpha
                 && !c.see(
                     position,
                     SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1,
@@ -730,6 +735,7 @@ impl Thread<'_> {
                 return 0;
             }
 
+            best_score = best_score.max(eval);
             if eval > alpha {
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
@@ -742,11 +748,11 @@ impl Thread<'_> {
 
         //write eval to hash table
         if !self.is_stopped() {
-            let hash_entry = TTEntry::new(0, alpha, hash_flag, best_move, position.hash_key);
+            let hash_entry = TTEntry::new(0, best_score, hash_flag, best_move, position.hash_key);
 
             self.tt.write(position.hash_key, hash_entry);
         }
-        alpha
+        best_score
     }
 
     pub fn update_pv(&mut self, m: Move) {
