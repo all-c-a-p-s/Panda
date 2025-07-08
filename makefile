@@ -1,4 +1,4 @@
-EXE = Panda
+EXE = BabyPanda
 
 ifeq ($(OS),Windows_NT)
 	NAME := $(EXE).exe
