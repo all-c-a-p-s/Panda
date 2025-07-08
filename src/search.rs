@@ -3,6 +3,7 @@ use crate::eval::*;
 use crate::helper::*;
 use crate::magic::*;
 use crate::movegen::*;
+use crate::nmm::*;
 use crate::ordering::*;
 use crate::r#move::*;
 use crate::thread::*;
@@ -314,7 +315,7 @@ impl Thread<'_> {
                         EntryFlag::Missing => false,
                     }
                 {
-                    return entry.eval;
+                    return entry.eval.clamp(alpha, beta);
                 }
             }
         }
@@ -325,10 +326,6 @@ impl Thread<'_> {
         } else {
             best_move.is_capture(position)
         };
-
-        //reset killers for child nodes
-        self.info.killer_moves[0][self.ply + 1] = NULL_MOVE;
-        self.info.killer_moves[1][self.ply + 1] = NULL_MOVE;
 
         let in_check = position.checkers != 0;
         let mut improving = false;
@@ -427,7 +424,7 @@ impl Thread<'_> {
         //the latter for pseudo-legal moves we consider
         let mut skip_quiets = false;
 
-        let mut best_score = -INFINITY;
+        let mut moves_tried = vec![];
 
         #[allow(unused)]
         for (i, &m) in move_list.moves.iter().enumerate() {
@@ -447,16 +444,13 @@ impl Thread<'_> {
 
             let tactical = m.is_tactical(position);
             let quiet = !tactical;
-            let not_mated = best_score > -INFINITY + MAX_PLY as i32;
+            let not_mated = alpha > -INFINITY + MAX_PLY as i32;
             //must be done before making the move on the board
-
-            let is_killer = m == self.info.killer_moves[0][self.ply]
-                || m == self.info.killer_moves[1][self.ply];
 
             //Early Pruning: try to prune moves before we search them properly
             //by showing that they're not worth investigating
             if !root && not_mated {
-                if quiet && skip_quiets && !is_killer {
+                if quiet && skip_quiets {
                     continue;
                 }
                 let r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
@@ -496,6 +490,7 @@ impl Thread<'_> {
 
             moves_played += 1;
             self.ply += 1;
+            moves_tried.push(m);
             //update after pruning above
 
             // update for countermove heuristic
@@ -601,8 +596,6 @@ impl Thread<'_> {
                 //at least one move has been searched fully
             }
 
-            best_score = best_score.max(eval);
-
             if eval > alpha {
                 alpha = eval;
                 self.update_pv(m);
@@ -614,7 +607,7 @@ impl Thread<'_> {
             if eval >= beta {
                 //only write quiet moves into history table because captures
                 //will be scored separately
-                self.update_search_tables(position, &move_list, m, tactical, depth, moves_played);
+                self.update_policy(position, &moves_tried);
                 hash_flag = EntryFlag::LowerBound;
                 break;
             }
@@ -629,13 +622,12 @@ impl Thread<'_> {
         }
 
         if !self.is_stopped() {
-            let hash_entry =
-                TTEntry::new(depth, best_score, hash_flag, best_move, position.hash_key);
+            let hash_entry = TTEntry::new(depth, alpha, hash_flag, best_move, position.hash_key);
 
             self.tt.write(position.hash_key, hash_entry);
         }
 
-        best_score
+        alpha
     }
 
     pub fn qsearch(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
@@ -663,22 +655,22 @@ impl Thread<'_> {
                 EntryFlag::UpperBound => entry.eval <= alpha,
                 EntryFlag::Missing => false,
             } {
-                return entry.eval;
+                return entry.eval.clamp(alpha, beta);
             }
         }
 
-        let mut best_score = evaluate(position);
+        let eval = evaluate(position);
         //node count = every position that gets evaluated
-        if best_score >= beta {
+        if eval >= beta {
             return beta;
         }
 
         let delta = 1000; //delta pruning - try to avoid wasting time on hopeless positions
-        if best_score < alpha - delta {
+        if eval < alpha - delta {
             return alpha;
         }
 
-        alpha = cmp::max(alpha, best_score);
+        alpha = cmp::max(alpha, eval);
 
         let in_check = position.checkers != 0;
 
@@ -701,7 +693,7 @@ impl Thread<'_> {
             let worst_case = SEE_VALUES[piece_type(position.get_piece_at(c.square_to()))]
                 - SEE_VALUES[piece_type(c.piece_moved(position))];
 
-            if best_score + worst_case > beta {
+            if eval + worst_case > beta {
                 //prune in the case that our move > beta even if we lose the piece
                 //that we just moved
                 return beta;
@@ -712,7 +704,7 @@ impl Thread<'_> {
                 continue;
             }
 
-            if best_score + read_param!(QSEARCH_FP_MARGIN) <= alpha
+            if eval + read_param!(QSEARCH_FP_MARGIN) <= alpha
                 && !c.see(
                     position,
                     SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1,
@@ -735,7 +727,6 @@ impl Thread<'_> {
                 return 0;
             }
 
-            best_score = best_score.max(eval);
             if eval > alpha {
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
@@ -748,11 +739,11 @@ impl Thread<'_> {
 
         //write eval to hash table
         if !self.is_stopped() {
-            let hash_entry = TTEntry::new(0, best_score, hash_flag, best_move, position.hash_key);
+            let hash_entry = TTEntry::new(0, alpha, hash_flag, best_move, position.hash_key);
 
             self.tt.write(position.hash_key, hash_entry);
         }
-        best_score
+        alpha
     }
 
     pub fn update_pv(&mut self, m: Move) {
@@ -765,56 +756,29 @@ impl Thread<'_> {
         self.pv_length[self.ply] = self.pv_length[next_ply];
     }
 
-    pub fn update_search_tables(
-        &mut self,
-        b: &Board,
-        moves: &MoveList,
-        cutoff_move: Move,
-        tactical: bool,
-        depth: u8,
-        moves_played: u8,
-    ) {
-        if !tactical {
-            self.update_killer_moves(cutoff_move, tactical);
-            self.update_history_table(b, moves, cutoff_move, depth, moves_played as usize)
-        }
-    }
+    pub fn update_policy(&mut self, b: &Board, moves_tried: &Vec<Move>) {
+        let cutoff_move = moves_tried[moves_tried.len() - 1];
+        let is = make_input_state(b, cutoff_move);
 
-    pub fn update_killer_moves(&mut self, cutoff_move: Move, tactical: bool) {
-        if !tactical && self.info.killer_moves[0][self.ply] != cutoff_move {
-            //avoid saving the same killer move twice
-            self.info.killer_moves[1][self.ply] = self.info.killer_moves[0][self.ply];
-            self.info.killer_moves[0][self.ply] = cutoff_move;
-        }
-    }
+        update_net(
+            &mut self.info.policy.net,
+            &mut self.info.policy.opt,
+            &is,
+            1.0,
+        )
+        .expect("failed to update net");
 
-    pub fn update_counter_moves(&mut self, cutoff_move: Move) {
-        self.info.ss[self.ply].previous_piece.inspect(|x| {
-            self.info.ss[self.ply].previous_square.inspect(|y| {
-                self.info.counter_moves[*x][*y] = cutoff_move;
-            });
-        });
-    }
+        if moves_tried.len() > 1 {
+            for &m in moves_tried.iter().take(moves_tried.len() - 1) {
+                let is = make_input_state(b, m);
 
-    pub fn update_history_table(
-        &mut self,
-        b: &Board,
-        moves: &MoveList,
-        cutoff_move: Move,
-        depth: u8,
-        moves_played: usize,
-    ) {
-        //penalise all moves that have been checked and have not caused beta cutoff
-        for i in 0..moves_played {
-            if moves.moves[i].is_null() {
-                break;
-            }
-            let piece = moves.moves[i].piece_moved(b);
-            let target = moves.moves[i].square_to();
-            if moves.moves[i] == cutoff_move {
-                self.info.history_table[piece][target] += (depth * depth) as i32;
-            } else {
-                self.info.history_table[piece][target] -= (depth * depth) as i32;
+                update_net(
+                    &mut self.info.policy.net,
+                    &mut self.info.policy.opt,
+                    &is,
+                    -1.0,
+                )
+                .expect("failed to update net");
             }
         }
     }
@@ -827,9 +791,7 @@ impl Thread<'_> {
         self.ply = 0;
         self.moves_fully_searched = 0;
 
-        //reset move ordering heuristics
-        self.info.killer_moves = [[NULL_MOVE; MAX_PLY]; 2];
-        self.info.history_table = [[0; 64]; 12];
+        self.info.policy = NetConfig::new();
     }
 }
 

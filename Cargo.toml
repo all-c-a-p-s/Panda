@@ -1,6 +1,6 @@
 [package]
 name = "panda"
-version = "0.1.0"
+version = "1.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -18,7 +18,8 @@ rand = "0.8.5"
 rand_chacha = "0.3.1"
 rand_xoshiro = "0.6.0"
 rayon = "1.10.0"
-rusqlite = "0.33.0"
+tch = "0.20.0"
 
 [features]
 datagen = []
+tuning = []

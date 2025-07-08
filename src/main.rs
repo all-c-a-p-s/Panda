@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 pub mod board;
 pub mod datagen;
 pub mod eval;
@@ -5,6 +7,7 @@ pub mod helper;
 pub mod magic;
 pub mod r#move;
 pub mod movegen;
+pub mod nmm;
 pub mod nnue;
 pub mod ordering;
 pub mod perft;

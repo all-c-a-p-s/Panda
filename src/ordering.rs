@@ -1,19 +1,10 @@
 use crate::movegen::*;
+use crate::nmm::*;
 use crate::r#move::*;
 use crate::search::*;
 use crate::thread::*;
 use crate::types::*;
 use crate::*;
-
-const MVV_LVA: [[i32; 6]; 6] = [
-    //most valuable victim least valuable attacker
-    [205, 204, 203, 202, 201, 200], //victim pawn
-    [305, 304, 303, 302, 301, 300], //victim knight
-    [405, 404, 403, 402, 401, 400], //victim bishop
-    [505, 504, 503, 502, 501, 500], //victim rook
-    [605, 604, 603, 602, 601, 600], //victim queen
-    [0, 0, 0, 0, 0, 0],             //victim king
-];
 
 //same as MG evaluation weights (haven't updated these in a while)
 pub const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, INFINITY];
@@ -151,66 +142,14 @@ impl Move {
         b.side_to_move != colour
     }
 
-    pub fn score_move(self, b: &mut Board, s: &Thread, hash_move: &Move) -> i32 {
-        /*
-          MOVE ORDER:
-        - TT Move
-        - PV Move
-        - Queen Promotion
-        - Winning Capture + E.P.
-        - Killers
-        - History
-        - Losing Capture
-        - Underpromotion
-         */
-
-        if self.is_null() {
-            -INFINITY
-            //important for this to come before checking hash move
-            //otherwise null move can get given hash move score
+    pub fn score_move(self, b: &mut Board, s: &Thread, hash_move: &Move) -> f32 {
+        if self == NULL_MOVE {
+            -1.0
         } else if self == *hash_move {
-            read_param!(HASH_MOVE_SCORE)
-            //before pv move because this has been verified by >= search depth
-        } else if self.is_capture(b) {
-            let victim_type =
-                piece_type(unsafe { b.pieces_array[self.square_to()].unwrap_unchecked() });
-            let attacker_type = piece_type(self.piece_moved(b));
-            let winning_capture = self.see(b, 0);
-            match winning_capture {
-                true => read_param!(WINNING_CAPTURE) + MVV_LVA[victim_type][attacker_type],
-                false => read_param!(LOSING_CAPTURE) + MVV_LVA[victim_type][attacker_type],
-            }
-        } else if self.is_promotion() {
-            //maybe this should fo before checking if capture
-            //because of promotions that are also captures
-            match self.promoted_piece() {
-                //promotions sorted by likelihood to be good
-                PieceType::Queen => read_param!(QUEEN_PROMOTION),
-                PieceType::Knight => read_param!(UNDER_PROMOTION),
-                PieceType::Rook => read_param!(UNDER_PROMOTION),
-                PieceType::Bishop => read_param!(UNDER_PROMOTION),
-                _ => unreachable!(),
-            }
-        } else if self.is_en_passant() {
-            MVV_LVA[PieceType::Pawn][PieceType::Pawn]
+            1.0
         } else {
-            ({
-                let mut bonus = 0;
-                s.info.ss[s.ply].previous_piece.inspect(|x| {
-                    s.info.ss[s.ply].previous_square.inspect(|y| {
-                        if self == s.info.counter_moves[*x][*y] {
-                            bonus = read_param!(COUNTERMOVE_BONUS)
-                        }
-                    });
-                });
-                bonus
-            }) + if s.info.killer_moves[0][s.ply] == self {
-                read_param!(FIRST_KILLER_MOVE) //after captures
-            } else if s.info.killer_moves[1][s.ply] == self {
-                read_param!(SECOND_KILLER_MOVE)
-            } else {
-                s.info.history_table[self.piece_moved(b)][self.square_to()]
-            }
+            let is = make_input_state(b, self);
+            forward_prediction(&s.info.policy.net, &is).expect("failed to pass forward") as f32
         }
     }
 }
@@ -218,14 +157,14 @@ impl Move {
 #[derive(Copy, Clone)]
 pub struct MoveOrderEntry<'a> {
     m: &'a Move,
-    score: i32,
+    score: f32,
 }
 
 impl MoveList {
     pub fn order_moves(&mut self, board: &mut Board, s: &Thread, best_move: &Move) {
         let mut ordered_moves = [MoveOrderEntry {
             m: &NULL_MOVE,
-            score: -INFINITY,
+            score: -1.0,
         }; MAX_MOVES];
 
         for (i, m) in self.moves.iter().enumerate() {
@@ -236,7 +175,7 @@ impl MoveList {
             ordered_moves[i].score = m.score_move(board, s, best_move);
         }
 
-        ordered_moves.sort_by(|a, b| b.score.cmp(&a.score));
+        ordered_moves.sort_by(|a, b| b.score.partial_cmp(&a.score).expect("no ordering"));
 
         let mut final_moves = [NULL_MOVE; MAX_MOVES];
 

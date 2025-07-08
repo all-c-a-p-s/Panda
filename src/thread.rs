@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::time::{Duration, Instant};
 use types::{Piece, Square};
 
+use crate::nmm::*;
 use crate::transposition::*;
 use crate::*;
 
@@ -46,10 +47,8 @@ pub struct SearchStackEntry {
 pub struct SearchInfo {
     pub ss: [SearchStackEntry; MAX_PLY],
     pub lmr_table: LMRTable,
-    pub history_table: [[i32; 64]; 12],
-    pub counter_moves: [[Move; 64]; 12],
-    pub killer_moves: [[Move; MAX_PLY]; 2],
     pub excluded: [Option<Move>; MAX_PLY],
+    pub policy: NetConfig,
 }
 
 pub struct LMRTable {
@@ -89,10 +88,8 @@ impl Default for SearchInfo {
         Self {
             ss: [SearchStackEntry::default(); MAX_PLY],
             lmr_table: LMRTable::default(),
-            history_table: [[0i32; 64]; 12],
-            counter_moves: [[NULL_MOVE; 64]; 12],
-            killer_moves: [[NULL_MOVE; 64]; 2],
             excluded: [None; 64],
+            policy: NetConfig::new(),
         }
     }
 }
