@@ -4,7 +4,7 @@ Baby Panda is a highly experimental version of Panda, which updates a neural net
 
 ## What Makes Baby Panda Interesting?
 
-Baby Panda trains a neural network on beta cutoffs as they occur, and uses this as the sole heuristic for move ordering (except for TT if a TT move is present). The only problem is that this is so slow that it only searches at about 10k NPS...
+Baby Panda trains a neural network on beta cutoffs as they occur, and uses this as the sole heuristic for move ordering (except for TT if a TT move is present). The only problem is that because of the computational cost of training a network while searching, it seaches about 100 times slower than the classical version of Panda.
 
 ## Usage (tricky and only tested on MacOS)
 ### 1. Install Rust and Clone Repo (Easy Part)
