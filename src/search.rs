@@ -12,8 +12,7 @@ use crate::uci::*;
 use crate::zobrist::{BLACK_TO_MOVE, EP_KEYS};
 
 use std::cmp;
-#[allow(unused_imports)]
-use std::collections::HashMap;
+
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
 
@@ -566,6 +565,11 @@ impl Thread<'_> {
                     //reduce more in cutnodes
                     r += cutnode as i32;
 
+                    let history_threshold = ((self.nodes / 1_024) as i32).max(8192);
+                    r -= (self.info.history_table[m.piece_moved(position)][m.square_to()]
+                        / history_threshold)
+                        .clamp(-2, 1);
+
                     let mut reduced_depth = cmp::max(new_depth as i32 - r, 1) as u8;
                     reduced_depth = reduced_depth.clamp(1, new_depth);
                     //avoid dropping into qsearch or extending
@@ -805,13 +809,15 @@ impl Thread<'_> {
         moves_played: usize,
     ) {
         //penalise all moves that have been checked and have not caused beta cutoff
-        for i in 0..moves_played {
-            if moves.moves[i].is_null() {
-                break;
-            }
-            let piece = moves.moves[i].piece_moved(b);
-            let target = moves.moves[i].square_to();
-            if moves.moves[i] == cutoff_move {
+        for &m in moves
+            .moves
+            .iter()
+            .take(moves_played)
+            .take_while(|x| !x.is_null())
+        {
+            let piece = m.piece_moved(b);
+            let target = m.square_to();
+            if m == cutoff_move {
                 self.info.history_table[piece][target] += (depth * depth) as i32;
             } else {
                 self.info.history_table[piece][target] -= (depth * depth) as i32;
@@ -936,8 +942,6 @@ pub fn iterative_deepening(
     show_thinking: bool,
 ) -> MoveData {
     let start = Instant::now();
-
-    //TODO: no aspiration window for first few depths
 
     s.reset_thread();
     s.timer.end_time = start + Duration::from_millis(hard_limit as u64);

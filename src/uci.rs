@@ -118,7 +118,7 @@ pub fn parse_move(input: &str, board: &Board) -> Move {
 
 pub fn parse_uci(command: &str) {
     if command == "uci" {
-        println!("id name Panda 1.0");
+        println!("id name Panda 1.1");
         println!("option name Threads type spin default 1 min 1 max 256");
         println!("option name Hash type spin default 16 min 1 max 1048576");
 
