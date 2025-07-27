@@ -176,10 +176,13 @@ impl Move {
                 piece_type(unsafe { b.pieces_array[self.square_to()].unwrap_unchecked() });
             let attacker_type = piece_type(self.piece_moved(b));
             let winning_capture = self.see(b, 0);
-            match winning_capture {
-                true => read_param!(WINNING_CAPTURE) + MVV_LVA[victim_type][attacker_type],
-                false => read_param!(LOSING_CAPTURE) + MVV_LVA[victim_type][attacker_type],
-            }
+
+            MVV_LVA[victim_type][attacker_type]
+                + if winning_capture {
+                    read_param!(WINNING_CAPTURE)
+                } else {
+                    read_param!(LOSING_CAPTURE)
+                }
         } else if self.is_promotion() {
             //maybe this should fo before checking if capture
             //because of promotions that are also captures
@@ -192,7 +195,7 @@ impl Move {
                 _ => unreachable!(),
             }
         } else if self.is_en_passant() {
-            MVV_LVA[PieceType::Pawn][PieceType::Pawn]
+            MVV_LVA[PieceType::Pawn][PieceType::Pawn] //winning capture?
         } else {
             ({
                 let mut bonus = 0;

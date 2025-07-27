@@ -429,12 +429,8 @@ impl Thread<'_> {
 
         let mut best_score = -INFINITY;
 
-        #[allow(unused)]
-        for (i, &m) in move_list.moves.iter().enumerate() {
-            if m.is_null() {
-                //no pseudolegal moves left in move list
-                break;
-            } else if let Some(n) = self.info.excluded[self.ply] {
+        for &m in move_list.moves.iter().take_while(|m| !m.is_null()) {
+            if let Some(n) = self.info.excluded[self.ply] {
                 if n == m {
                     moves_seen += 1;
                     continue;
