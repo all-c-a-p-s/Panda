@@ -422,7 +422,7 @@ impl Thread<'_> {
         let mut move_list = MoveList::gen_moves::<false>(position);
         move_list.order_moves(position, self, &best_move);
 
-        let (mut moves_played, mut moves_seen) = (0, 0);
+        let (mut legal, mut considered) = (0, 0);
         //the former of these is for legal moves we actually search
         //the latter for pseudo-legal moves we consider
         let mut skip_quiets = false;
@@ -432,14 +432,14 @@ impl Thread<'_> {
         for &m in move_list.moves.iter().take_while(|m| !m.is_null()) {
             if let Some(n) = self.info.excluded[self.ply] {
                 if n == m {
-                    moves_seen += 1;
+                    considered += 1;
                     continue;
                 }
             }
 
             //from what I can see strong engines update this before checking whether or not the
             //move is legal
-            moves_seen += 1;
+            considered += 1;
 
             let tactical = m.is_tactical(position);
             let quiet = !tactical;
@@ -456,13 +456,13 @@ impl Thread<'_> {
                     continue;
                 }
                 let r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
-                    [cmp::min(depth, 31) as usize][cmp::min(moves_seen, 31) as usize]
+                    [cmp::min(depth, 31) as usize][cmp::min(considered, 31) as usize]
                     + (!improving) as i32;
                 let lmr_depth = std::cmp::max(depth as i32 - 1 - r, 0);
 
                 //SEE Pruning: if a move fails SEE by a depth-dependent threshold,
                 //prune it
-                if lmr_depth <= read_param!(SEE_PRUNING_DEPTH) && moves_seen > 1 && !pv_node {
+                if lmr_depth <= read_param!(SEE_PRUNING_DEPTH) && considered > 1 && !pv_node {
                     let margin = if tactical {
                         read_param!(SEE_NOISY_MARGIN)
                     } else {
@@ -481,7 +481,7 @@ impl Thread<'_> {
                     true => depth * depth + 2,
                     false => depth * depth / 2,
                 };
-                if depth <= read_param!(LMP_DEPTH) && moves_seen > lmp_threshold && !in_check {
+                if depth <= read_param!(LMP_DEPTH) && considered > lmp_threshold && !in_check {
                     skip_quiets = true;
                 }
             }
@@ -490,7 +490,7 @@ impl Thread<'_> {
                 continue;
             };
 
-            moves_played += 1;
+            legal += 1;
             self.ply += 1;
             //update after pruning above
 
@@ -534,7 +534,7 @@ impl Thread<'_> {
             let new_depth =
                 i32::clamp(depth as i32 - 1 + extension.unwrap(), 0, MAX_PLY as i32) as u8;
 
-            let eval = if moves_played == 1 {
+            let eval = if legal == 1 {
                 //note that this is one because the variable is updated above
                 -self.negamax(position, new_depth, -beta, -alpha, false)
                 //normal search on pv move (no moves searched yet)
@@ -546,9 +546,9 @@ impl Thread<'_> {
                 // then if we are unable to prove so
 
                 let mut r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
-                    [cmp::min(depth, 31) as usize][cmp::min(moves_played, 31) as usize];
+                    [cmp::min(depth, 31) as usize][cmp::min(legal, 31) as usize];
 
-                let mut reduction_eval = if moves_played
+                let mut reduction_eval = if legal
                     > (FULL_DEPTH_MOVES + pv_node as u8 + !tt_move as u8 + root as u8)
                     && depth >= REDUCTION_LIMIT
                     && reduction_ok(tactical, in_check)
@@ -561,6 +561,11 @@ impl Thread<'_> {
                     r += !improving as i32;
                     //reduce more in cutnodes
                     r += cutnode as i32;
+
+                    let history_threshold = ((self.nodes / 1_024) as i32).max(8192);
+                    r -= (self.info.history_table[m.piece_moved(position)][m.square_to()]
+                        / history_threshold)
+                        .clamp(-2, 1);
 
                     let mut reduced_depth = cmp::max(new_depth as i32 - r, 1) as u8;
                     reduced_depth = reduced_depth.clamp(1, new_depth);
@@ -610,13 +615,13 @@ impl Thread<'_> {
             if eval >= beta {
                 //only write quiet moves into history table because captures
                 //will be scored separately
-                self.update_search_tables(position, &move_list, m, tactical, depth, moves_played);
+                self.update_search_tables(position, &move_list, m, tactical, depth, legal);
                 hash_flag = EntryFlag::LowerBound;
                 break;
             }
         }
 
-        if moves_played == 0 {
+        if legal == 0 {
             //no legal moves -> mate or stalemate
             return match in_check {
                 true => -INFINITY + self.ply as i32,
@@ -688,26 +693,21 @@ impl Thread<'_> {
 
         captures.order_moves(position, self, &best_move);
 
-        for c in captures.moves {
-            if c.is_null() {
-                //no more pseudo-legal moves
-                break;
-            }
-
+        for &c in captures.moves.iter().take_while(|c| !c.is_null()) {
             let worst_case = SEE_VALUES[piece_type(position.get_piece_at(c.square_to()))]
                 - SEE_VALUES[piece_type(c.piece_moved(position))];
 
+            //first check if we beat beta even in the worst case
             if best_score + worst_case > beta {
-                //prune in the case that our move > beta even if we lose the piece
-                //that we just moved
                 return beta;
             }
 
+            //next check if we fail SEE by threshold
             if !c.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
-                //prune moves that fail see by threshold
                 continue;
             }
 
+            //if we're far behind, only consider moves which win significant material
             if best_score + read_param!(QSEARCH_FP_MARGIN) <= alpha
                 && !c.see(
                     position,
