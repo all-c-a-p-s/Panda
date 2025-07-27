@@ -801,16 +801,12 @@ impl Thread<'_> {
         moves_played: usize,
     ) {
         //penalise all moves that have been checked and have not caused beta cutoff
-        for i in 0..moves_played {
-            if moves.moves[i].is_null() {
-                break;
-            }
-            let piece = moves.moves[i].piece_moved(b);
-            let target = moves.moves[i].square_to();
-            if moves.moves[i] == cutoff_move {
-                self.info.history_table[piece][target] += (depth * depth) as i32;
-            } else {
-                self.info.history_table[piece][target] -= (depth * depth) as i32;
+        for &m in moves.moves.iter().take(moves_played) {
+            let piece = m.piece_moved(b);
+            let target = m.square_to();
+            if !m.is_capture(b) {
+                self.info.history_table[piece][target] +=
+                    (depth * depth) as i32 * if m == cutoff_move { 1 } else { -1 };
             }
         }
     }
