@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use crate::board::*;
+use crate::board::Colour;
 use std::ops::{Index, IndexMut};
 
 #[rustfmt::skip]
@@ -130,21 +130,21 @@ impl Square {
     /// # Safety
     ///
     /// must not pass in a value outside of [0, 63]
-    pub const unsafe fn from(x: u8) -> Self {
+    #[must_use] pub const unsafe fn from(x: u8) -> Self {
         std::mem::transmute(x)
     }
 
     /// # Safety
     ///
     /// must not pass in a value greater than 64 - self as u8
-    pub const unsafe fn add_unchecked(self, x: u8) -> Self {
+    #[must_use] pub const unsafe fn add_unchecked(self, x: u8) -> Self {
         Self::from(self as u8 + x)
     }
 
     /// # Safety
     ///
     /// must not pass in a value which is greater than self as u8
-    pub const unsafe fn sub_unchecked(self, x: u8) -> Self {
+    #[must_use] pub const unsafe fn sub_unchecked(self, x: u8) -> Self {
         Self::from(self as u8 - x)
     }
 }
@@ -153,18 +153,18 @@ impl Piece {
     /// # Safety
     ///
     /// must not pass a value outside of [0, 11]
-    pub const unsafe fn from(x: u8) -> Self {
+    #[must_use] pub const unsafe fn from(x: u8) -> Self {
         std::mem::transmute(x)
     }
 
-    pub fn colour(self) -> Colour {
+    #[must_use] pub fn colour(self) -> Colour {
         match self {
             Piece::WP | Piece::WN | Piece::WB | Piece::WR | Piece::WQ | Piece::WK => Colour::White,
             _ => Colour::Black,
         }
     }
 
-    pub const fn opposite(self) -> Self {
+    #[must_use] pub const fn opposite(self) -> Self {
         match self {
             Piece::WP => Piece::BP,
             Piece::WN => Piece::BN,
@@ -183,7 +183,7 @@ impl Piece {
 }
 
 impl PieceType {
-    pub fn to_white_piece(self) -> Piece {
+    #[must_use] pub fn to_white_piece(self) -> Piece {
         match self {
             PieceType::Pawn => Piece::WP,
             PieceType::Knight => Piece::WN,
@@ -197,7 +197,7 @@ impl PieceType {
     /// # Safety
     ///
     /// must not pass a value outside of [0, 5]
-    pub const unsafe fn from(x: u8) -> Self {
+    #[must_use] pub const unsafe fn from(x: u8) -> Self {
         std::mem::transmute(x)
     }
 }

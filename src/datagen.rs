@@ -6,9 +6,9 @@ use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::thread::*;
+use crate::thread::{Searcher, Thread};
 use crate::transposition::TranspositionTable;
-use crate::*;
+use crate::{BOTH, Board, Colour, INFINITY, Move, MoveList, NULL_MOVE, STARTPOS, iterative_deepening};
 
 const OPENING_CP_MARGIN: i32 = 20;
 const OPENING_PLIES: usize = 16;
@@ -59,7 +59,7 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn from_position(pos: &Board) -> Self {
+    #[must_use] pub fn from_position(pos: &Board) -> Self {
         Self {
             position: *pos,
             value: 0,
@@ -187,7 +187,7 @@ impl Game {
         Ok(true)
     }
 
-    pub fn generate() -> Option<Self> {
+    #[must_use] pub fn generate() -> Option<Self> {
         let tt = TranspositionTable::in_megabytes(16);
 
         let mut g = Self::new();
@@ -283,14 +283,14 @@ impl Display for Node {
         .as_str();
         s += format!("\nresult: {}", {
             if let Some(r) = self.result {
-                format!("{}", r)
+                format!("{r}")
             } else {
                 "Unknown".to_string()
             }
         })
         .as_str();
 
-        writeln!(f, "{}", s)
+        writeln!(f, "{s}")
     }
 }
 
@@ -314,7 +314,7 @@ fn game_result(found_move: bool, board: &Board, history: &[u64]) -> Option<f32> 
     }
 }
 
-pub fn play_one_game() -> Vec<(String, i32, f32)> {
+#[must_use] pub fn play_one_game() -> Vec<(String, i32, f32)> {
     // **Very** occasionally the engine can fail to find a move in 10ms / within node limit which leads
     // it to not find a move to play. In this case we just throw away the game and try again until one works.
     // To make sure that there isn't some bigger problem if we somehow fail to generate 3 games in
@@ -324,9 +324,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
 
     let mut try_game = None;
     while try_game.is_none() {
-        if attempts >= 3 {
-            panic!("failing to find moves too often...");
-        }
+        assert!((attempts < 3), "failing to find moves too often...");
         try_game = Game::generate();
         attempts += 1;
     }
@@ -342,7 +340,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
         .skip(OPENING_PLIES)
     {
         let quiet = n.position.checkers == 0 && !n.choice.unwrap().is_capture(&n.position);
-        let within_bounds = n.value.abs() < i16::MAX as i32;
+        let within_bounds = n.value.abs() < i32::from(i16::MAX);
         let enough_pieces = n.position.occupancies[BOTH].count_ones() > 3;
 
         let value = match n.position.side_to_move {
@@ -351,14 +349,14 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
         };
 
         if quiet && within_bounds && enough_pieces {
-            filtered.push((n.position.fen(), value, n.result.unwrap()))
+            filtered.push((n.position.fen(), value, n.result.unwrap()));
         }
     }
 
     filtered
 }
 
-pub fn play_parallel_games(num_games: usize, num_threads: usize) -> Vec<(String, i32, f32)> {
+#[must_use] pub fn play_parallel_games(num_games: usize, num_threads: usize) -> Vec<(String, i32, f32)> {
     let num_threads = std::cmp::min(num_threads, num_games);
 
     let games_per_thread = num_games / num_threads;
@@ -460,11 +458,10 @@ pub fn gen_data(path: &str, duration: Duration) -> std::io::Result<()> {
         remaining -= t;
 
         println!(
-            "Checkpoint Entries: {}\nAdded so far: {}\nTime remaining: {:?}\n",
-            added_this_checkpoint, added, remaining
+            "Checkpoint Entries: {added_this_checkpoint}\nAdded so far: {added}\nTime remaining: {remaining:?}\n"
         );
     }
 
-    println!("Done generating data. {} entries added in total.", added);
+    println!("Done generating data. {added} entries added in total.");
     Ok(())
 }

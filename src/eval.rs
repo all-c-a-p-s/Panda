@@ -1,5 +1,5 @@
-use crate::board::*;
-use crate::helper::*;
+use crate::board::{Board, Colour};
+use crate::helper::{count, rank};
 
 use crate::types::{Piece, Square};
 
@@ -45,7 +45,7 @@ fn side_has_sufficient_matieral(b: &Board, side: Colour) -> bool {
     }
 }
 
-pub fn evaluate(b: &Board) -> i32 {
+#[must_use] pub fn evaluate(b: &Board) -> i32 {
     let s = b.nnue.evaluate(b.side_to_move);
 
     //TODO: endgame tablebase for better draw detection

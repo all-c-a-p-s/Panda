@@ -18,14 +18,14 @@ pub mod zobrist;
 
 use std::error::Error;
 
-use crate::board::*;
-use crate::datagen::*;
-use crate::helper::*;
-use crate::magic::*;
-use crate::perft::*;
-use crate::r#move::*;
-use crate::search::*;
-use crate::uci::*;
+use crate::board::{BitBoard, Board, Colour};
+use crate::datagen::gen_data;
+use crate::helper::{BLACK, BOTH, MAX_MOVES, WHITE, coordinate, lsfb, piece_type, pop_bit, set_bit, square};
+use crate::magic::{get_bishop_attacks, get_rook_attacks, init_slider_attacks};
+use crate::perft::{full_perft, perft};
+use crate::r#move::{CASTLING_FLAG, EN_PASSANT_FLAG, Move, MoveList, NO_FLAG, NULL_MOVE, PROMOTION_FLAG, encode_move};
+use crate::search::{INFINITY, MAX_GAME_PLY, MAX_PLY, MoveData, iterative_deepening};
+use crate::uci::{STARTPOS, uci_loop};
 
 fn init_all() {
     // initialise all constants
@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Mode::Profile => full_perft(),
         Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(ONE_HOUR * 100))?,
         Mode::Debug => {}
-    };
+    }
 
     Ok(())
 }

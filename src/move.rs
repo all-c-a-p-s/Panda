@@ -5,13 +5,13 @@
 /// 0100 0000 0000 0000 en passant flag    0x4000
 /// 1000 0000 0000 0000 castling flag      0x8000
 /// 1100 0000 0000 0000 promotion flag     0xc000
-use crate::board::*;
-use crate::helper::*;
-use crate::magic::*;
-use crate::movegen::*;
-use crate::zobrist::*;
+use crate::board::{BitBoard, Board, Colour};
+use crate::helper::{BLACK, BOTH, MAX_MOVES, WHITE, coordinate, count, lsfb, piece_type, pop_bit, rank, set_bit};
+use crate::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS};
+use crate::movegen::{RAY_BETWEEN, check_en_passant, is_attacked};
+use crate::zobrist::{CASTLING_KEYS, hash_update};
 
-use crate::types::*;
+use crate::types::{Piece, PieceType, Square};
 
 pub const SQUARE_FROM_MASK: u16 = 0b0000_0000_0011_1111;
 pub const SQUARE_TO_MASK: u16 = 0b0000_1111_1100_0000;
@@ -48,7 +48,7 @@ pub struct Commit {
 }
 
 impl Move {
-    pub fn from_promotion(from: Square, to: Square, promoted_piece: PieceType) -> Self {
+    #[must_use] pub fn from_promotion(from: Square, to: Square, promoted_piece: PieceType) -> Self {
         Self {
             data: from as u16
                 | (to as u16) << 6
@@ -57,51 +57,51 @@ impl Move {
         }
     }
 
-    pub fn from_flags(from: Square, to: Square, flags: u16) -> Self {
+    #[must_use] pub fn from_flags(from: Square, to: Square, flags: u16) -> Self {
         Self {
             data: from as u16 | (to as u16) << 6 | flags,
         }
     }
 
-    pub fn square_from(self) -> Square {
+    #[must_use] pub fn square_from(self) -> Square {
         unsafe { Square::from((self.data & SQUARE_FROM_MASK) as u8) }
     }
 
-    pub fn square_to(self) -> Square {
+    #[must_use] pub fn square_to(self) -> Square {
         unsafe { Square::from(((self.data & SQUARE_TO_MASK) >> 6) as u8) }
     }
 
-    pub fn promoted_piece(self) -> PieceType {
+    #[must_use] pub fn promoted_piece(self) -> PieceType {
         //must be called only if self.is_promotion() is true
         //also only given piece type, not colour
         unsafe { PieceType::from((((self.data & PROMOTION_MASK) >> 12) + 1) as u8) }
     }
 
-    pub fn is_promotion(self) -> bool {
+    #[must_use] pub fn is_promotion(self) -> bool {
         self.data & PROMOTION_FLAG == PROMOTION_FLAG
     }
 
-    pub fn is_castling(self) -> bool {
+    #[must_use] pub fn is_castling(self) -> bool {
         (self.data & CASTLING_FLAG) > 0 && (self.data & EN_PASSANT_FLAG == 0)
     }
 
-    pub fn is_en_passant(self) -> bool {
+    #[must_use] pub fn is_en_passant(self) -> bool {
         (self.data & EN_PASSANT_FLAG) > 0 && (self.data & CASTLING_FLAG == 0)
     }
 
-    pub fn is_null(self) -> bool {
+    #[must_use] pub fn is_null(self) -> bool {
         self.data == 0
     }
 
-    pub fn piece_moved(self, b: &Board) -> Piece {
+    #[must_use] pub fn piece_moved(self, b: &Board) -> Piece {
         b.get_piece_at(self.square_from())
     }
 
-    pub fn is_capture(self, b: &Board) -> bool {
+    #[must_use] pub fn is_capture(self, b: &Board) -> bool {
         b.pieces_array[self.square_to()].is_some()
     }
 
-    pub fn is_double_push(self, b: &Board) -> bool {
+    #[must_use] pub fn is_double_push(self, b: &Board) -> bool {
         if rank(self.square_to()) != 3 && rank(self.square_to()) != 4
             || rank(self.square_from()) != 1 && rank(self.square_from()) != 6
         {
@@ -110,11 +110,11 @@ impl Move {
         piece_type(self.piece_moved(b)) == PieceType::Pawn
     }
 
-    pub fn piece_captured(self, b: &Board) -> Piece {
+    #[must_use] pub fn piece_captured(self, b: &Board) -> Piece {
         b.get_piece_at(self.square_to())
     }
 
-    pub fn is_tactical(self, b: &Board) -> bool {
+    #[must_use] pub fn is_tactical(self, b: &Board) -> bool {
         self.is_promotion() || self.is_capture(b) || self.is_en_passant()
     }
 }
@@ -148,7 +148,7 @@ impl Move {
     }
 }
 
-pub fn encode_move(from: Square, to: Square, promoted_piece: Option<PieceType>, flag: u16) -> Move {
+#[must_use] pub fn encode_move(from: Square, to: Square, promoted_piece: Option<PieceType>, flag: u16) -> Move {
     if flag & PROMOTION_FLAG == PROMOTION_FLAG {
         //move is a promotion
         Move::from_promotion(from, to, unsafe { promoted_piece.unwrap_unchecked() })
@@ -205,14 +205,11 @@ impl Board {
 
         let to = m.square_to();
         let from = m.square_from();
-        let piece = match m.is_promotion() {
-            false => self.get_piece_at(to),
-            true => match self.pieces_array[to] {
-                Some(Piece::WN) | Some(Piece::WB) | Some(Piece::WR) | Some(Piece::WQ) => Piece::WP,
-                Some(Piece::BN) | Some(Piece::BB) | Some(Piece::BR) | Some(Piece::BQ) => Piece::BP,
-                _ => unreachable!(),
-            },
-        }; //not m.piece_moved(&self) because board has been mutated
+        let piece = if m.is_promotion() { match self.pieces_array[to] {
+            Some(Piece::WN | Piece::WB | Piece::WR | Piece::WQ) => Piece::WP,
+            Some(Piece::BN | Piece::BB | Piece::BR | Piece::BQ) => Piece::BP,
+            _ => unreachable!(),
+        } } else { self.get_piece_at(to) }; //not m.piece_moved(&self) because board has been mutated
 
         if m.is_promotion() {
             let promoted_piece = self.get_piece_at(to);
@@ -293,7 +290,7 @@ impl Board {
                     self.pieces_array[unsafe { to.add_unchecked(8) }] = Some(Piece::WP);
                     self.nnue.undo_ep(piece, Some(Piece::WP), from, to);
                 }
-            };
+            }
         }
 
         self.occupancies[WHITE] = self.bitboards[Piece::WP]
@@ -478,10 +475,10 @@ impl Board {
                         if rank(from).abs_diff(rank(to)) == 2 {
                             match colour {
                                 Colour::White => {
-                                    self.en_passant = Some(unsafe { to.sub_unchecked(8) })
+                                    self.en_passant = Some(unsafe { to.sub_unchecked(8) });
                                 }
                                 Colour::Black => {
-                                    self.en_passant = Some(unsafe { to.add_unchecked(8) })
+                                    self.en_passant = Some(unsafe { to.add_unchecked(8) });
                                 }
                             }
                         } else if m.is_en_passant() {
@@ -518,7 +515,7 @@ impl Board {
                     _ => {}
                 },
                 _ => {}
-            };
+            }
         }
 
         self.occupancies[WHITE] = self.bitboards[Piece::WP]

@@ -1,6 +1,6 @@
 use crate::rng::XorShiftU64;
-use crate::types::*;
-use crate::*;
+use crate::types::{Piece, Square};
+use crate::{Board, Colour, Move};
 
 macro_rules! cfor {
     ($init: stmt; $cond: expr; $step: expr; $body: block) => {
@@ -45,7 +45,7 @@ pub static EP_KEYS: [u64; 64] = init_hash_keys().1;
 pub static CASTLING_KEYS: [u64; 16] = init_hash_keys().2;
 pub const BLACK_TO_MOVE: u64 = init_hash_keys().3;
 
-pub fn hash(b: &Board) -> u64 {
+#[must_use] pub fn hash(b: &Board) -> u64 {
     let mut hash_key: u64 = 0;
 
     for (square, &piece) in b.pieces_array.iter().enumerate() {
@@ -69,7 +69,7 @@ pub fn hash(b: &Board) -> u64 {
 
 /// This updates everything about the hash key EXCEPT castling rights,
 /// which it is more efficient to simply do after making the move
-pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
+#[must_use] pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
     //call with board state before move was made
     let mut res = hash_key;
 
@@ -234,6 +234,6 @@ mod tests {
         hasht!("8/4K3/5P2/1p6/4N2p/1k3n2/6p1/8 w - - 0 53", 6, 19_350_596, 25);
 
         let duration: Duration = start.elapsed();
-        println!("Hash Test completed in: {:?}", duration);
+        println!("Hash Test completed in: {duration:?}");
     }
 }

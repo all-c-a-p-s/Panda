@@ -1,9 +1,9 @@
 use std::mem;
 
 use crate::eval::MIRROR;
-use crate::*;
+use crate::{BOTH, Board, Colour, lsfb, pop_bit};
 
-use crate::types::*;
+use crate::types::{PIECES, Piece, Square};
 
 // ON or OFF for each piece / colour / square
 const NUM_FEATURES: usize = 6 * 2 * 64;
@@ -32,7 +32,7 @@ static MODEL: Network = unsafe { mem::transmute(*include_bytes!("./nets/quantise
 
 type SideAccumulator = [i16; HL_SIZE];
 
-pub const fn nnue_index(piece: Piece, sq: Square) -> (usize, usize) {
+#[must_use] pub const fn nnue_index(piece: Piece, sq: Square) -> (usize, usize) {
     const PIECE_STEP: usize = 64;
 
     let white_idx = PIECE_STEP * piece as usize + sq as usize;
@@ -60,7 +60,7 @@ impl Default for Accumulator {
 }
 
 impl Accumulator {
-    pub fn from_board(board: &Board) -> Self {
+    #[must_use] pub fn from_board(board: &Board) -> Self {
         let mut a = Accumulator::default();
 
         let mut occs = board.occupancies[BOTH];
@@ -186,7 +186,7 @@ impl Accumulator {
         }
     }
 
-    pub fn evaluate(&self, side: Colour) -> i32 {
+    #[must_use] pub fn evaluate(&self, side: Colour) -> i32 {
         let (us, them) = match side {
             Colour::White => (self.white.iter(), self.black.iter()),
             Colour::Black => (self.black.iter(), self.white.iter()),
@@ -194,18 +194,18 @@ impl Accumulator {
 
         let mut out = 0;
         for (&value, &weight) in us.zip(&MODEL.output_weights[..HL_SIZE]) {
-            out += squared_crelu(value) * (weight as i32);
+            out += squared_crelu(value) * i32::from(weight);
         }
         for (&value, &weight) in them.zip(&MODEL.output_weights[HL_SIZE..]) {
-            out += squared_crelu(value) * (weight as i32);
+            out += squared_crelu(value) * i32::from(weight);
         }
 
-        (out / QA + MODEL.output_bias as i32) * SCALE / QAB
+        (out / QA + i32::from(MODEL.output_bias)) * SCALE / QAB
     }
 }
 
 fn squared_crelu(value: i16) -> i32 {
-    let v = value.clamp(CR_MIN, CR_MAX) as i32;
+    let v = i32::from(value.clamp(CR_MIN, CR_MAX));
 
     v * v
 }

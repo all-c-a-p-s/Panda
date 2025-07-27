@@ -1,19 +1,16 @@
-use crate::board::*;
-use crate::eval::*;
-use crate::helper::*;
-use crate::magic::*;
-use crate::movegen::*;
-use crate::ordering::*;
-use crate::r#move::*;
-use crate::thread::*;
-use crate::transposition::*;
-use crate::types::*;
-use crate::uci::*;
+use crate::board::{BitBoard, Board, Colour};
+use crate::eval::evaluate;
+use crate::helper::{BLACK, BOTH, WHITE, count, lsfb, piece_type, pop_bit, read_param, tuneable_params};
+use crate::magic::{BISHOP_EDGE_RAYS, ROOK_EDGE_RAYS};
+use crate::movegen::RAY_BETWEEN;
+use crate::ordering::SEE_VALUES;
+use crate::r#move::{Commit, Move, MoveList, NULL_MOVE};
+use crate::thread::{SearchStackEntry, Thread};
+use crate::transposition::{EntryFlag, TT, TTEntry};
+use crate::types::{Piece, PieceType, Square};
+use crate::uci::print_thinking;
 use crate::zobrist::{BLACK_TO_MOVE, EP_KEYS};
 
-use std::cmp;
-#[allow(unused_imports)]
-use std::collections::HashMap;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
 
@@ -102,7 +99,7 @@ fn make_null_move(b: &mut Board) -> NullMoveUndo {
     while let Some(sq) = lsfb(their_attackers) {
         let ray_between = RAY_BETWEEN[sq][our_king] & b.occupancies[BOTH];
         if count(ray_between) == 1 {
-            b.pinned |= ray_between
+            b.pinned |= ray_between;
         }
         their_attackers = pop_bit(sq, their_attackers);
     }
@@ -221,7 +218,7 @@ impl Thread<'_> {
         position.undo_move(best_move, commit);
         self.ply -= 1;
         //undo move already made on board
-        let threshold = std::cmp::max(tt_score - (depth as i32 * 2 + 20), -INFINITY);
+        let threshold = std::cmp::max(tt_score - (i32::from(depth) * 2 + 20), -INFINITY);
 
         self.info.excluded[self.ply] = Some(best_move);
 
@@ -293,8 +290,8 @@ impl Thread<'_> {
             // mate distance pruning:
             // check if line is so good/bad that being mated in the current ply
             // or mating in the next ply would not change alpha/beta
-            let r_alpha = cmp::max(alpha, -INFINITY + self.ply as i32);
-            let r_beta = cmp::min(beta, INFINITY - self.ply as i32 - 1);
+            let r_alpha = std::cmp::max(alpha, -INFINITY + self.ply as i32);
+            let r_beta = std::cmp::min(beta, INFINITY - self.ply as i32 - 1);
             if r_alpha >= r_beta {
                 return r_alpha;
             }
@@ -359,8 +356,7 @@ impl Thread<'_> {
                 //If eval >= beta + some margin, assume that we can achieve at least beta
                 if depth <= read_param!(BETA_PRUNING_DEPTH)
                     && static_eval
-                        - (read_param!(BETA_PRUNING_MARGIN) * cmp::max(depth - improving as u8, 0))
-                            as i32
+                        - i32::from(read_param!(BETA_PRUNING_MARGIN) * std::cmp::max(depth - u8::from(improving), 0))
                         >= beta
                 {
                     return static_eval;
@@ -378,7 +374,7 @@ impl Thread<'_> {
                 // eval is very low so only realistic way to increase it is with captures
                 // we only need to qsearch to evaluate the position
                 if depth <= read_param!(MAX_RAZOR_DEPTH)
-                    && static_eval + read_param!(RAZORING_MARGIN) * (depth as i32) <= alpha
+                    && static_eval + read_param!(RAZORING_MARGIN) * i32::from(depth) <= alpha
                 {
                     let score = self.qsearch(position, alpha, beta);
                     if score > alpha {
@@ -391,13 +387,13 @@ impl Thread<'_> {
                 // another move, then their previous move was probably bad
                 if !position.is_kp_endgame()
                     && !position.last_move_null
-                    && static_eval >= beta + 200 - 20 * (depth as i32)
+                    && static_eval >= beta + 200 - 20 * i32::from(depth)
                     && !root
                 {
                     let undo = make_null_move(position);
                     self.ply += 1;
-                    let r = 2 + depth as i32 / 4 + cmp::min((static_eval - beta) / 256, 3);
-                    let reduced_depth = cmp::max(depth as i32 - r, 1) as u8;
+                    let r = 2 + i32::from(depth) / 4 + std::cmp::min((static_eval - beta) / 256, 3);
+                    let reduced_depth = std::cmp::max(i32::from(depth) - r, 1) as u8;
                     let null_move_eval =
                         -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
                     //minimal window used because all that matters is whether the search result is better than beta
@@ -455,10 +451,11 @@ impl Thread<'_> {
                 if quiet && skip_quiets && !is_killer {
                     continue;
                 }
-                let r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
-                    [cmp::min(depth, 31) as usize][cmp::min(considered, 31) as usize]
-                    + (!improving) as i32;
-                let lmr_depth = std::cmp::max(depth as i32 - 1 - r, 0);
+                let r: i32 = self.info.lmr_table.reduction_table[usize::from(quiet)]
+                    [std::cmp::min(depth, 31) as usize]
+                    [std::cmp::min(considered, 31) as usize]
+                    + i32::from(!improving);
+                let lmr_depth = std::cmp::max(i32::from(depth) - 1 - r, 0);
 
                 //SEE Pruning: if a move fails SEE by a depth-dependent threshold,
                 //prune it
@@ -468,7 +465,7 @@ impl Thread<'_> {
                     } else {
                         read_param!(SEE_QUIET_MARGIN)
                     };
-                    let threshold = margin * depth as i32;
+                    let threshold = margin * i32::from(depth);
                     //prune if move fails to beat SEE threshold
                     if !m.see(position, threshold) {
                         continue;
@@ -477,10 +474,7 @@ impl Thread<'_> {
 
                 //Late Move Pruning: after a certain point start skipping all quiets after the current
                 //move. The threshold I'm currently using comes from Weiss
-                let lmp_threshold = match improving {
-                    true => depth * depth + 2,
-                    false => depth * depth / 2,
-                };
+                let lmp_threshold = if improving { depth * depth + 2 } else { depth * depth / 2 };
                 if depth <= read_param!(LMP_DEPTH) && considered > lmp_threshold && !in_check {
                     skip_quiets = true;
                 }
@@ -516,12 +510,12 @@ impl Thread<'_> {
                     position, best_move, &commit, tt_score, depth, pv_node, alpha, beta, cutnode,
                 )
             } else {
-                Some((in_check && !root) as i32)
+                Some(i32::from(in_check && !root))
             };
 
             if extension.is_none() {
                 //MultiCut case from singularity() function
-                return tt_score - (depth as i32 * 2);
+                return tt_score - (i32::from(depth) * 2);
             } else if maybe_singular {
                 position.play_unchecked(best_move);
                 self.ply += 1;
@@ -532,7 +526,7 @@ impl Thread<'_> {
             }
 
             let new_depth =
-                i32::clamp(depth as i32 - 1 + extension.unwrap(), 0, MAX_PLY as i32) as u8;
+                i32::clamp(i32::from(depth) - 1 + extension.unwrap(), 0, MAX_PLY as i32) as u8;
 
             let eval = if legal == 1 {
                 //note that this is one because the variable is updated above
@@ -545,29 +539,29 @@ impl Thread<'_> {
                 // often enough that it outweighs the cost of re-searching
                 // then if we are unable to prove so
 
-                let mut r: i32 = self.info.lmr_table.reduction_table[quiet as usize]
-                    [cmp::min(depth, 31) as usize][cmp::min(legal, 31) as usize];
+                let mut r: i32 = self.info.lmr_table.reduction_table[usize::from(quiet)]
+                    [std::cmp::min(depth, 31) as usize][std::cmp::min(legal, 31) as usize];
 
                 let mut reduction_eval = if legal
-                    > (FULL_DEPTH_MOVES + pv_node as u8 + !tt_move as u8 + root as u8)
+                    > (FULL_DEPTH_MOVES + u8::from(pv_node) + u8::from(!tt_move) + u8::from(root))
                     && depth >= REDUCTION_LIMIT
                     && reduction_ok(tactical, in_check)
                 {
                     //decrease reduction for pv-nodes
-                    r -= pv_node as i32;
+                    r -= i32::from(pv_node);
                     //increase reduction for quiet moves where tt move is noisy
-                    r += tt_move_capture as i32;
+                    r += i32::from(tt_move_capture);
                     //reduce more in nodes where search isn't improving
-                    r += !improving as i32;
+                    r += i32::from(!improving);
                     //reduce more in cutnodes
-                    r += cutnode as i32;
+                    r += i32::from(cutnode);
 
                     let history_threshold = ((self.nodes / 1_024) as i32).max(8192);
                     r -= (self.info.history_table[m.piece_moved(position)][m.square_to()]
                         / history_threshold)
                         .clamp(-2, 1);
 
-                    let mut reduced_depth = cmp::max(new_depth as i32 - r, 1) as u8;
+                    let mut reduced_depth = std::cmp::max(i32::from(new_depth) - r, 1) as u8;
                     reduced_depth = reduced_depth.clamp(1, new_depth);
                     //avoid dropping into qsearch or extending
 
@@ -623,10 +617,7 @@ impl Thread<'_> {
 
         if legal == 0 {
             //no legal moves -> mate or stalemate
-            return match in_check {
-                true => -INFINITY + self.ply as i32,
-                false => 0,
-            };
+            return if in_check { -INFINITY + self.ply as i32 } else { 0 };
         }
 
         if !self.is_stopped() {
@@ -679,7 +670,7 @@ impl Thread<'_> {
             return alpha;
         }
 
-        alpha = cmp::max(alpha, best_score);
+        alpha = std::cmp::max(alpha, best_score);
 
         let in_check = position.checkers != 0;
 
@@ -772,7 +763,7 @@ impl Thread<'_> {
     ) {
         if !tactical {
             self.update_killer_moves(cutoff_move, tactical);
-            self.update_history_table(b, moves, cutoff_move, depth, moves_played as usize)
+            self.update_history_table(b, moves, cutoff_move, depth, moves_played as usize);
         }
     }
 
@@ -806,7 +797,7 @@ impl Thread<'_> {
             let target = m.square_to();
             if !m.is_capture(b) {
                 self.info.history_table[piece][target] +=
-                    (depth * depth) as i32 * if m == cutoff_move { 1 } else { -1 };
+                    i32::from(depth * depth) * if m == cutoff_move { 1 } else { -1 };
             }
         }
     }

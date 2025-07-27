@@ -1,7 +1,7 @@
-use crate::helper::*;
-use crate::magic::*;
-use crate::movegen::*;
-use crate::nnue::*;
+use crate::helper::{BLACK, BOTH, WHITE, coordinate, count, lsfb, pop_bit, set_bit, square};
+use crate::magic::{BISHOP_EDGE_RAYS, ROOK_EDGE_RAYS};
+use crate::movegen::RAY_BETWEEN;
+use crate::nnue::Accumulator;
 use crate::types::{Piece, Square};
 use crate::zobrist::hash;
 use crate::MAX_GAME_PLY;
@@ -41,7 +41,7 @@ pub enum Colour {
 }
 
 impl Colour {
-    pub fn opponent(&self) -> Self {
+    #[must_use] pub fn opponent(&self) -> Self {
         match self {
             Colour::White => Colour::Black,
             Colour::Black => Colour::White,
@@ -49,7 +49,7 @@ impl Colour {
     }
 }
 
-pub fn ascii_to_piece(ascii: char) -> Piece {
+#[must_use] pub fn ascii_to_piece(ascii: char) -> Piece {
     match ascii {
         'P' => Piece::WP,
         'N' => Piece::WN,
@@ -68,7 +68,7 @@ pub fn ascii_to_piece(ascii: char) -> Piece {
 }
 
 impl Board {
-    pub fn from(fen: &str) -> Self {
+    #[must_use] pub fn from(fen: &str) -> Self {
         let mut new_board = Board {
             bitboards: [EMPTY; 12],
             pieces_array: [None; 64],
@@ -93,7 +93,7 @@ impl Board {
             if i == ' ' {
                 break;
             }
-            board_fen += i.to_string().as_str()
+            board_fen += i.to_string().as_str();
         }
 
         let flags: Vec<&str> = (fen[flags..].split(' ')).clone().collect::<Vec<&str>>();
@@ -142,19 +142,15 @@ impl Board {
         for c in board_fen.chars() {
             if c == '/' {
                 rank -= 1;
-                if file != 8 {
-                    panic!("invalid file count on / {}", file)
-                }
+                assert!((file == 8), "invalid file count on / {file}");
                 file = 0;
                 continue;
             }
-            if file == 8 {
-                panic!("file count 8 and no newline {}", c)
-            }
+            assert!((file != 8), "file count 8 and no newline {c}");
             match c {
                 '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' => {
                     file += <u32 as std::convert::TryInto<usize>>::try_into(c.to_digit(10).unwrap())
-                        .unwrap()
+                        .unwrap();
                 }
                 'P' | 'N' | 'B' | 'R' | 'Q' | 'K' | 'p' | 'n' | 'b' | 'r' | 'q' | 'k' => {
                     new_board.bitboards[ascii_to_piece(c)] = set_bit(
@@ -162,9 +158,9 @@ impl Board {
                         new_board.bitboards[ascii_to_piece(c)],
                     );
                     new_board.pieces_array[rank * 8 + file] = Some(ascii_to_piece(c));
-                    file += 1
+                    file += 1;
                 }
-                _ => panic!("unexpected character {}", c),
+                _ => panic!("unexpected character {c}"),
             }
         }
 
@@ -216,7 +212,7 @@ impl Board {
                             11 => squares += "k",
 
                             _ => unreachable!(),
-                        };
+                        }
                         empty = false;
                         break;
                     }
@@ -231,15 +227,15 @@ impl Board {
             print!("{}", rank + 1);
             for file in 0..8 {
                 let sq: usize = rank * 8 + file;
-                print!(" {}", squares.chars().collect::<Vec<char>>()[sq])
+                print!(" {}", squares.chars().collect::<Vec<char>>()[sq]);
             }
-            println!()
+            println!();
         }
         println!("  a b c d e f g h\n");
         match self.side_to_move {
             Colour::White => println!("White to move"),
             Colour::Black => println!("Black to move"),
-        };
+        }
         let castling_rights: &str = match self.castling {
             0b0000_0000 => "NONE",
             0b0000_0001 => "K",
@@ -260,7 +256,7 @@ impl Board {
 
             _ => panic!("invalid castling rights"),
         };
-        println!("Castling: {}", castling_rights);
+        println!("Castling: {castling_rights}");
         if let Some(ep) = self.en_passant {
             println!("En passant: {}", coordinate(ep));
         } else {
@@ -270,7 +266,7 @@ impl Board {
         println!("FEN: {}", self.fen());
     }
 
-    pub fn is_kp_endgame(&self) -> bool {
+    #[must_use] pub fn is_kp_endgame(&self) -> bool {
         //used to avoid null move pruning in king and pawn endgames
         //where zugzwang is very common
         self.occupancies[BOTH]
@@ -281,7 +277,7 @@ impl Board {
             == 0
     }
 
-    pub fn fen(&self) -> String {
+    #[must_use] pub fn fen(&self) -> String {
         let mut fen = String::new();
         let mut empty_count = 0;
 
@@ -292,7 +288,7 @@ impl Board {
 
                 if i % 8 == 0 && i != 56 {
                     if empty_count != 0 {
-                        fen += format!("{}", empty_count).as_str();
+                        fen += format!("{empty_count}").as_str();
                         empty_count = 0;
                     }
                     fen += "/";
@@ -301,7 +297,7 @@ impl Board {
                     empty_count += 1;
                 } else {
                     if empty_count != 0 {
-                        fen += format!("{}", empty_count).as_str();
+                        fen += format!("{empty_count}").as_str();
                         empty_count = 0;
                     }
                     match pc {
@@ -324,7 +320,7 @@ impl Board {
         }
 
         if empty_count != 0 {
-            fen += format!("{}", empty_count).as_str();
+            fen += format!("{empty_count}").as_str();
         }
 
         fen += if self.side_to_move == Colour::White {
@@ -359,7 +355,7 @@ impl Board {
             fen += &coordinate(ep);
         } else {
             fen += " -";
-        };
+        }
 
         fen += format!(" {}", self.fifty_move).as_str();
         fen += format!(" {}", self.ply % 2 + 1).as_str();
@@ -406,7 +402,7 @@ impl Board {
         }
     }
 
-    pub fn get_piece_at(&self, sq: Square) -> Piece {
+    #[must_use] pub fn get_piece_at(&self, sq: Square) -> Piece {
         //SAFETY: this must only be called when we know there is a piece on sq
         unsafe { self.pieces_array[sq].unwrap_unchecked() }
     }

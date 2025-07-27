@@ -23,7 +23,7 @@ impl std::ops::Deref for TTRef<'_> {
 }
 
 impl<'a> TTRef<'a> {
-    pub fn new(tt: &'a TranspositionTable) -> Self {
+    #[must_use] pub fn new(tt: &'a TranspositionTable) -> Self {
         Self { tt }
     }
 }
@@ -70,13 +70,13 @@ impl TTEntry {
     const BEST_MOVE_SHIFT: u64 = 32;
     const DEPTH_SHIFT: u64 = 48;
     const FLAG_SHIFT: u64 = 56;
-    pub fn new(depth: u8, eval: i32, flag: EntryFlag, best_move: Move, hash_key: u64) -> Self {
+    #[must_use] pub fn new(depth: u8, eval: i32, flag: EntryFlag, best_move: Move, hash_key: u64) -> Self {
         Self {
-            depth,
-            eval,
-            flag,
-            best_move,
             hash_key,
+            eval,
+            best_move,
+            depth,
+            flag,
         }
     }
 
@@ -91,10 +91,10 @@ impl TTEntry {
     fn to_u64s(&self) -> (u64, u64) {
         let key = self.hash_key;
 
-        let eval_data = (unsafe { std::mem::transmute::<i32, u32>(self.eval) } as u64);
-        let bm_data = (self.best_move.data as u64) << Self::BEST_MOVE_SHIFT;
-        let depth_data = (self.depth as u64) << Self::DEPTH_SHIFT;
-        let flag_data = ((self.flag as u8) as u64) << Self::FLAG_SHIFT;
+        let eval_data = u64::from(unsafe { std::mem::transmute::<i32, u32>(self.eval) });
+        let bm_data = u64::from(self.best_move.data) << Self::BEST_MOVE_SHIFT;
+        let depth_data = u64::from(self.depth) << Self::DEPTH_SHIFT;
+        let flag_data = u64::from(self.flag as u8) << Self::FLAG_SHIFT;
 
         let data = eval_data | bm_data | depth_data | flag_data;
 
@@ -108,7 +108,7 @@ pub trait TT {
 }
 
 impl TranspositionTable {
-    pub fn with_log2_capacity(n: usize) -> Self {
+    #[must_use] pub fn with_log2_capacity(n: usize) -> Self {
         let capacity: usize = 1 << n;
         TranspositionTable {
             tt: (0..capacity)
@@ -119,19 +119,19 @@ impl TranspositionTable {
         }
     }
 
-    pub fn in_megabytes(n: usize) -> Self {
+    #[must_use] pub fn in_megabytes(n: usize) -> Self {
         let mbs = n.max(1);
         let x = (mbs as f32).log2() as usize;
 
         Self::with_log2_capacity(16 + x)
     }
 
-    pub fn index(&self, hash_key: u64) -> usize {
+    #[must_use] pub fn index(&self, hash_key: u64) -> usize {
         //return index to allocate in table
         (hash_key as usize) & self.mask
     }
 
-    pub fn get(&self, hash: u64) -> Option<TTEntry> {
+    #[must_use] pub fn get(&self, hash: u64) -> Option<TTEntry> {
         let index = self.index(hash);
         let entry = TTEntry::from_internal(self.tt[index].clone());
         match entry.flag {
@@ -141,7 +141,7 @@ impl TranspositionTable {
     }
 
     pub fn clear(&self) {
-        self.tt.iter().for_each(|entry| entry.zero());
+        self.tt.iter().for_each(TTEntryInternal::zero);
     }
 
     pub fn resize(&mut self, mbs: usize) {

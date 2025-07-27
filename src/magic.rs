@@ -1,7 +1,7 @@
-use crate::board::*;
-use crate::helper::*;
-use crate::rng::*;
-use crate::types::*;
+use crate::board::{BitBoard, Colour};
+use crate::helper::{A_FILE, B_FILE, G_FILE, H_FILE, coordinate, count, get_bit, lsfb, pop_bit, set_bit};
+use crate::rng::magic_candidate;
+use crate::types::Square;
 // max number of relevant blocker bits
 
 pub enum SliderType {
@@ -155,7 +155,7 @@ const fn rook_edge_rays(square: usize) -> BitBoard {
 }
 
 //functions with attack maps for non-sliders
-pub const fn mask_pawn_attacks(square: usize, side: Colour) -> BitBoard {
+#[must_use] pub const fn mask_pawn_attacks(square: usize, side: Colour) -> BitBoard {
     //generate capturing attacks
     let p: BitBoard = set_bit(unsafe { Square::from(square as u8) }, 0);
     match side {
@@ -164,7 +164,7 @@ pub const fn mask_pawn_attacks(square: usize, side: Colour) -> BitBoard {
     }
 }
 
-pub const fn mask_knight_attacks(square: usize) -> BitBoard {
+#[must_use] pub const fn mask_knight_attacks(square: usize) -> BitBoard {
     let n: BitBoard = set_bit(unsafe { Square::from(square as u8) }, 0);
     ((n >> 17) & !H_FILE)
         | ((n >> 15) & !A_FILE)
@@ -176,7 +176,7 @@ pub const fn mask_knight_attacks(square: usize) -> BitBoard {
         | ((n << 17) & !A_FILE)
 }
 
-pub const fn mask_king_attacks(square: usize) -> BitBoard {
+#[must_use] pub const fn mask_king_attacks(square: usize) -> BitBoard {
     let k: BitBoard = set_bit(unsafe { Square::from(square as u8) }, 0);
     ((k >> 9) & !H_FILE)
         | ((k >> 7) & !A_FILE)
@@ -188,7 +188,7 @@ pub const fn mask_king_attacks(square: usize) -> BitBoard {
         | (k >> 8)
 }
 
-pub const fn bishop_rays(square: usize) -> BitBoard {
+#[must_use] pub const fn bishop_rays(square: usize) -> BitBoard {
     //separate function needed for hashing
     //does not include squares on the edge of the board as
     //bishop cannot go past these anyway
@@ -230,7 +230,7 @@ pub const fn bishop_rays(square: usize) -> BitBoard {
     attacks
 }
 
-pub const fn mask_bishop_attacks(square: usize, blockers: BitBoard) -> BitBoard {
+#[must_use] pub const fn mask_bishop_attacks(square: usize, blockers: BitBoard) -> BitBoard {
     //does not include squares on the edge of the board as
     //bishop cannot go past these anyway
     //blockers are treated as pieces of opposite colour (can be captured)
@@ -283,7 +283,7 @@ pub const fn mask_bishop_attacks(square: usize, blockers: BitBoard) -> BitBoard 
     attacks
 }
 
-pub const fn rook_rays(square: usize) -> BitBoard {
+#[must_use] pub const fn rook_rays(square: usize) -> BitBoard {
     //rook attacks without blockers
     //separate function for hashing
     let mut attacks: BitBoard = 0;
@@ -324,7 +324,7 @@ pub const fn rook_rays(square: usize) -> BitBoard {
     attacks
 }
 
-pub const fn mask_rook_attacks(square: usize, blockers: BitBoard) -> BitBoard {
+#[must_use] pub const fn mask_rook_attacks(square: usize, blockers: BitBoard) -> BitBoard {
     //rook attacks accounting for blockers
     let mut attacks: BitBoard = 0;
     let square_rank: usize = square / 8;
@@ -392,11 +392,11 @@ pub const fn mask_rook_attacks(square: usize, blockers: BitBoard) -> BitBoard {
     attacks
 }
 
-pub const fn mask_queen_attacks(square: usize, blockers: BitBoard) -> BitBoard {
+#[must_use] pub const fn mask_queen_attacks(square: usize, blockers: BitBoard) -> BitBoard {
     mask_bishop_attacks(square, blockers) | mask_rook_attacks(square, blockers)
 }
 
-pub const fn set_blockers(index: usize, bits_in_mask: usize, m: BitBoard) -> BitBoard {
+#[must_use] pub const fn set_blockers(index: usize, bits_in_mask: usize, m: BitBoard) -> BitBoard {
     //essentially count to 2^bits_in_mask - 1 in binary by toggling
     //the bits in the attack mask
     let mut blocker: u64 = 0;
@@ -417,7 +417,7 @@ pub const fn set_blockers(index: usize, bits_in_mask: usize, m: BitBoard) -> Bit
 }
 
 //generate magic for given square
-pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> BitBoard {
+#[must_use] pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> BitBoard {
     let (mut blockers, mut attacks) = ([0u64; 4096], [0u64; 4096]);
     let attack_mask = match slider {
         SliderType::Bishop => bishop_rays(square),
@@ -447,7 +447,7 @@ pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> Bit
                 .unwrap(); //shift ensures it is between 0 and 4095
                            //test magic number multiplication
             if used_attacks[magic_index] == 0 {
-                used_attacks[magic_index] = attacks[i]
+                used_attacks[magic_index] = attacks[i];
             } else {
                 //magic doesn't work
                 ok = false;
@@ -469,7 +469,7 @@ pub fn init_magics() {
     println!("BISHOP MAGICS:");
     println!("==============\n");
     for (i, bits) in BISHOP_RELEVANT_BITS.iter().enumerate() {
-        println!("0x{:X}u64,", gen_magic(i, *bits, SliderType::Bishop))
+        println!("0x{:X}u64,", gen_magic(i, *bits, SliderType::Bishop));
     }
 
     print!("\n\n\n");
@@ -477,7 +477,7 @@ pub fn init_magics() {
     println!("==============\n");
 
     for (i, bits) in ROOK_RELEVANT_BITS.iter().enumerate() {
-        println!("0x{:X}u64,", gen_magic(i, *bits, SliderType::Rook))
+        println!("0x{:X}u64,", gen_magic(i, *bits, SliderType::Rook));
     }
 }
 
@@ -696,7 +696,7 @@ pub fn init_slider_attacks() {
     init_rook_attacks();
 }
 
-pub fn get_bishop_attacks(square: usize, blockers: BitBoard) -> BitBoard {
+#[must_use] pub fn get_bishop_attacks(square: usize, blockers: BitBoard) -> BitBoard {
     let mut b: BitBoard = blockers;
     b &= BISHOP_RAYS[square]; //bits where blockers block rays
     b = b.wrapping_mul(BISHOP_MAGICS[square]); //magic hashing
@@ -704,7 +704,7 @@ pub fn get_bishop_attacks(square: usize, blockers: BitBoard) -> BitBoard {
     unsafe { BISHOP_ATTACKS[square][b as usize] }
 }
 
-pub fn get_rook_attacks(square: usize, blockers: BitBoard) -> BitBoard {
+#[must_use] pub fn get_rook_attacks(square: usize, blockers: BitBoard) -> BitBoard {
     let mut b: BitBoard = blockers;
     b &= ROOK_RAYS[square];
     b = b.wrapping_mul(ROOK_MAGICS[square]);
@@ -712,7 +712,7 @@ pub fn get_rook_attacks(square: usize, blockers: BitBoard) -> BitBoard {
     unsafe { ROOK_ATTACKS[square][b as usize] }
 }
 
-pub fn get_queen_attacks(square: usize, blockers: BitBoard) -> BitBoard {
+#[must_use] pub fn get_queen_attacks(square: usize, blockers: BitBoard) -> BitBoard {
     let mut bishop_blockers: BitBoard = blockers;
     let mut rook_blockers: BitBoard = blockers;
 

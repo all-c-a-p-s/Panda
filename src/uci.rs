@@ -2,10 +2,10 @@ use std::time::Instant;
 
 #[cfg(feature = "tuning")]
 use crate::search::params;
-use crate::thread::*;
-use crate::transposition::*;
-use crate::types::*;
-use crate::*;
+use crate::thread::{Searcher, Thread};
+use crate::transposition::TranspositionTable;
+use crate::types::{Piece, PieceType, Square};
+use crate::{Board, CASTLING_FLAG, Colour, EN_PASSANT_FLAG, INFINITY, Move, MoveData, NO_FLAG, PROMOTION_FLAG, coordinate, encode_move, perft, piece_type, square};
 
 pub enum CommandType {
     Unknown,
@@ -36,7 +36,7 @@ impl Default for UciOptions {
 }
 
 impl Move {
-    pub fn uci(self) -> String {
+    #[must_use] pub fn uci(self) -> String {
         let mut res = String::new();
         res += coordinate(self.square_from()).as_str();
         res += coordinate(self.square_to()).as_str();
@@ -54,7 +54,7 @@ impl Move {
     }
 }
 
-pub fn recognise_command(command: &str) -> CommandType {
+#[must_use] pub fn recognise_command(command: &str) -> CommandType {
     let words = command.split_whitespace().collect::<Vec<&str>>();
     match words[0] {
         "uci" => CommandType::Uci,
@@ -62,9 +62,7 @@ pub fn recognise_command(command: &str) -> CommandType {
         "isready" => CommandType::IsReady,
         "position" => CommandType::Position,
         "go" => {
-            if words.is_empty() {
-                panic!("invalid uci command");
-            }
+            assert!(!words.is_empty(), "invalid uci command");
 
             if words[1] == "perft" {
                 CommandType::Perft
@@ -82,7 +80,7 @@ pub fn recognise_command(command: &str) -> CommandType {
 
 pub const STARTPOS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-pub fn parse_move(input: &str, board: &Board) -> Move {
+#[must_use] pub fn parse_move(input: &str, board: &Board) -> Move {
     let sq_from = unsafe { Square::from(square(&input[0..2]) as u8) };
     let sq_to = unsafe { Square::from(square(&input[2..4]) as u8) };
     let piece = board.get_piece_at(sq_from);
@@ -118,7 +116,7 @@ pub fn parse_move(input: &str, board: &Board) -> Move {
 
 pub fn parse_uci(command: &str) {
     if command == "uci" {
-        println!("id name Panda 1.0");
+        println!("id name Panda 1.1");
         println!("option name Threads type spin default 1 min 1 max 256");
         println!("option name Hash type spin default 16 min 1 max 1048576");
 
@@ -132,7 +130,7 @@ pub fn parse_uci(command: &str) {
 
 pub fn parse_isready(command: &str) {
     if command == "isready" {
-        println!("readyok")
+        println!("readyok");
     }
 }
 
@@ -143,9 +141,7 @@ pub fn reset(b: &mut Board) {
 pub fn parse_position(command: &str, b: &mut Board) {
     reset(b);
     let words = command.split_whitespace().collect::<Vec<&str>>();
-    if words.len() < 2 {
-        panic!("invalid position command");
-    }
+    assert!((words.len() >= 2), "invalid position command");
     match words[1] {
         "startpos" => {
             if words.len() != 2 {
@@ -166,7 +162,7 @@ pub fn parse_position(command: &str, b: &mut Board) {
                     fen_string += " ";
                 }
             }
-            *b = Board::from(&fen_string)
+            *b = Board::from(&fen_string);
         }
         "moves" => {
             for w in words.iter().skip(2) {
@@ -177,7 +173,7 @@ pub fn parse_position(command: &str, b: &mut Board) {
             }
         }
         _ => {}
-    };
+    }
 }
 
 pub fn parse_special_go(
@@ -189,9 +185,7 @@ pub fn parse_special_go(
     //special combination of go and position command by lichess bot api
     reset(b);
     let words = command.split_whitespace().collect::<Vec<&str>>();
-    if words.len() < 2 {
-        panic!("invalid position command");
-    }
+    assert!((words.len() >= 2), "invalid position command");
 
     let mut end_of_moves = 0;
 
@@ -223,7 +217,7 @@ pub fn parse_special_go(
                     fen_string += " ";
                 }
             }
-            *b = Board::from(&fen_string)
+            *b = Board::from(&fen_string);
         }
         "moves" => {
             for (i, &w) in words.iter().enumerate().skip(2) {
@@ -238,7 +232,7 @@ pub fn parse_special_go(
             }
         }
         _ => panic!("invalid position command"),
-    };
+    }
 
     let time_words = &words[end_of_moves..];
 
@@ -302,7 +296,7 @@ pub fn parse_go(
                 .expect("failed to convert movestogo to int");
         }
         _ => return parse_special_go(command, position, tt, opts),
-    };
+    }
 
     if words.len() > 9 {
         moves_to_go = words[10]
@@ -351,11 +345,10 @@ fn parse_perft(command: &str, position: &mut Board) {
         };
 
         println!(
-            "\ninfo depth {} nodes {} time {} nps {}",
-            x, nodes, time, nps
+            "\ninfo depth {x} nodes {nodes} time {time} nps {nps}"
         );
     } else {
-        eprintln!("expected integer depth in perft command (go perft <depth>)")
+        eprintln!("expected integer depth in perft command (go perft <depth>)");
     }
 }
 
@@ -367,7 +360,7 @@ fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable
             tt.resize(opts.hash_size);
         }
         ["setoption", "name", "Threads", "value", x] => {
-            opts.threads = x.parse().expect("thread count should be a +ve integer")
+            opts.threads = x.parse().expect("thread count should be a +ve integer");
         }
 
         #[cfg(feature = "tuning")]

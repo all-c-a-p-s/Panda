@@ -2,14 +2,14 @@ use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::time::{Duration, Instant};
 use types::{Piece, Square};
 
-use crate::transposition::*;
-use crate::*;
+use crate::transposition::{TTRef, TranspositionTable};
+use crate::{Board, INFINITY, MAX_PLY, Move, MoveData, NULL_MOVE, iterative_deepening, types};
 
 const MIN_MOVE_TIME: usize = 1; //make sure move time is never 0
 const MOVE_OVERHEAD: usize = 50;
 
 //returns ideal time window, hard deadline
-pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize) -> (usize, usize) {
+#[must_use] pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize) -> (usize, usize) {
     if time < MOVE_OVERHEAD {
         return (
             std::cmp::max(time / 2, MIN_MOVE_TIME),
@@ -133,8 +133,8 @@ impl<'a> Thread<'a> {
         stop: &'a AtomicBool,
     ) -> Self {
         let timer = Timer {
-            end_time,
             max_nodes,
+            end_time,
         };
 
         Thread {
@@ -159,7 +159,7 @@ pub struct Searcher<'a> {
 }
 
 impl<'a> Searcher<'a> {
-    pub fn new(tt: &'a TranspositionTable) -> Self {
+    #[must_use] pub fn new(tt: &'a TranspositionTable) -> Self {
         Self {
             _nodecount: AtomicU64::new(0),
             tt,

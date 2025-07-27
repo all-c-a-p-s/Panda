@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use crate::*;
+use crate::{Board, MoveList, STARTPOS};
 
 pub fn perft<const BULK: bool>(
     depth: usize,
@@ -94,7 +94,7 @@ pub fn full_perft() {
     perft!("8/4K3/5P2/1p6/4N2p/1k3n2/6p1/8 w - - 0 53", 6, 19_350_596, 25);
 
     let duration: Duration = start.elapsed();
-    println!("Perft completed in: {:?}", duration);
+    println!("Perft completed in: {duration:?}");
 }
 
 #[cfg(test)]

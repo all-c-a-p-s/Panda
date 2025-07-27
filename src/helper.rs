@@ -1,4 +1,4 @@
-use crate::types::*;
+use crate::types::{Piece, PieceType, Square};
 use std::collections::HashMap;
 
 use crate::BitBoard;
@@ -29,7 +29,7 @@ pub const BOTH: usize = 2;
 //max number of legal moves possible in a position (that has been found)
 pub const MAX_MOVES: usize = 218;
 
-pub fn file_indices() -> HashMap<char, usize> {
+#[must_use] pub fn file_indices() -> HashMap<char, usize> {
     let mut files = HashMap::new();
     files.insert('a', 0);
     files.insert('b', 1);
@@ -43,12 +43,12 @@ pub fn file_indices() -> HashMap<char, usize> {
 }
 
 #[inline(always)]
-pub const fn set_bit(square: Square, bitboard: BitBoard) -> BitBoard {
+#[must_use] pub const fn set_bit(square: Square, bitboard: BitBoard) -> BitBoard {
     bitboard | (1 << square as u8)
 }
 
 #[inline(always)]
-pub const fn get_bit(square: Square, bitboard: BitBoard) -> usize {
+#[must_use] pub const fn get_bit(square: Square, bitboard: BitBoard) -> usize {
     if bitboard & (1 << square as u8) != 0 {
         1
     } else {
@@ -57,7 +57,7 @@ pub const fn get_bit(square: Square, bitboard: BitBoard) -> usize {
 }
 
 #[inline(always)]
-pub const fn pop_bit(square: Square, bitboard: BitBoard) -> BitBoard {
+#[must_use] pub const fn pop_bit(square: Square, bitboard: BitBoard) -> BitBoard {
     if get_bit(square, bitboard) == 1 {
         return bitboard ^ set_bit(square, 0);
     }
@@ -65,7 +65,7 @@ pub const fn pop_bit(square: Square, bitboard: BitBoard) -> BitBoard {
 }
 
 #[inline(always)]
-pub const fn count(bitboard: BitBoard) -> usize {
+#[must_use] pub const fn count(bitboard: BitBoard) -> usize {
     let mut prev: BitBoard = bitboard;
     let mut count: usize = 0;
     while prev > 0 {
@@ -76,7 +76,7 @@ pub const fn count(bitboard: BitBoard) -> usize {
 }
 
 #[inline(always)]
-pub const fn lsfb(bitboard: BitBoard) -> Option<Square> {
+#[must_use] pub const fn lsfb(bitboard: BitBoard) -> Option<Square> {
     if bitboard != 0 {
         Some(unsafe { Square::from(bitboard.trailing_zeros() as u8) })
     } else {
@@ -84,11 +84,9 @@ pub const fn lsfb(bitboard: BitBoard) -> Option<Square> {
     }
 }
 
-pub fn square(sq: &str) -> Square {
+#[must_use] pub fn square(sq: &str) -> Square {
     let square = sq.to_string();
-    if square.len() != 2 {
-        panic!("invalid square name")
-    }
+    assert!((square.len() == 2), "invalid square name");
     let last: char = match square.chars().last() {
         Some(c) => c,
         None => panic!("failed to get last character"),
@@ -102,7 +100,7 @@ pub fn square(sq: &str) -> Square {
     unsafe { Square::from(((rank - 1) * 8 + file) as u8) }
 }
 
-pub fn coordinate(sq: Square) -> String {
+#[must_use] pub fn coordinate(sq: Square) -> String {
     let mut files: HashMap<usize, char> = HashMap::new();
     for (file, idx) in file_indices() {
         files.insert(idx, file); //invert hashmap
@@ -111,21 +109,21 @@ pub fn coordinate(sq: Square) -> String {
     let r = format!("{}", rank + 1); //+1 for zero-indexed
     let file = unsafe { sq.sub_unchecked(rank * 8) } as usize;
     let f = files[&file];
-    format!("{}{}", f, r)
+    format!("{f}{r}")
 }
 
 #[inline(always)]
-pub const fn rank(sq: Square) -> usize {
+#[must_use] pub const fn rank(sq: Square) -> usize {
     sq as usize / 8
 }
 
 #[inline(always)]
-pub const fn file(sq: Square) -> usize {
+#[must_use] pub const fn file(sq: Square) -> usize {
     sq as usize % 8
 }
 
 #[inline(always)]
-pub const fn piece_type(piece: Piece) -> PieceType {
+#[must_use] pub const fn piece_type(piece: Piece) -> PieceType {
     unsafe { PieceType::from(piece as u8 % 6) }
 }
 
@@ -137,9 +135,9 @@ pub fn print_bitboard(bitboard: BitBoard) {
             let square = rank * 8 + file;
             let mut d: String = String::from("0 ");
             if (bitboard & (1 << square)) != 0 {
-                d = String::from("1 ")
+                d = String::from("1 ");
             }
-            rank_str = format!("{}{}", rank_str, d);
+            rank_str = format!("{rank_str}{d}");
         }
         board_ranks.push(rank_str);
     }
@@ -147,7 +145,7 @@ pub fn print_bitboard(bitboard: BitBoard) {
     for i in (0..board_ranks.len()).rev() {
         print!("{} ", i + 1);
         print!("{}", board_ranks[i]);
-        println!()
+        println!();
     }
     println!("  a b c d e f g h");
 }

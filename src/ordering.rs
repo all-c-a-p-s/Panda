@@ -1,9 +1,9 @@
-use crate::movegen::*;
-use crate::r#move::*;
-use crate::search::*;
-use crate::thread::*;
-use crate::types::*;
-use crate::*;
+use crate::movegen::get_attackers;
+use crate::r#move::{Move, MoveList, NULL_MOVE};
+use crate::search::{INFINITY, params};
+use crate::thread::Thread;
+use crate::types::{BLACK_PIECES, Piece, PieceType, WHITE_PIECES};
+use crate::{BLACK, BOTH, Board, Colour, MAX_MOVES, WHITE, get_bishop_attacks, get_rook_attacks, lsfb, piece_type, read_param, set_bit};
 
 const MVV_LVA: [[i32; 6]; 6] = [
     //most valuable victim least valuable attacker
@@ -19,19 +19,16 @@ const MVV_LVA: [[i32; 6]; 6] = [
 pub const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, INFINITY];
 
 impl Move {
-    pub fn see(self, b: &Board, threshold: i32) -> bool {
+    #[must_use] pub fn see(self, b: &Board, threshold: i32) -> bool {
         // Iterative approach to SEE inspired by Ethereal.
         let sq_from = self.square_from();
         let sq_to = self.square_to();
 
-        let mut next_victim = match self.is_promotion() {
-            true => match b.side_to_move {
-                //only consider queen promotions
-                Colour::White => Piece::WQ,
-                Colour::Black => Piece::BQ,
-            },
-            false => self.piece_moved(b),
-        };
+        let mut next_victim = if self.is_promotion() { match b.side_to_move {
+            //only consider queen promotions
+            Colour::White => Piece::WQ,
+            Colour::Black => Piece::BQ,
+        } } else { self.piece_moved(b) };
 
         let mut balance = match b.pieces_array[sq_to] {
             None => 0,
@@ -202,7 +199,7 @@ impl Move {
                 s.info.ss[s.ply].previous_piece.inspect(|x| {
                     s.info.ss[s.ply].previous_square.inspect(|y| {
                         if self == s.info.counter_moves[*x][*y] {
-                            bonus = read_param!(COUNTERMOVE_BONUS)
+                            bonus = read_param!(COUNTERMOVE_BONUS);
                         }
                     });
                 });
@@ -249,6 +246,6 @@ impl MoveList {
             }
             final_moves[i] = *ordered_moves[i].m;
         }
-        self.moves = final_moves
+        self.moves = final_moves;
     }
 }
