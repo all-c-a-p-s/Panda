@@ -1,12 +1,14 @@
 use crate::board::{BitBoard, Board, Colour};
 use crate::eval::evaluate;
-use crate::helper::{BLACK, BOTH, WHITE, count, lsfb, piece_type, pop_bit, read_param, tuneable_params};
+use crate::helper::{
+    count, lsfb, piece_type, pop_bit, read_param, tuneable_params, BLACK, BOTH, WHITE,
+};
 use crate::magic::{BISHOP_EDGE_RAYS, ROOK_EDGE_RAYS};
 use crate::movegen::RAY_BETWEEN;
 use crate::ordering::SEE_VALUES;
 use crate::r#move::{Commit, Move, MoveList, NULL_MOVE};
 use crate::thread::{SearchStackEntry, Thread};
-use crate::transposition::{EntryFlag, TT, TTEntry};
+use crate::transposition::{EntryFlag, TTEntry, TT};
 use crate::types::{Piece, PieceType, Square};
 use crate::uci::print_thinking;
 use crate::zobrist::{BLACK_TO_MOVE, EP_KEYS};
@@ -47,6 +49,10 @@ tuneable_params! {
     LOSING_CAPTURE, i32, -300_400, -999_999, 999_999;
     UNDER_PROMOTION, i32, -134_051, -999_999, 999_999;
     COUNTERMOVE_BONUS, i32, 55_151, -999_999, 999999;
+    NMP_FACTOR, i32, 20, 1, 100;
+    NMP_BASE, i32, 200, 50, 500;
+    HISTORY_NODE_DIVISOR, usize, 1024, 256, 8192;
+    HISTORY_MIN_THRESHOLD, i32, 8192, 1024, 32768;
 }
 
 const DO_SINGULARITY_EXTENSION: bool = true;
@@ -356,7 +362,10 @@ impl Thread<'_> {
                 //If eval >= beta + some margin, assume that we can achieve at least beta
                 if depth <= read_param!(BETA_PRUNING_DEPTH)
                     && static_eval
-                        - i32::from(read_param!(BETA_PRUNING_MARGIN) * std::cmp::max(depth - u8::from(improving), 0))
+                        - i32::from(
+                            read_param!(BETA_PRUNING_MARGIN)
+                                * std::cmp::max(depth - u8::from(improving), 0),
+                        )
                         >= beta
                 {
                     return static_eval;
@@ -370,24 +379,14 @@ impl Thread<'_> {
                     return static_eval;
                 }
 
-                // Razoring:
-                // eval is very low so only realistic way to increase it is with captures
-                // we only need to qsearch to evaluate the position
-                if depth <= read_param!(MAX_RAZOR_DEPTH)
-                    && static_eval + read_param!(RAZORING_MARGIN) * i32::from(depth) <= alpha
-                {
-                    let score = self.qsearch(position, alpha, beta);
-                    if score > alpha {
-                        return score;
-                    }
-                }
-
                 // Null move pruning:
                 // If we are still able to reach an eval >= beta if we give our opponent
                 // another move, then their previous move was probably bad
                 if !position.is_kp_endgame()
                     && !position.last_move_null
-                    && static_eval >= beta + 200 - 20 * i32::from(depth)
+                    && static_eval + read_param!(NMP_FACTOR) * i32::from(depth)
+                        - read_param!(NMP_BASE)
+                        >= beta
                     && !root
                 {
                     let undo = make_null_move(position);
@@ -474,7 +473,11 @@ impl Thread<'_> {
 
                 //Late Move Pruning: after a certain point start skipping all quiets after the current
                 //move. The threshold I'm currently using comes from Weiss
-                let lmp_threshold = if improving { depth * depth + 2 } else { depth * depth / 2 };
+                let lmp_threshold = if improving {
+                    depth * depth + 2
+                } else {
+                    depth * depth / 2
+                };
                 if depth <= read_param!(LMP_DEPTH) && considered > lmp_threshold && !in_check {
                     skip_quiets = true;
                 }
@@ -556,7 +559,10 @@ impl Thread<'_> {
                     //reduce more in cutnodes
                     r += i32::from(cutnode);
 
-                    let history_threshold = ((self.nodes / 1_024) as i32).max(8192);
+                    let history_threshold = ((self.nodes / read_param!(HISTORY_NODE_DIVISOR))
+                        as i32)
+                        .max(read_param!(HISTORY_MIN_THRESHOLD));
+                    // use nodes to contextualise history score based on how much we've searched
                     r -= (self.info.history_table[m.piece_moved(position)][m.square_to()]
                         / history_threshold)
                         .clamp(-2, 1);
@@ -617,7 +623,11 @@ impl Thread<'_> {
 
         if legal == 0 {
             //no legal moves -> mate or stalemate
-            return if in_check { -INFINITY + self.ply as i32 } else { 0 };
+            return if in_check {
+                -INFINITY + self.ply as i32
+            } else {
+                0
+            };
         }
 
         if !self.is_stopped() {
