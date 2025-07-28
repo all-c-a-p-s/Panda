@@ -336,7 +336,6 @@ impl Thread<'_> {
         let in_check = position.checkers != 0;
         let mut improving = false;
 
-        //avoid static pruning when in check or in singular search
         if !in_check && self.info.excluded[self.ply].is_none() && self.do_pruning {
             let static_eval = evaluate(position);
             if self.ply < MAX_PLY {
@@ -347,9 +346,6 @@ impl Thread<'_> {
                 };
             }
 
-            //measuring whether the search is improving (better static eval than 2 tempi ago)
-            //is useful in adjusting how we should prune/reduce. if the search is improving,
-            //we should be more cautious reducing. if not, we can reduce more
             improving = match self.ply {
                 2..=31 => self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval,
                 _ => false,
@@ -411,17 +407,11 @@ impl Thread<'_> {
             depth -= 1;
         }
 
-        // Generate pseudo-legal moves here because this is faster in cases where
-        // the search is pruned early, and so we don't actually have to check whether later
-        // pseudo-legal moves are legal.
         let mut move_list = MoveList::gen_moves::<false>(position);
         move_list.order_moves(position, self, &best_move);
 
         let (mut legal, mut considered) = (0, 0);
-        //the former of these is for legal moves we actually search
-        //the latter for pseudo-legal moves we consider
         let mut skip_quiets = false;
-
         let mut best_score = -INFINITY;
 
         for &m in move_list.moves.iter().take_while(|m| !m.is_null()) {
@@ -432,14 +422,11 @@ impl Thread<'_> {
                 }
             }
 
-            //from what I can see strong engines update this before checking whether or not the
-            //move is legal
             considered += 1;
 
             let tactical = m.is_tactical(position);
             let quiet = !tactical;
             let not_mated = best_score > -INFINITY + MAX_PLY as i32;
-            //must be done before making the move on the board
 
             let is_killer = m == self.info.killer_moves[0][self.ply]
                 || m == self.info.killer_moves[1][self.ply];
@@ -497,9 +484,6 @@ impl Thread<'_> {
 
             //A singular move is a move which seems to be forced or at least much stronger than
             //others. We should therefore extend to investigate it further.
-
-            // after I implemented it I realised singularity extension currently loses elo for
-            // Panda, but I didn't want to throw away the code
             let maybe_singular = DO_SINGULARITY_EXTENSION
                 && !root
                 && depth >= 8
@@ -550,13 +534,9 @@ impl Thread<'_> {
                     && depth >= REDUCTION_LIMIT
                     && reduction_ok(tactical, in_check)
                 {
-                    //decrease reduction for pv-nodes
                     r -= i32::from(pv_node);
-                    //increase reduction for quiet moves where tt move is noisy
                     r += i32::from(tt_move_capture);
-                    //reduce more in nodes where search isn't improving
                     r += i32::from(!improving);
-                    //reduce more in cutnodes
                     r += i32::from(cutnode);
 
                     let history_threshold = ((self.nodes / read_param!(HISTORY_NODE_DIVISOR))
@@ -670,14 +650,8 @@ impl Thread<'_> {
         }
 
         let mut best_score = evaluate(position);
-        //node count = every position that gets evaluated
         if best_score >= beta {
             return beta;
-        }
-
-        let delta = 1000; //delta pruning - try to avoid wasting time on hopeless positions
-        if best_score < alpha - delta {
-            return alpha;
         }
 
         alpha = std::cmp::max(alpha, best_score);
@@ -695,12 +669,14 @@ impl Thread<'_> {
         captures.order_moves(position, self, &best_move);
 
         for &c in captures.moves.iter().take_while(|c| !c.is_null()) {
-            let worst_case = SEE_VALUES[piece_type(position.get_piece_at(c.square_to()))]
-                - SEE_VALUES[piece_type(c.piece_moved(position))];
+            if c.is_capture(position) {
+                let worst_case = SEE_VALUES[piece_type(position.get_piece_at(c.square_to()))]
+                    - SEE_VALUES[piece_type(c.piece_moved(position))];
 
-            //first check if we beat beta even in the worst case
-            if best_score + worst_case > beta {
-                return beta;
+                //first check if we beat beta even in the worst case
+                if best_score + worst_case > beta {
+                    return beta;
+                }
             }
 
             //next check if we fail SEE by threshold
