@@ -2,14 +2,16 @@ use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::time::{Duration, Instant};
 use types::{Piece, Square};
 
+use crate::search::CORRHIST_SIZE;
 use crate::transposition::{TTRef, TranspositionTable};
-use crate::{Board, INFINITY, MAX_PLY, Move, MoveData, NULL_MOVE, iterative_deepening, types};
+use crate::{iterative_deepening, types, Board, Move, MoveData, INFINITY, MAX_PLY, NULL_MOVE};
 
 const MIN_MOVE_TIME: usize = 1; //make sure move time is never 0
 const MOVE_OVERHEAD: usize = 50;
 
 //returns ideal time window, hard deadline
-#[must_use] pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize) -> (usize, usize) {
+#[must_use]
+pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize) -> (usize, usize) {
     if time < MOVE_OVERHEAD {
         return (
             std::cmp::max(time / 2, MIN_MOVE_TIME),
@@ -48,6 +50,7 @@ pub struct SearchInfo {
     pub lmr_table: LMRTable,
     pub history_table: [[i32; 64]; 12],
     pub counter_moves: [[Move; 64]; 12],
+    pub corrhist: [[i32; CORRHIST_SIZE]; 2],
     pub killer_moves: [[Move; MAX_PLY]; 2],
     pub excluded: [Option<Move>; MAX_PLY],
 }
@@ -90,6 +93,7 @@ impl Default for SearchInfo {
             ss: [SearchStackEntry::default(); MAX_PLY],
             lmr_table: LMRTable::default(),
             history_table: [[0i32; 64]; 12],
+            corrhist: [[0; CORRHIST_SIZE]; 2],
             counter_moves: [[NULL_MOVE; 64]; 12],
             killer_moves: [[NULL_MOVE; 64]; 2],
             excluded: [None; 64],
@@ -159,7 +163,8 @@ pub struct Searcher<'a> {
 }
 
 impl<'a> Searcher<'a> {
-    #[must_use] pub fn new(tt: &'a TranspositionTable) -> Self {
+    #[must_use]
+    pub fn new(tt: &'a TranspositionTable) -> Self {
         Self {
             _nodecount: AtomicU64::new(0),
             tt,

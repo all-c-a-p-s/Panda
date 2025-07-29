@@ -3,7 +3,7 @@ use crate::magic::{BISHOP_EDGE_RAYS, ROOK_EDGE_RAYS};
 use crate::movegen::RAY_BETWEEN;
 use crate::nnue::Accumulator;
 use crate::types::{Piece, Square};
-use crate::zobrist::hash;
+use crate::zobrist::{hash, pawn_hash};
 use crate::zobrist::{BLACK_TO_MOVE, EP_KEYS};
 use crate::MAX_GAME_PLY;
 
@@ -557,5 +557,10 @@ impl Board {
         }
 
         0
+    }
+
+    #[must_use]
+    pub fn pawn_hash(&self) -> u64 {
+        pawn_hash(&self)
     }
 }

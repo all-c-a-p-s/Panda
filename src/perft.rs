@@ -100,6 +100,7 @@ pub fn full_perft() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::*;
     #[test]
     pub fn perft_wrapper() {
         init_all();

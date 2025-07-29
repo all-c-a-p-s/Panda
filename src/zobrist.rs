@@ -45,7 +45,8 @@ pub static EP_KEYS: [u64; 64] = init_hash_keys().1;
 pub static CASTLING_KEYS: [u64; 16] = init_hash_keys().2;
 pub const BLACK_TO_MOVE: u64 = init_hash_keys().3;
 
-#[must_use] pub fn hash(b: &Board) -> u64 {
+#[must_use]
+pub fn hash(b: &Board) -> u64 {
     let mut hash_key: u64 = 0;
 
     for (square, &piece) in b.pieces_array.iter().enumerate() {
@@ -67,9 +68,23 @@ pub const BLACK_TO_MOVE: u64 = init_hash_keys().3;
     hash_key
 }
 
+#[must_use]
+pub fn pawn_hash(b: &Board) -> u64 {
+    let mut hash_key: u64 = 0;
+
+    for (square, &piece) in b.pieces_array.iter().enumerate() {
+        if piece == Some(Piece::WP) || piece == Some(Piece::BP) {
+            hash_key ^= PIECE_KEYS[square][piece.unwrap()];
+        }
+    }
+
+    hash_key
+}
+
 /// This updates everything about the hash key EXCEPT castling rights,
 /// which it is more efficient to simply do after making the move
-#[must_use] pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
+#[must_use]
+pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
     //call with board state before move was made
     let mut res = hash_key;
 
@@ -150,6 +165,7 @@ pub const BLACK_TO_MOVE: u64 = init_hash_keys().3;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::*;
     use std::time::{Duration, Instant};
     pub fn hash_update_test(depth: usize, b: &mut Board) -> usize {
         let hash_before_move = hash(b);

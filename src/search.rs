@@ -7,16 +7,23 @@ use crate::thread::{SearchStackEntry, Thread};
 use crate::transposition::{EntryFlag, TTEntry, TT};
 use crate::types::PieceType;
 use crate::uci::print_thinking;
+use crate::Colour;
 
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
 
 pub const INFINITY: i32 = 1_000_000_000;
 pub const MAX_PLY: usize = 64;
+pub const MATE: i32 = INFINITY - MAX_PLY as i32;
 
 pub const REDUCTION_LIMIT: u8 = 2;
 
 const FULL_DEPTH_MOVES: u8 = 1;
+
+const CORRHIST_GRAIN: i32 = 256;
+const CORRHIST_SCALE: i32 = 256;
+const CORRHIST_MAX: i32 = 256 * 32;
+pub const CORRHIST_SIZE: usize = 16_384;
 
 // name, type, val, min, max
 
@@ -100,7 +107,7 @@ impl Thread<'_> {
         position.undo_move(best_move, commit);
         self.ply -= 1;
         //undo move already made on board
-        let threshold = std::cmp::max(tt_score - (i32::from(depth) * 2 + 20), -INFINITY);
+        let threshold = (tt_score - (i32::from(depth) * 2 + 20)).max(-INFINITY);
 
         self.info.excluded[self.ply] = Some(best_move);
 
@@ -143,6 +150,7 @@ impl Thread<'_> {
         }
         let pv_node = beta - alpha != 1;
         let root = self.ply == 0;
+        let singular = self.info.excluded[self.ply].is_some();
 
         self.pv_length[self.ply] = self.ply;
 
@@ -156,13 +164,9 @@ impl Thread<'_> {
         //NOTE: tt_score is only used in singular search, in which case we know that there is
         //definitely a hash result, so this value of 0 is never actually read
         let (mut tt_depth, mut tt_bound, mut tt_score) = (0, EntryFlag::Missing, 0);
-        let mut best_move = NULL_MOVE; //used for TT hash -> move ordering
-                                       //this is useful in cases where it cannot return the eval of the hash lookup
-                                       //due to the bounds, but it can use the best_move field for move ordering
+        let mut best_move = NULL_MOVE;
 
-        //don't probe TT in singular search
-        if !root && self.info.excluded[self.ply].is_none() {
-            //check 50 move rule, repetition and insufficient material
+        if !root && !singular {
             if position.is_drawn() {
                 return 0;
             }
@@ -170,8 +174,8 @@ impl Thread<'_> {
             // mate distance pruning:
             // check if line is so good/bad that being mated in the current ply
             // or mating in the next ply would not change alpha/beta
-            let r_alpha = std::cmp::max(alpha, -INFINITY + self.ply as i32);
-            let r_beta = std::cmp::min(beta, INFINITY - self.ply as i32 - 1);
+            let r_alpha = alpha.max(-INFINITY + self.ply as i32);
+            let r_beta = beta.min(INFINITY - self.ply as i32 - 1);
             if r_alpha >= r_beta {
                 return r_alpha;
             }
@@ -197,10 +201,10 @@ impl Thread<'_> {
         }
 
         let tt_move = !best_move.is_null();
-        let tt_move_capture = if best_move.is_null() {
-            false
-        } else {
+        let tt_move_capture = if tt_move {
             best_move.is_capture(position)
+        } else {
+            false
         };
 
         //reset killers for child nodes
@@ -208,23 +212,25 @@ impl Thread<'_> {
         self.info.killer_moves[1][self.ply + 1] = NULL_MOVE;
 
         let in_check = position.checkers != 0;
-        let mut improving = false;
+        let mut static_eval = evaluate(position);
+        if !singular {
+            static_eval = self.eval_with_corrhist(position, static_eval);
+        }
 
-        if !in_check && self.info.excluded[self.ply].is_none() && self.do_pruning {
-            let static_eval = evaluate(position);
-            if self.ply < MAX_PLY {
-                self.info.ss[self.ply] = SearchStackEntry {
-                    eval: static_eval,
-                    previous_square: None,
-                    previous_piece: None,
-                };
-            }
-
-            improving = match self.ply {
-                2..=31 => self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval,
-                _ => false,
+        if self.ply < MAX_PLY {
+            self.info.ss[self.ply] = SearchStackEntry {
+                eval: static_eval,
+                previous_square: None,
+                previous_piece: None,
             };
+        }
 
+        let improving = match self.ply {
+            2..=31 => self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval,
+            _ => false,
+        };
+
+        if !in_check && !singular && self.do_pruning {
             //Static pruning: here we attempt to show that the position does not require any further
             //search
             if !pv_node {
@@ -233,8 +239,7 @@ impl Thread<'_> {
                 if depth <= read_param!(BETA_PRUNING_DEPTH)
                     && static_eval
                         - i32::from(
-                            read_param!(BETA_PRUNING_MARGIN)
-                                * std::cmp::max(depth - u8::from(improving), 0),
+                            read_param!(BETA_PRUNING_MARGIN) * (depth - u8::from(improving)).max(0),
                         )
                         >= beta
                 {
@@ -261,8 +266,8 @@ impl Thread<'_> {
                 {
                     let undo = position.make_null_move();
                     self.ply += 1;
-                    let r = 2 + i32::from(depth) / 4 + std::cmp::min((static_eval - beta) / 256, 3);
-                    let reduced_depth = std::cmp::max(i32::from(depth) - r, 1) as u8;
+                    let r = 2 + i32::from(depth) / 4 + ((static_eval - beta) / 256).min(3);
+                    let reduced_depth = (i32::from(depth) - r).max(1) as u8;
                     let null_move_eval =
                         -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
                     //minimal window used because all that matters is whether the search result is better than beta
@@ -300,7 +305,7 @@ impl Thread<'_> {
 
             let tactical = m.is_tactical(position);
             let quiet = !tactical;
-            let not_mated = best_score > -INFINITY + MAX_PLY as i32;
+            let not_mated = best_score > -MATE;
 
             let is_killer = m == self.info.killer_moves[0][self.ply]
                 || m == self.info.killer_moves[1][self.ply];
@@ -312,10 +317,9 @@ impl Thread<'_> {
                     continue;
                 }
                 let r: i32 = self.info.lmr_table.reduction_table[usize::from(quiet)]
-                    [std::cmp::min(depth, 31) as usize]
-                    [std::cmp::min(considered, 31) as usize]
+                    [depth.min(31) as usize][considered.min(31) as usize]
                     + i32::from(!improving);
-                let lmr_depth = std::cmp::max(i32::from(depth) - 1 - r, 0);
+                let lmr_depth = i32::from(depth) - 1 - r.max(0);
 
                 //SEE Pruning: if a move fails SEE by a depth-dependent threshold,
                 //prune it
@@ -361,7 +365,7 @@ impl Thread<'_> {
             let maybe_singular = DO_SINGULARITY_EXTENSION
                 && !root
                 && depth >= 8
-                && self.info.excluded[self.ply].is_none()
+                && !singular
                 && m == best_move
                 && tt_depth >= depth - 3
                 && tt_bound != EntryFlag::UpperBound;
@@ -401,7 +405,7 @@ impl Thread<'_> {
                 // then if we are unable to prove so
 
                 let mut r: i32 = self.info.lmr_table.reduction_table[usize::from(quiet)]
-                    [std::cmp::min(depth, 31) as usize][std::cmp::min(legal, 31) as usize];
+                    [depth.min(31) as usize][legal.min(31) as usize];
 
                 let mut reduction_eval = if legal
                     > (FULL_DEPTH_MOVES + u8::from(pv_node) + u8::from(!tt_move) + u8::from(root))
@@ -416,7 +420,6 @@ impl Thread<'_> {
                     r += i32::from(cutnode);
 
                     r -= i32::from(is_check);
-                    r -= i32::from(in_check);
 
                     let history_threshold = ((self.nodes / read_param!(HISTORY_NODE_DIVISOR))
                         as i32)
@@ -426,7 +429,7 @@ impl Thread<'_> {
                         / history_threshold)
                         .clamp(-2, 1);
 
-                    let mut reduced_depth = std::cmp::max(i32::from(new_depth) - r, 1) as u8;
+                    let mut reduced_depth = (i32::from(new_depth) - r).max(1) as u8;
                     reduced_depth = reduced_depth.clamp(1, new_depth);
                     //avoid dropping into qsearch or extending
 
@@ -478,19 +481,22 @@ impl Thread<'_> {
         }
 
         if legal == 0 {
-            //no legal moves -> mate or stalemate
-            return if in_check {
-                -INFINITY + self.ply as i32
-            } else {
-                0
-            };
+            return (-INFINITY + self.ply as i32) * i32::from(in_check);
         }
 
-        if !self.is_stopped() {
+        if !self.is_stopped() && !singular {
             let hash_entry =
                 TTEntry::new(depth, best_score, hash_flag, best_move, position.hash_key);
 
             self.tt.write(position.hash_key, hash_entry);
+
+            if !(in_check
+                || best_move.is_capture(position)
+                || (hash_flag == EntryFlag::LowerBound && best_score <= static_eval)
+                || (hash_flag == EntryFlag::UpperBound && best_score >= static_eval))
+            {
+                self.update_corrhist(position, depth, best_score - static_eval);
+            }
         }
 
         best_score
@@ -525,13 +531,15 @@ impl Thread<'_> {
             }
         }
 
-        let eval = evaluate(position);
+        let mut eval = evaluate(position);
+        eval = self.eval_with_corrhist(position, eval);
+
         if eval >= beta {
             return beta;
         }
         let mut best_score = eval;
 
-        alpha = std::cmp::max(alpha, best_score);
+        alpha = alpha.max(best_score);
 
         let in_check = position.checkers != 0;
 
@@ -645,6 +653,28 @@ impl Thread<'_> {
         });
     }
 
+    pub fn update_corrhist(&mut self, b: &Board, depth: u8, diff: i32) {
+        let idx = (b.pawn_hash() % 16384) as usize;
+        let side = usize::from(b.side_to_move == Colour::White);
+
+        let entry = &mut self.info.corrhist[side][idx];
+
+        let new_weight = (depth + 1).min(16) as i32;
+        let scaled_diff = diff + CORRHIST_GRAIN;
+
+        *entry =
+            (*entry * (CORRHIST_SCALE - new_weight) + scaled_diff * new_weight) / CORRHIST_SCALE;
+        *entry = entry.clone().clamp(-CORRHIST_MAX, CORRHIST_MAX);
+    }
+
+    pub fn eval_with_corrhist(&self, b: &Board, raw_eval: i32) -> i32 {
+        let idx = (b.pawn_hash() % 16384) as usize;
+        let side = usize::from(b.side_to_move == Colour::White);
+
+        let entry = self.info.corrhist[side][idx];
+        (raw_eval + entry / CORRHIST_GRAIN).clamp(-MATE + 1, MATE - 1)
+    }
+
     pub fn update_history_table(
         &mut self,
         b: &Board,
@@ -671,7 +701,7 @@ impl Thread<'_> {
         self.ply = 0;
         self.moves_fully_searched = 0;
 
-        //reset move ordering heuristics
+        //reset tables
         self.info.killer_moves = [[NULL_MOVE; MAX_PLY]; 2];
         self.info.history_table = [[0; 64]; 12];
     }
@@ -718,13 +748,7 @@ impl IterDeepData {
 
 fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData) -> i32 {
     loop {
-        let eval = s.negamax(
-            position,
-            std::cmp::max(id.depth, 1),
-            id.alpha,
-            id.beta,
-            false,
-        );
+        let eval = s.negamax(position, id.depth.max(1), id.alpha, id.beta, false);
 
         if s.is_stopped() {
             if s.moves_fully_searched > 0 {
@@ -757,12 +781,12 @@ fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData
 
         if eval <= id.alpha {
             //failed low -> widen window down, do not update pv
-            id.alpha = std::cmp::max(id.alpha - id.delta, -INFINITY);
+            id.alpha = (id.alpha - id.delta).max(-INFINITY);
             id.beta = (id.alpha + id.beta) / 2;
             id.delta += id.delta / 2;
         } else if eval >= id.beta {
             //failed high -> widen window up, also update pv
-            id.beta = std::cmp::min(id.beta + id.delta, INFINITY);
+            id.beta = (id.beta + id.delta).min(INFINITY);
             id.delta += id.delta / 2;
 
             id.pv = s.pv;
