@@ -408,10 +408,15 @@ impl Thread<'_> {
                     && depth >= REDUCTION_LIMIT
                     && reduction_ok(tactical, in_check)
                 {
+                    let is_check = position.checkers != 0;
+
                     r -= i32::from(pv_node);
                     r += i32::from(tt_move_capture);
                     r += i32::from(!improving);
                     r += i32::from(cutnode);
+
+                    r -= i32::from(is_check);
+                    r -= i32::from(in_check);
 
                     let history_threshold = ((self.nodes / read_param!(HISTORY_NODE_DIVISOR))
                         as i32)
