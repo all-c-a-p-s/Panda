@@ -649,10 +649,11 @@ impl Thread<'_> {
             }
         }
 
-        let mut best_score = evaluate(position);
-        if best_score >= beta {
+        let eval = evaluate(position);
+        if eval >= beta {
             return beta;
         }
+        let mut best_score = eval;
 
         alpha = std::cmp::max(alpha, best_score);
 
@@ -670,11 +671,12 @@ impl Thread<'_> {
 
         for &c in captures.moves.iter().take_while(|c| !c.is_null()) {
             if c.is_capture(position) {
-                let worst_case = SEE_VALUES[piece_type(position.get_piece_at(c.square_to()))]
-                    - SEE_VALUES[piece_type(c.piece_moved(position))];
+                // if not capture then we must be in check
+                let best_case = eval + SEE_VALUES[piece_type(position.get_piece_at(c.square_to()))];
+                let worst_case = best_case - SEE_VALUES[piece_type(c.piece_moved(position))];
 
                 //first check if we beat beta even in the worst case
-                if best_score + worst_case > beta {
+                if worst_case > beta {
                     return beta;
                 }
             }
@@ -719,10 +721,8 @@ impl Thread<'_> {
             }
         }
 
-        //write eval to hash table
         if !self.is_stopped() {
             let hash_entry = TTEntry::new(0, best_score, hash_flag, best_move, position.hash_key);
-
             self.tt.write(position.hash_key, hash_entry);
         }
         best_score
@@ -905,8 +905,6 @@ pub fn iterative_deepening(
     show_thinking: bool,
 ) -> MoveData {
     let start = Instant::now();
-
-    //TODO: no aspiration window for first few depths
 
     s.reset_thread();
     s.timer.end_time = start + Duration::from_millis(hard_limit as u64);
