@@ -1,9 +1,10 @@
-use crate::helper::{BLACK, BOTH, WHITE, coordinate, count, lsfb, pop_bit, set_bit, square};
+use crate::helper::{coordinate, count, lsfb, pop_bit, set_bit, square, BLACK, BOTH, WHITE};
 use crate::magic::{BISHOP_EDGE_RAYS, ROOK_EDGE_RAYS};
 use crate::movegen::RAY_BETWEEN;
 use crate::nnue::Accumulator;
 use crate::types::{Piece, Square};
 use crate::zobrist::hash;
+use crate::zobrist::{BLACK_TO_MOVE, EP_KEYS};
 use crate::MAX_GAME_PLY;
 
 pub(crate) type BitBoard = u64;
@@ -34,6 +35,12 @@ pub struct Board {
     pub nnue: Accumulator,
 }
 
+pub struct NullMoveUndo {
+    ep: Option<Square>,
+    pinned: BitBoard,
+    hash_key: u64,
+}
+
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum Colour {
     White,
@@ -41,7 +48,8 @@ pub enum Colour {
 }
 
 impl Colour {
-    #[must_use] pub fn opponent(&self) -> Self {
+    #[must_use]
+    pub fn opponent(&self) -> Self {
         match self {
             Colour::White => Colour::Black,
             Colour::Black => Colour::White,
@@ -49,7 +57,8 @@ impl Colour {
     }
 }
 
-#[must_use] pub fn ascii_to_piece(ascii: char) -> Piece {
+#[must_use]
+pub fn ascii_to_piece(ascii: char) -> Piece {
     match ascii {
         'P' => Piece::WP,
         'N' => Piece::WN,
@@ -68,7 +77,8 @@ impl Colour {
 }
 
 impl Board {
-    #[must_use] pub fn from(fen: &str) -> Self {
+    #[must_use]
+    pub fn from(fen: &str) -> Self {
         let mut new_board = Board {
             bitboards: [EMPTY; 12],
             pieces_array: [None; 64],
@@ -149,8 +159,9 @@ impl Board {
             assert!((file != 8), "file count 8 and no newline {c}");
             match c {
                 '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' => {
-                    file += <u32 as std::convert::TryInto<usize>>::try_into(c.to_digit(10).unwrap())
-                        .unwrap();
+                    file +=
+                        <u32 as std::convert::TryInto<usize>>::try_into(c.to_digit(10).unwrap())
+                            .unwrap();
                 }
                 'P' | 'N' | 'B' | 'R' | 'Q' | 'K' | 'p' | 'n' | 'b' | 'r' | 'q' | 'k' => {
                     new_board.bitboards[ascii_to_piece(c)] = set_bit(
@@ -266,7 +277,8 @@ impl Board {
         println!("FEN: {}", self.fen());
     }
 
-    #[must_use] pub fn is_kp_endgame(&self) -> bool {
+    #[must_use]
+    pub fn is_kp_endgame(&self) -> bool {
         //used to avoid null move pruning in king and pawn endgames
         //where zugzwang is very common
         self.occupancies[BOTH]
@@ -277,7 +289,8 @@ impl Board {
             == 0
     }
 
-    #[must_use] pub fn fen(&self) -> String {
+    #[must_use]
+    pub fn fen(&self) -> String {
         let mut fen = String::new();
         let mut empty_count = 0;
 
@@ -402,8 +415,147 @@ impl Board {
         }
     }
 
-    #[must_use] pub fn get_piece_at(&self, sq: Square) -> Piece {
+    #[must_use]
+    pub fn get_piece_at(&self, sq: Square) -> Piece {
         //SAFETY: this must only be called when we know there is a piece on sq
         unsafe { self.pieces_array[sq].unwrap_unchecked() }
+    }
+
+    pub fn is_insufficient_material(&self) -> bool {
+        if count(
+            self.bitboards[Piece::WP]
+                | self.bitboards[Piece::WR]
+                | self.bitboards[Piece::WQ]
+                | self.bitboards[Piece::BP]
+                | self.bitboards[Piece::BR]
+                | self.bitboards[Piece::BQ],
+        ) != 0
+        {
+            return false;
+        }
+        if count(self.bitboards[Piece::WB]) >= 2
+            || count(self.bitboards[Piece::BB]) >= 2
+            || count(self.bitboards[Piece::WB]) >= 1 && count(self.bitboards[Piece::WN]) >= 1
+            || count(self.bitboards[Piece::BB]) >= 1 && count(self.bitboards[Piece::BN]) >= 1
+        {
+            return false;
+        }
+        count(self.bitboards[Piece::WN]) <= 2 && count(self.bitboards[Piece::BN]) <= 2
+        //can technically arise a position where KvKNN is mate so this
+        //could cause some bug in theory lol
+    }
+
+    //make null move for NMP
+    //we have to update pinners but not checkers since NMP is never done while in check
+    pub fn make_null_move(&mut self) -> NullMoveUndo {
+        let hash_reset = self.hash_key;
+        self.side_to_move = self.side_to_move.opponent();
+        self.last_move_null = true;
+
+        let pinned_reset = self.pinned;
+
+        let colour = self.side_to_move;
+
+        //SAFETY: there MUST be a king on the board
+        let our_king = unsafe {
+            lsfb(
+                self.bitboards[match colour {
+                    Colour::White => Piece::WK,
+                    Colour::Black => Piece::BK,
+                }],
+            )
+            .unwrap_unchecked()
+        };
+
+        let mut their_attackers = if colour == Colour::White {
+            self.occupancies[BLACK]
+                & ((BISHOP_EDGE_RAYS[our_king]
+                    & (self.bitboards[Piece::BB] | self.bitboards[Piece::BQ]))
+                    | ROOK_EDGE_RAYS[our_king]
+                        & (self.bitboards[Piece::BR] | self.bitboards[Piece::BQ]))
+        } else {
+            self.occupancies[WHITE]
+                & ((BISHOP_EDGE_RAYS[our_king]
+                    & (self.bitboards[Piece::WB] | self.bitboards[Piece::WQ]))
+                    | ROOK_EDGE_RAYS[our_king]
+                        & (self.bitboards[Piece::WR] | self.bitboards[Piece::WQ]))
+        };
+
+        while let Some(sq) = lsfb(their_attackers) {
+            let ray_between = RAY_BETWEEN[sq][our_king] & self.occupancies[BOTH];
+            if count(ray_between) == 1 {
+                self.pinned |= ray_between;
+            }
+            their_attackers = pop_bit(sq, their_attackers);
+        }
+
+        self.hash_key ^= BLACK_TO_MOVE;
+
+        if let Some(reset) = self.en_passant {
+            self.hash_key ^= EP_KEYS[reset];
+            self.en_passant = None;
+            return NullMoveUndo {
+                ep: Some(reset),
+                pinned: pinned_reset,
+                hash_key: hash_reset,
+            };
+        }
+
+        NullMoveUndo {
+            ep: None,
+            pinned: pinned_reset,
+            hash_key: hash_reset,
+        }
+    }
+
+    pub fn undo_null_move(&mut self, undo: &NullMoveUndo) {
+        self.side_to_move = match self.side_to_move {
+            Colour::White => Colour::Black,
+            Colour::Black => Colour::White,
+        };
+        self.last_move_null = false;
+        self.en_passant = undo.ep;
+
+        self.pinned = undo.pinned;
+        self.hash_key = undo.hash_key;
+    }
+
+    pub fn is_drawn(&self) -> bool {
+        if self.fifty_move == 100 {
+            return true;
+        }
+
+        for key in self.history.iter().take(self.ply - 1) {
+            //take ply - 1 because the start position (with 0 ply) is included
+            if *key == self.hash_key {
+                return true;
+                //return true on one repetition because otherwise the third
+                //repetition will not be reached because the search will stop
+                //after a tt hit on the second repetition
+            }
+        }
+
+        self.is_insufficient_material()
+    }
+
+    // finds maximum value of opponent pieces, regardless of whether it is actually possible to
+    // take them
+    #[must_use]
+    pub fn get_max_gain(&self) -> i32 {
+        let opponent_pieces = if self.side_to_move == Colour::White {
+            [Piece::BQ, Piece::BR, Piece::BB, Piece::BN, Piece::BP]
+        } else {
+            [Piece::WQ, Piece::WR, Piece::WB, Piece::WN, Piece::WP]
+        };
+        // see values * 1.2 for margin
+        let piece_values = [1110, 588, 386, 370, 102];
+
+        for (&piece, value) in opponent_pieces.iter().zip(piece_values) {
+            if self.bitboards[piece] != 0 {
+                return value;
+            }
+        }
+
+        0
     }
 }

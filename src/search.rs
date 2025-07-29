@@ -1,17 +1,12 @@
-use crate::board::{BitBoard, Board, Colour};
+use crate::board::Board;
 use crate::eval::evaluate;
-use crate::helper::{
-    count, lsfb, piece_type, pop_bit, read_param, tuneable_params, BLACK, BOTH, WHITE,
-};
-use crate::magic::{BISHOP_EDGE_RAYS, ROOK_EDGE_RAYS};
-use crate::movegen::RAY_BETWEEN;
+use crate::helper::{piece_type, read_param, tuneable_params};
 use crate::ordering::SEE_VALUES;
 use crate::r#move::{Commit, Move, MoveList, NULL_MOVE};
 use crate::thread::{SearchStackEntry, Thread};
 use crate::transposition::{EntryFlag, TTEntry, TT};
-use crate::types::{Piece, PieceType, Square};
+use crate::types::PieceType;
 use crate::uci::print_thinking;
-use crate::zobrist::{BLACK_TO_MOVE, EP_KEYS};
 
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
@@ -60,127 +55,8 @@ const DO_SINGULARITY_DE: bool = true;
 
 pub const MAX_GAME_PLY: usize = 1024;
 
-struct NullMoveUndo {
-    ep: Option<Square>,
-    pinned: BitBoard,
-    hash_key: u64,
-}
-
 fn reduction_ok(tactical: bool, in_check: bool) -> bool {
     !(tactical || in_check)
-}
-
-//make null move for NMP
-//we have to update pinners but not checkers since NMP is never done while in check
-fn make_null_move(b: &mut Board) -> NullMoveUndo {
-    let hash_reset = b.hash_key;
-    b.side_to_move = b.side_to_move.opponent();
-    b.last_move_null = true;
-
-    let pinned_reset = b.pinned;
-
-    let colour = b.side_to_move;
-
-    //SAFETY: there MUST be a king on the board
-    let our_king = unsafe {
-        lsfb(
-            b.bitboards[match colour {
-                Colour::White => Piece::WK,
-                Colour::Black => Piece::BK,
-            }],
-        )
-        .unwrap_unchecked()
-    };
-
-    let mut their_attackers = if colour == Colour::White {
-        b.occupancies[BLACK]
-            & ((BISHOP_EDGE_RAYS[our_king] & (b.bitboards[Piece::BB] | b.bitboards[Piece::BQ]))
-                | ROOK_EDGE_RAYS[our_king] & (b.bitboards[Piece::BR] | b.bitboards[Piece::BQ]))
-    } else {
-        b.occupancies[WHITE]
-            & ((BISHOP_EDGE_RAYS[our_king] & (b.bitboards[Piece::WB] | b.bitboards[Piece::WQ]))
-                | ROOK_EDGE_RAYS[our_king] & (b.bitboards[Piece::WR] | b.bitboards[Piece::WQ]))
-    };
-
-    while let Some(sq) = lsfb(their_attackers) {
-        let ray_between = RAY_BETWEEN[sq][our_king] & b.occupancies[BOTH];
-        if count(ray_between) == 1 {
-            b.pinned |= ray_between;
-        }
-        their_attackers = pop_bit(sq, their_attackers);
-    }
-
-    b.hash_key ^= BLACK_TO_MOVE;
-
-    if let Some(reset) = b.en_passant {
-        b.hash_key ^= EP_KEYS[reset];
-        b.en_passant = None;
-        return NullMoveUndo {
-            ep: Some(reset),
-            pinned: pinned_reset,
-            hash_key: hash_reset,
-        };
-    }
-
-    NullMoveUndo {
-        ep: None,
-        pinned: pinned_reset,
-        hash_key: hash_reset,
-    }
-}
-
-fn undo_null_move(b: &mut Board, undo: &NullMoveUndo) {
-    b.side_to_move = match b.side_to_move {
-        Colour::White => Colour::Black,
-        Colour::Black => Colour::White,
-    };
-    b.last_move_null = false;
-    b.en_passant = undo.ep;
-
-    b.pinned = undo.pinned;
-    b.hash_key = undo.hash_key;
-}
-
-fn is_insufficient_material(b: &Board) -> bool {
-    if count(
-        b.bitboards[Piece::WP]
-            | b.bitboards[Piece::WR]
-            | b.bitboards[Piece::WQ]
-            | b.bitboards[Piece::BP]
-            | b.bitboards[Piece::BR]
-            | b.bitboards[Piece::BQ],
-    ) != 0
-    {
-        return false;
-    }
-    if count(b.bitboards[Piece::WB]) >= 2
-        || count(b.bitboards[Piece::BB]) >= 2
-        || count(b.bitboards[Piece::WB]) >= 1 && count(b.bitboards[Piece::WN]) >= 1
-        || count(b.bitboards[Piece::BB]) >= 1 && count(b.bitboards[Piece::BN]) >= 1
-    {
-        return false;
-    }
-    count(b.bitboards[Piece::WN]) <= 2 && count(b.bitboards[Piece::BN]) <= 2
-    //can technically arise a position where KvKNN is mate so this
-    //could cause some bug in theory lol
-}
-
-fn is_drawn(position: &Board) -> bool {
-    if position.fifty_move == 100 {
-        return true;
-    }
-
-    for key in position.history.iter().take(position.ply - 1) {
-        //take ply - 1 because the start position (with 0 ply) is included
-        if *key == position.hash_key {
-            return true;
-            //return true on one repetition because otherwise the third
-            //repetition will not be reached because the search will stop
-            //after a tt hit on the second repetition
-        }
-    }
-
-    is_insufficient_material(position)
 }
 
 impl Thread<'_> {
@@ -267,12 +143,10 @@ impl Thread<'_> {
         }
         let pv_node = beta - alpha != 1;
         let root = self.ply == 0;
-        //full window search
 
         self.pv_length[self.ply] = self.ply;
 
         if depth == 0 {
-            //qsearch on leaf nodes
             return self.qsearch(position, alpha, beta);
         }
 
@@ -289,7 +163,7 @@ impl Thread<'_> {
         //don't probe TT in singular search
         if !root && self.info.excluded[self.ply].is_none() {
             //check 50 move rule, repetition and insufficient material
-            if is_drawn(position) {
+            if position.is_drawn() {
                 return 0;
             }
 
@@ -385,14 +259,14 @@ impl Thread<'_> {
                         >= beta
                     && !root
                 {
-                    let undo = make_null_move(position);
+                    let undo = position.make_null_move();
                     self.ply += 1;
                     let r = 2 + i32::from(depth) / 4 + std::cmp::min((static_eval - beta) / 256, 3);
                     let reduced_depth = std::cmp::max(i32::from(depth) - r, 1) as u8;
                     let null_move_eval =
                         -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
                     //minimal window used because all that matters is whether the search result is better than beta
-                    undo_null_move(position, &undo);
+                    position.undo_null_move(&undo);
                     self.ply -= 1;
                     if null_move_eval >= beta {
                         return beta;
@@ -591,10 +465,7 @@ impl Thread<'_> {
                 best_move = m;
             }
 
-            //search failed high
             if eval >= beta {
-                //only write quiet moves into history table because captures
-                //will be scored separately
                 self.update_search_tables(position, &move_list, m, tactical, depth, legal);
                 hash_flag = EntryFlag::LowerBound;
                 break;
@@ -623,7 +494,7 @@ impl Thread<'_> {
     pub fn qsearch(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
 
-        if is_drawn(position) {
+        if position.is_drawn() {
             return 0;
         }
 
@@ -671,7 +542,7 @@ impl Thread<'_> {
 
         for &c in captures.moves.iter().take_while(|c| !c.is_null()) {
             if c.is_capture(position) {
-                // if not capture then we must be in check
+                // if not capture then must be a check evasion
                 let best_case = eval + SEE_VALUES[piece_type(position.get_piece_at(c.square_to()))];
                 let worst_case = best_case - SEE_VALUES[piece_type(c.piece_moved(position))];
 
@@ -789,7 +660,6 @@ impl Thread<'_> {
     }
 
     pub fn reset_thread(&mut self) {
-        //try to keep tt, history and killer moves
         self.nodes = 0;
         self.pv_length = [0; 64];
         self.pv = [[NULL_MOVE; MAX_PLY]; MAX_PLY];
@@ -864,7 +734,6 @@ fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData
 
         if eval > id.alpha && eval < id.beta {
             //within window -> just update pv and set up for next iteration
-            //note atm this must be a strict inequality since search is failing hard
 
             id.pv = s.pv;
             id.pv_length = s.pv_length;
