@@ -55,16 +55,16 @@ tuneable_params! {
     NMP_BASE, i32, 200, 50, 500;
     HISTORY_NODE_DIVISOR, usize, 1024, 256, 8192;
     HISTORY_MIN_THRESHOLD, i32, 8192, 1024, 32768;
+    LMR_TACTICAL_BASE, i32, 33, 0, 500;
+    LMR_TACTICAL_DIVISOR, i32, 320, 100, 500;
+    LMR_QUIET_BASE, i32, 164, 0, 500;
+    LMR_QUIET_DIVISOR, i32, 280, 100, 500;
 }
 
 const DO_SINGULARITY_EXTENSION: bool = true;
 const DO_SINGULARITY_DE: bool = true;
 
 pub const MAX_GAME_PLY: usize = 1024;
-
-fn reduction_ok(tactical: bool, in_check: bool) -> bool {
-    !(tactical || in_check)
-}
 
 impl Thread<'_> {
     fn should_check_exit(&self) -> bool {
@@ -404,30 +404,33 @@ impl Thread<'_> {
                 // often enough that it outweighs the cost of re-searching
                 // then if we are unable to prove so
 
-                let mut r: i32 = self.info.lmr_table.reduction_table[usize::from(quiet)]
-                    [depth.min(31) as usize][legal.min(31) as usize];
-
                 let mut reduction_eval = if legal
                     > (FULL_DEPTH_MOVES + u8::from(pv_node) + u8::from(!tt_move) + u8::from(root))
+                        + u8::from(tactical)
                     && depth >= REDUCTION_LIMIT
-                    && reduction_ok(tactical, in_check)
+                    && !in_check
                 {
-                    let is_check = position.checkers != 0;
+                    let mut r = 1;
+                    if quiet {
+                        r = self.info.lmr_table.reduction_table[usize::from(quiet)]
+                            [depth.min(31) as usize][legal.min(31) as usize];
+                        let is_check = position.checkers != 0;
 
-                    r -= i32::from(pv_node);
-                    r += i32::from(tt_move_capture);
-                    r += i32::from(!improving);
-                    r += i32::from(cutnode);
+                        r -= i32::from(pv_node);
+                        r += i32::from(tt_move_capture);
+                        r += i32::from(!improving);
+                        r += i32::from(cutnode);
 
-                    r -= i32::from(is_check);
+                        r -= i32::from(is_check);
 
-                    let history_threshold = ((self.nodes / read_param!(HISTORY_NODE_DIVISOR))
-                        as i32)
-                        .max(read_param!(HISTORY_MIN_THRESHOLD));
-                    // use nodes to contextualise history score based on how much we've searched
-                    r -= (self.info.history_table[m.piece_moved(position)][m.square_to()]
-                        / history_threshold)
-                        .clamp(-2, 1);
+                        let history_threshold = ((self.nodes / read_param!(HISTORY_NODE_DIVISOR))
+                            as i32)
+                            .max(read_param!(HISTORY_MIN_THRESHOLD));
+                        // use nodes to contextualise history score based on how much we've searched
+                        r -= (self.info.history_table[m.piece_moved(position)][m.square_to()]
+                            / history_threshold)
+                            .clamp(-2, 1);
+                    }
 
                     let mut reduced_depth = (i32::from(new_depth) - r).max(1) as u8;
                     reduced_depth = reduced_depth.clamp(1, new_depth);
