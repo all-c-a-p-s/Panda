@@ -220,6 +220,10 @@ impl Thread<'_> {
             static_eval = self.eval_with_corrhist(position, static_eval);
         }
 
+        // idea: some pruning-based version of history heuristic
+        // - i.e. square / square or piece / square indexed values of moves which caused fail-high
+        // (in static pruning)
+
         if tt_hit
             && !((static_eval > tt_score && tt_bound == EntryFlag::LowerBound)
                 || (static_eval < tt_score && tt_bound == EntryFlag::UpperBound))
@@ -258,11 +262,13 @@ impl Thread<'_> {
                 return static_eval;
             }
 
-            //Razoring: (try depth + u8::from(!improving) or - u8::from(improving))
+            //Razoring:
             //If we're very far behind it's likely that the only way to raise alpha will be with
             //captures, so just run a qsearch
             if depth <= read_param!(MAX_RAZOR_DEPTH)
-                && static_eval + read_param!(RAZORING_MARGIN) * i32::from(depth) <= alpha
+                && static_eval
+                    + read_param!(RAZORING_MARGIN) * i32::from(depth + u8::from(improving))
+                    <= alpha
             {
                 let qeval = self.qsearch(position, alpha, beta);
                 if qeval < alpha {
