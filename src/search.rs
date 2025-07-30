@@ -443,9 +443,6 @@ impl Thread<'_> {
                         r += i32::from(tt_move_capture);
                         r += i32::from(!improving);
 
-                        //consider improving && !pv_node
-                        r += i32::from(cutnode);
-
                         r -= i32::from(is_check);
 
                         let history_threshold = ((self.nodes / read_param!(HISTORY_NODE_DIVISOR))
