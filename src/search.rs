@@ -246,12 +246,13 @@ impl Thread<'_> {
                     return static_eval;
                 }
 
-                // Alpha Pruning:
-                // eval is so bad that even a huge margin fails to raise alpha
-                if depth <= read_param!(ALPHA_PRUNING_DEPTH)
-                    && static_eval + read_param!(ALPHA_PRUNING_MARGIN) <= alpha
+                if depth <= read_param!(MAX_RAZOR_DEPTH)
+                    && static_eval + read_param!(RAZORING_MARGIN) * i32::from(depth) <= alpha
                 {
-                    return static_eval;
+                    let qeval = self.qsearch(position, alpha, beta);
+                    if qeval < alpha {
+                        return qeval;
+                    }
                 }
 
                 // Null move pruning:
