@@ -161,9 +161,8 @@ impl Thread<'_> {
         let mut hash_flag = EntryFlag::UpperBound;
         self.nodes += 1;
 
-        //NOTE: tt_score is only used in singular search, in which case we know that there is
-        //definitely a hash result, so this value of 0 is never actually read
-        let (mut tt_depth, mut tt_bound, mut tt_score) = (0, EntryFlag::Missing, 0);
+        let (mut tt_depth, mut tt_bound, mut tt_score, mut tt_hit) =
+            (0, EntryFlag::Missing, 0, false);
         let mut best_move = NULL_MOVE;
 
         if !root && !singular {
@@ -182,6 +181,7 @@ impl Thread<'_> {
 
             if let Some(entry) = self.tt.lookup(position.hash_key) {
                 best_move = entry.best_move;
+                tt_hit = true;
                 tt_score = entry.eval;
                 tt_depth = entry.depth;
                 tt_bound = entry.flag;
@@ -217,6 +217,13 @@ impl Thread<'_> {
             static_eval = self.eval_with_corrhist(position, static_eval);
         }
 
+        if tt_hit
+            && !((static_eval > tt_score && tt_bound == EntryFlag::LowerBound)
+                || (static_eval < tt_score && tt_bound == EntryFlag::UpperBound))
+        {
+            static_eval = tt_score;
+        }
+
         if self.ply < MAX_PLY {
             self.info.ss[self.ply] = SearchStackEntry {
                 eval: static_eval,
@@ -230,53 +237,50 @@ impl Thread<'_> {
             _ => false,
         };
 
-        if !in_check && !singular && self.do_pruning {
-            //Static pruning: here we attempt to show that the position does not require any further
-            //search
-            if !pv_node {
-                //Beta Pruning / Reverse Futility Pruning:
-                //If eval >= beta + some margin, assume that we can achieve at least beta
-                if depth <= read_param!(BETA_PRUNING_DEPTH)
-                    && static_eval
-                        - i32::from(
-                            read_param!(BETA_PRUNING_MARGIN) * (depth - u8::from(improving)).max(0),
-                        )
-                        >= beta
-                {
-                    return static_eval;
-                }
+        //Static pruning: here we attempt to show that the position does not require any further
+        //search
+        if !in_check && !singular && self.do_pruning && !pv_node {
+            //Beta Pruning / Reverse Futility Pruning:
+            //If eval >= beta + some margin, assume that we can achieve at least beta
+            if depth <= read_param!(BETA_PRUNING_DEPTH)
+                && static_eval
+                    - i32::from(
+                        read_param!(BETA_PRUNING_MARGIN) * (depth - u8::from(improving)).max(0),
+                    )
+                    >= beta
+            {
+                return static_eval;
+            }
 
-                if depth <= read_param!(MAX_RAZOR_DEPTH)
-                    && static_eval + read_param!(RAZORING_MARGIN) * i32::from(depth) <= alpha
-                {
-                    let qeval = self.qsearch(position, alpha, beta);
-                    if qeval < alpha {
-                        return qeval;
-                    }
+            if depth <= read_param!(MAX_RAZOR_DEPTH)
+                && static_eval + read_param!(RAZORING_MARGIN) * i32::from(depth) <= alpha
+            {
+                let qeval = self.qsearch(position, alpha, beta);
+                if qeval < alpha {
+                    return qeval;
                 }
+            }
 
-                // Null move pruning:
-                // If we are still able to reach an eval >= beta if we give our opponent
-                // another move, then their previous move was probably bad
-                if !position.is_kp_endgame()
-                    && !position.last_move_null
-                    && static_eval + read_param!(NMP_FACTOR) * i32::from(depth)
-                        - read_param!(NMP_BASE)
-                        >= beta
-                    && !root
-                {
-                    let undo = position.make_null_move();
-                    self.ply += 1;
-                    let r = 2 + i32::from(depth) / 4 + ((static_eval - beta) / 256).min(3);
-                    let reduced_depth = (i32::from(depth) - r).max(1) as u8;
-                    let null_move_eval =
-                        -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
-                    //minimal window used because all that matters is whether the search result is better than beta
-                    position.undo_null_move(&undo);
-                    self.ply -= 1;
-                    if null_move_eval >= beta {
-                        return beta;
-                    }
+            // Null move pruning:
+            // If we are still able to reach an eval >= beta if we give our opponent
+            // another move, then their previous move was probably bad
+            if !position.is_kp_endgame()
+                && !position.last_move_null
+                && static_eval + read_param!(NMP_FACTOR) * i32::from(depth) - read_param!(NMP_BASE)
+                    >= beta
+                && !root
+            {
+                let undo = position.make_null_move();
+                self.ply += 1;
+                let r = 2 + i32::from(depth) / 4 + ((static_eval - beta) / 256).min(3);
+                let reduced_depth = (i32::from(depth) - r).max(1) as u8;
+                let null_move_eval =
+                    -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
+                //minimal window used because all that matters is whether the search result is better than beta
+                position.undo_null_move(&undo);
+                self.ply -= 1;
+                if null_move_eval >= beta {
+                    return beta;
                 }
             }
         }
