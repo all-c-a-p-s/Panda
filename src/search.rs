@@ -197,6 +197,9 @@ impl Thread<'_> {
                 {
                     return entry.eval;
                 }
+
+                // try some beta pruning here i.e.
+                // if cutnode && entry.eval - margin * (depth - entry.depth) > beta {return beta}
             }
         }
 
@@ -232,6 +235,9 @@ impl Thread<'_> {
             };
         }
 
+        // useful for considering whether or not to prune in the search:
+        // - if improving then we should expect to fail high more
+        // - and to fail low less
         let improving = match self.ply {
             2..=31 => self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval,
             _ => false,
@@ -252,6 +258,9 @@ impl Thread<'_> {
                 return static_eval;
             }
 
+            //Razoring: (try depth + u8::from(!improving) or - u8::from(improving))
+            //If we're very far behind it's likely that the only way to raise alpha will be with
+            //captures, so just run a qsearch
             if depth <= read_param!(MAX_RAZOR_DEPTH)
                 && static_eval + read_param!(RAZORING_MARGIN) * i32::from(depth) <= alpha
             {
@@ -272,7 +281,10 @@ impl Thread<'_> {
             {
                 let undo = position.make_null_move();
                 self.ply += 1;
-                let r = 2 + i32::from(depth) / 4 + ((static_eval - beta) / 256).min(3);
+                let r = 2
+                    + i32::from(depth) / 4
+                    + ((static_eval - beta) / 256).min(3)
+                    + i32::from(improving);
                 let reduced_depth = (i32::from(depth) - r).max(1) as u8;
                 let null_move_eval =
                     -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
@@ -314,6 +326,7 @@ impl Thread<'_> {
 
             let is_killer = m == self.info.killer_moves[0][self.ply]
                 || m == self.info.killer_moves[1][self.ply];
+            let is_check = position.checkers != 0;
 
             //Early Pruning: try to prune moves before we search them properly
             //by showing that they're not worth investigating
@@ -419,11 +432,12 @@ impl Thread<'_> {
                     if quiet {
                         r = self.info.lmr_table.reduction_table[usize::from(quiet)]
                             [depth.min(31) as usize][legal.min(31) as usize];
-                        let is_check = position.checkers != 0;
 
                         r -= i32::from(pv_node);
                         r += i32::from(tt_move_capture);
                         r += i32::from(!improving);
+
+                        //consider improving && !pv_node
                         r += i32::from(cutnode);
 
                         r -= i32::from(is_check);
@@ -683,6 +697,13 @@ impl Thread<'_> {
         (raw_eval + entry / CORRHIST_GRAIN).clamp(-MATE + 1, MATE - 1)
     }
 
+    pub fn age_corrhist(&mut self) {
+        self.info
+            .corrhist
+            .iter_mut()
+            .for_each(|side| side.iter_mut().for_each(|k| *k /= 2))
+    }
+
     pub fn update_history_table(
         &mut self,
         b: &Board,
@@ -712,6 +733,7 @@ impl Thread<'_> {
         //reset tables
         self.info.killer_moves = [[NULL_MOVE; MAX_PLY]; 2];
         self.info.history_table = [[0; 64]; 12];
+        self.age_corrhist();
     }
 }
 
