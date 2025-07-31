@@ -1,9 +1,12 @@
 use crate::movegen::get_attackers;
 use crate::r#move::{Move, MoveList, NULL_MOVE};
-use crate::search::{INFINITY, params};
+use crate::search::{params, INFINITY};
 use crate::thread::Thread;
-use crate::types::{BLACK_PIECES, Piece, PieceType, WHITE_PIECES};
-use crate::{BLACK, BOTH, Board, Colour, MAX_MOVES, WHITE, get_bishop_attacks, get_rook_attacks, lsfb, piece_type, read_param, set_bit};
+use crate::types::{Piece, PieceType, BLACK_PIECES, WHITE_PIECES};
+use crate::{
+    get_bishop_attacks, get_rook_attacks, lsfb, piece_type, read_param, set_bit, Board, Colour,
+    BLACK, BOTH, MAX_MOVES, WHITE,
+};
 
 const MVV_LVA: [[i32; 6]; 6] = [
     //most valuable victim least valuable attacker
@@ -19,16 +22,21 @@ const MVV_LVA: [[i32; 6]; 6] = [
 pub const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, INFINITY];
 
 impl Move {
-    #[must_use] pub fn see(self, b: &Board, threshold: i32) -> bool {
+    #[must_use]
+    pub fn see(self, b: &Board, threshold: i32) -> bool {
         // Iterative approach to SEE inspired by Ethereal.
         let sq_from = self.square_from();
         let sq_to = self.square_to();
 
-        let mut next_victim = if self.is_promotion() { match b.side_to_move {
-            //only consider queen promotions
-            Colour::White => Piece::WQ,
-            Colour::Black => Piece::BQ,
-        } } else { self.piece_moved(b) };
+        let mut next_victim = if self.is_promotion() {
+            match b.side_to_move {
+                //only consider queen promotions
+                Colour::White => Piece::WQ,
+                Colour::Black => Piece::BQ,
+            }
+        } else {
+            self.piece_moved(b)
+        };
 
         let mut balance = match b.pieces_array[sq_to] {
             None => 0,
@@ -204,10 +212,8 @@ impl Move {
                     });
                 });
                 bonus
-            }) + if s.info.killer_moves[0][s.ply] == self {
+            }) + if s.info.killer_moves[s.ply] == Some(self) {
                 read_param!(FIRST_KILLER_MOVE) //after captures
-            } else if s.info.killer_moves[1][s.ply] == self {
-                read_param!(SECOND_KILLER_MOVE)
             } else {
                 s.info.history_table[self.piece_moved(b)][self.square_to()]
             }
