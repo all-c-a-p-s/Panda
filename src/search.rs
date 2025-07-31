@@ -50,6 +50,7 @@ tuneable_params! {
     LOSING_CAPTURE, i32, -300_000, -999_999, 999_999;
     UNDER_PROMOTION, i32, -500_000, -999_999, 999_999;
     COUNTERMOVE_BONUS, i32, 55_151, -999_999, 999999;
+    FOLLOWUP_BONUS, i32, 20_000, -999_999, 999_999;
     NMP_FACTOR, i32, 20, 1, 100;
     NMP_BASE, i32, 200, 50, 500;
     HISTORY_NODE_DIVISOR, usize, 1024, 256, 8192;
@@ -206,12 +207,6 @@ impl Thread<'_> {
                         return entry.eval;
                     }
                 }
-
-                // try some minimum depth criterion relative to depth
-                // - e.g. && entry.depth >= depth - 3
-
-                // try some beta pruning here i.e.
-                // if cutnode && entry.eval - margin * (depth - entry.depth) > beta {return beta}
             }
         }
 
@@ -229,10 +224,6 @@ impl Thread<'_> {
         if !singular {
             static_eval = self.eval_with_corrhist(position, static_eval);
         }
-
-        // idea: some pruning-based version of history heuristic
-        // - i.e. square / square or piece / square indexed values of moves which caused fail-high
-        // (in static pruning)
 
         if tt_hit
             && !((static_eval > tt_score && tt_bound == EntryFlag::LowerBound)
@@ -666,21 +657,32 @@ impl Thread<'_> {
         moves_played: u8,
     ) {
         if !tactical {
-            self.update_killer_moves(cutoff_move, tactical);
+            self.update_killer_moves(cutoff_move);
             self.update_history_table(b, moves, cutoff_move, depth, moves_played as usize);
+            self.update_counter_moves(cutoff_move);
+            self.update_followup(cutoff_move);
         }
     }
 
-    pub fn update_killer_moves(&mut self, cutoff_move: Move, tactical: bool) {
-        if !tactical {
-            self.info.killer_moves[self.ply] = Some(cutoff_move);
-        }
+    pub fn update_killer_moves(&mut self, cutoff_move: Move) {
+        self.info.killer_moves[self.ply] = Some(cutoff_move);
     }
 
     pub fn update_counter_moves(&mut self, cutoff_move: Move) {
         self.info.ss[self.ply].previous_piece.inspect(|x| {
             self.info.ss[self.ply].previous_square.inspect(|y| {
                 self.info.counter_moves[*x][*y] = cutoff_move;
+            });
+        });
+    }
+
+    pub fn update_followup(&mut self, cutoff_move: Move) {
+        if self.ply == 0 {
+            return;
+        }
+        self.info.ss[self.ply - 1].previous_piece.inspect(|x| {
+            self.info.ss[self.ply - 1].previous_square.inspect(|y| {
+                self.info.followup_moves[*x][*y] = cutoff_move;
             });
         });
     }
