@@ -32,10 +32,9 @@ tuneable_params! {
     ASPIRATION_WINDOW, i32, 20, 10, 70;
     RAZORING_MARGIN, i32, 273, 100, 500;
     MAX_RAZOR_DEPTH, u8, 2, 1, 12;
-    BETA_PRUNING_DEPTH, u8, 6, 1, 12;
-    BETA_PRUNING_MARGIN, u8, 27, 20, 200;
-    ALPHA_PRUNING_DEPTH, u8, 11, 1, 12;
-    ALPHA_PRUNING_MARGIN, i32, 2195, 500, 5000;
+    RFP_DEPTH, u8, 6, 1, 12;
+    RFP_MARGIN, u8, 27, 20, 200;
+    TT_FUTILITY_MARGIN, i32, 150, 40, 400;
     SEE_PRUNING_DEPTH, i32, 8, 1, 12;
     SEE_QUIET_MARGIN, i32, 51, 20, 300;
     SEE_NOISY_MARGIN, i32, 37, 20, 250;
@@ -200,7 +199,10 @@ impl Thread<'_> {
                     {
                         return entry.eval;
                     } else if cutnode
-                        && entry.eval - 150 * i32::from(depth - entry.depth).max(1) >= beta
+                        && entry.eval
+                            - read_param!(TT_FUTILITY_MARGIN)
+                                * i32::from(depth - entry.depth).max(1)
+                            >= beta
                         && entry.flag != EntryFlag::UpperBound
                         && !in_check
                     {
@@ -232,6 +234,7 @@ impl Thread<'_> {
             static_eval = tt_score;
         }
 
+        // use search result here?
         if self.ply < MAX_PLY {
             self.info.ss[self.ply] = SearchStackEntry {
                 eval: static_eval,
@@ -243,8 +246,14 @@ impl Thread<'_> {
         // useful for considering whether or not to prune in the search:
         // - if improving then we should expect to fail high more
         // - and to fail low less
+        // opposite goes for opponent_worsening
         let improving = match self.ply {
-            2..=31 => self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval,
+            2.. => self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval,
+            _ => false,
+        };
+
+        let opponent_worsening = match self.ply {
+            3.. => self.info.ss[self.ply - 1].eval < self.info.ss[self.ply - 3].eval,
             _ => false,
         };
 
@@ -253,11 +262,9 @@ impl Thread<'_> {
         if !in_check && !singular && self.do_pruning && !pv_node {
             //Reverse Futility Pruning:
             //If eval >= beta + some margin, assume that we can achieve at least beta
-            if depth <= read_param!(BETA_PRUNING_DEPTH)
+            if depth <= read_param!(RFP_DEPTH)
                 && static_eval
-                    - i32::from(
-                        read_param!(BETA_PRUNING_MARGIN) * (depth - u8::from(improving)).max(0),
-                    )
+                    - i32::from(read_param!(RFP_MARGIN) * (depth - u8::from(improving)).max(0))
                     >= beta
             {
                 return static_eval;
@@ -291,7 +298,8 @@ impl Thread<'_> {
                 let r = 2
                     + i32::from(depth) / 4
                     + ((static_eval - beta) / 256).min(3)
-                    + i32::from(improving);
+                    + i32::from(improving)
+                    + i32::from(opponent_worsening);
                 let reduced_depth = (i32::from(depth) - r).max(1) as u8;
                 let null_move_eval =
                     -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
