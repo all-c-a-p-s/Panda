@@ -2,7 +2,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::time::{Duration, Instant};
 use types::{Piece, Square};
 
-use crate::search::CORRHIST_SIZE;
+use crate::read_param;
+use crate::search::{params, CORRHIST_SIZE};
 use crate::transposition::{TTRef, TranspositionTable};
 use crate::{iterative_deepening, types, Board, Move, MoveData, INFINITY, MAX_PLY, NULL_MOVE};
 
@@ -50,8 +51,8 @@ pub struct SearchInfo {
     pub lmr_table: LMRTable,
     pub history_table: [[i32; 64]; 12],
     pub counter_moves: [[Move; 64]; 12],
-    pub corrhist: [[i32; CORRHIST_SIZE]; 2],
-    pub killer_moves: [[Move; MAX_PLY]; 2],
+    pub corrhist: [[i32; CORRHIST_SIZE as usize]; 2],
+    pub killer_moves: [Option<Move>; MAX_PLY],
     pub excluded: [Option<Move>; MAX_PLY],
 }
 
@@ -71,15 +72,18 @@ impl Default for SearchStackEntry {
 
 impl Default for LMRTable {
     fn default() -> Self {
-        //formula for reductions from Weiss chess engine
+        let tb = (read_param!(LMR_TACTICAL_BASE) as f64) / 100.0;
+        let td = (read_param!(LMR_TACTICAL_DIVISOR) as f64) / 100.0;
+        let qb = (read_param!(LMR_QUIET_BASE) as f64) / 100.0;
+        let qd = (read_param!(LMR_QUIET_DIVISOR) as f64) / 100.0;
         let mut reduction_table = [[[0; 32]; 32]; 2];
         for depth in 0..32 {
             for played in 0..32 {
                 reduction_table[0][depth][played] =
-                    (0.33 + f64::ln(depth as f64) * f64::ln(played as f64) / 3.20) as i32;
+                    (tb + f64::ln(depth as f64) * f64::ln(played as f64) / td) as i32;
                 //tactical move
                 reduction_table[1][depth][played] =
-                    (1.64 + f64::ln(depth as f64) * f64::ln(played as f64) / 2.80) as i32;
+                    (qb + f64::ln(depth as f64) * f64::ln(played as f64) / qd) as i32;
                 //quiet move
             }
         }
@@ -93,9 +97,9 @@ impl Default for SearchInfo {
             ss: [SearchStackEntry::default(); MAX_PLY],
             lmr_table: LMRTable::default(),
             history_table: [[0i32; 64]; 12],
-            corrhist: [[0; CORRHIST_SIZE]; 2],
+            corrhist: [[0; CORRHIST_SIZE as usize]; 2],
             counter_moves: [[NULL_MOVE; 64]; 12],
-            killer_moves: [[NULL_MOVE; 64]; 2],
+            killer_moves: [None; 64],
             excluded: [None; 64],
         }
     }
