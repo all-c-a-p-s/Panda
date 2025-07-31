@@ -211,8 +211,7 @@ impl Thread<'_> {
         };
 
         //reset killers for child nodes
-        self.info.killer_moves[0][self.ply + 1] = NULL_MOVE;
-        self.info.killer_moves[1][self.ply + 1] = NULL_MOVE;
+        self.info.killer_moves[self.ply + 1] = None;
 
         let in_check = position.checkers != 0;
         let mut static_eval = evaluate(position);
@@ -330,8 +329,7 @@ impl Thread<'_> {
             let quiet = !tactical;
             let not_mated = best_score > -MATE;
 
-            let is_killer = m == self.info.killer_moves[0][self.ply]
-                || m == self.info.killer_moves[1][self.ply];
+            let is_killer = self.info.killer_moves[self.ply] == Some(m);
             let is_check = position.checkers != 0;
 
             //Early Pruning: try to prune moves before we search them properly
@@ -663,10 +661,8 @@ impl Thread<'_> {
     }
 
     pub fn update_killer_moves(&mut self, cutoff_move: Move, tactical: bool) {
-        if !tactical && self.info.killer_moves[0][self.ply] != cutoff_move {
-            //avoid saving the same killer move twice
-            self.info.killer_moves[1][self.ply] = self.info.killer_moves[0][self.ply];
-            self.info.killer_moves[0][self.ply] = cutoff_move;
+        if !tactical {
+            self.info.killer_moves[self.ply] = Some(cutoff_move);
         }
     }
 
@@ -734,7 +730,7 @@ impl Thread<'_> {
         self.moves_fully_searched = 0;
 
         //reset tables
-        self.info.killer_moves = [[NULL_MOVE; MAX_PLY]; 2];
+        self.info.killer_moves = [None; MAX_PLY];
         self.info.history_table = [[0; 64]; 12];
         self.age_corrhist();
     }
