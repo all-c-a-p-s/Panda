@@ -164,6 +164,8 @@ impl Thread<'_> {
             (0, EntryFlag::Missing, 0, false);
         let mut best_move = NULL_MOVE;
 
+        let in_check = position.checkers != 0;
+
         if !root && !singular {
             if position.is_drawn() {
                 return 0;
@@ -185,21 +187,24 @@ impl Thread<'_> {
                 tt_depth = entry.depth;
                 tt_bound = entry.flag;
 
-                if !pv_node
-                    && depth <= entry.depth
-                    && match entry.flag {
-                        EntryFlag::Exact => true,
-                        EntryFlag::LowerBound => entry.eval >= beta,
-                        EntryFlag::UpperBound => entry.eval <= alpha,
-                        EntryFlag::Missing => false,
+                if !singular {
+                    if !pv_node
+                        && depth <= entry.depth
+                        && match entry.flag {
+                            EntryFlag::Exact => true,
+                            EntryFlag::LowerBound => entry.eval >= beta,
+                            EntryFlag::UpperBound => entry.eval <= alpha,
+                            EntryFlag::Missing => false,
+                        }
+                    {
+                        return entry.eval;
+                    } else if cutnode
+                        && entry.eval - 150 * i32::from(depth - entry.depth).max(1) >= beta
+                        && entry.flag != EntryFlag::UpperBound
+                        && !in_check
+                    {
+                        return entry.eval;
                     }
-                {
-                    return entry.eval;
-                } else if cutnode
-                    && entry.eval - 150 * i32::from(depth - entry.depth).max(1) >= beta
-                    && entry.flag != EntryFlag::UpperBound
-                {
-                    return entry.eval;
                 }
 
                 // try some minimum depth criterion relative to depth
@@ -220,7 +225,6 @@ impl Thread<'_> {
         //reset killers for child nodes
         self.info.killer_moves[self.ply + 1] = None;
 
-        let in_check = position.checkers != 0;
         let mut static_eval = evaluate(position);
         if !singular {
             static_eval = self.eval_with_corrhist(position, static_eval);
@@ -256,7 +260,7 @@ impl Thread<'_> {
         //Static pruning: here we attempt to show that the position does not require any further
         //search
         if !in_check && !singular && self.do_pruning && !pv_node {
-            //Beta Pruning / Reverse Futility Pruning:
+            //Reverse Futility Pruning:
             //If eval >= beta + some margin, assume that we can achieve at least beta
             if depth <= read_param!(BETA_PRUNING_DEPTH)
                 && static_eval
