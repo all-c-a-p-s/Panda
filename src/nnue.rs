@@ -1,13 +1,14 @@
 use std::mem;
 
 use crate::eval::MIRROR;
-use crate::{BOTH, Board, Colour, lsfb, pop_bit};
+use crate::{lsfb, pop_bit, Board, Colour, BOTH};
 
-use crate::types::{PIECES, Piece, Square};
+use crate::types::{Piece, Square, PIECES};
 
 // ON or OFF for each piece / colour / square
 const NUM_FEATURES: usize = 6 * 2 * 64;
 const HL_SIZE: usize = 256;
+const NUM_BUCKETS: usize = 1;
 
 const CR_MIN: i16 = 0;
 const CR_MAX: i16 = 255;
@@ -22,7 +23,7 @@ const SCALE: i32 = 400;
 
 #[repr(C)]
 struct Network {
-    feature_weights: [i16; NUM_FEATURES * HL_SIZE],
+    feature_weights: [i16; NUM_FEATURES * HL_SIZE * NUM_BUCKETS],
     feature_biases: [i16; HL_SIZE],
     output_weights: [i16; HL_SIZE * 2],
     output_bias: i16,
@@ -32,7 +33,8 @@ static MODEL: Network = unsafe { mem::transmute(*include_bytes!("./nets/quantise
 
 type SideAccumulator = [i16; HL_SIZE];
 
-#[must_use] pub const fn nnue_index(piece: Piece, sq: Square) -> (usize, usize) {
+#[must_use]
+pub const fn nnue_index(piece: Piece, sq: Square) -> (usize, usize) {
     const PIECE_STEP: usize = 64;
 
     let white_idx = PIECE_STEP * piece as usize + sq as usize;
@@ -60,7 +62,8 @@ impl Default for Accumulator {
 }
 
 impl Accumulator {
-    #[must_use] pub fn from_board(board: &Board) -> Self {
+    #[must_use]
+    pub fn from_board(board: &Board) -> Self {
         let mut a = Accumulator::default();
 
         let mut occs = board.occupancies[BOTH];
@@ -186,7 +189,8 @@ impl Accumulator {
         }
     }
 
-    #[must_use] pub fn evaluate(&self, side: Colour) -> i32 {
+    #[must_use]
+    pub fn evaluate(&self, side: Colour) -> i32 {
         let (us, them) = match side {
             Colour::White => (self.white.iter(), self.black.iter()),
             Colour::Black => (self.black.iter(), self.white.iter()),
