@@ -47,8 +47,7 @@ tuneable_params! {
     QUEEN_PROMOTION, i32, 750_000, -999_999, 999_999;
     WINNING_CAPTURE, i32, 500_000, -999_999, 999_999;
     FIRST_KILLER_MOVE, i32, 94_419, -999_999, 999_999;
-    SECOND_KILLER_MOVE, i32, 15_626, -999_999, 999_999;
-    LOSING_CAPTURE, i32, -300_400, -999_999, 999_999;
+    LOSING_CAPTURE, i32, -300_000, -999_999, 999_999;
     UNDER_PROMOTION, i32, -500_000, -999_999, 999_999;
     COUNTERMOVE_BONUS, i32, 55_151, -999_999, 999999;
     NMP_FACTOR, i32, 20, 1, 100;
@@ -196,7 +195,15 @@ impl Thread<'_> {
                     }
                 {
                     return entry.eval;
+                } else if cutnode
+                    && entry.eval - 150 * i32::from(depth - entry.depth).max(1) >= beta
+                    && entry.flag != EntryFlag::UpperBound
+                {
+                    return entry.eval;
                 }
+
+                // try some minimum depth criterion relative to depth
+                // - e.g. && entry.depth >= depth - 3
 
                 // try some beta pruning here i.e.
                 // if cutnode && entry.eval - margin * (depth - entry.depth) > beta {return beta}
