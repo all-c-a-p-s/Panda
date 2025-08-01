@@ -88,6 +88,7 @@ impl Default for LMRTable {
                 //quiet move
             }
         }
+
         LMRTable { reduction_table }
     }
 }

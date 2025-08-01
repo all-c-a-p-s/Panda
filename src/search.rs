@@ -348,7 +348,19 @@ impl Thread<'_> {
                 if quiet && skip_quiets && !is_killer {
                     continue;
                 }
-                let r: i32 = self.info.lmr_table.reduction_table[usize::from(quiet)]
+
+                //Late Move Pruning: after a certain point start skipping all quiets after the current
+                //move. The threshold I'm currently using comes from Weiss
+                let lmp_threshold = if improving {
+                    2 + depth * depth
+                } else {
+                    depth * depth / 2
+                };
+                if depth <= read_param!(LMP_DEPTH) && legal > lmp_threshold && !in_check {
+                    skip_quiets = true;
+                }
+
+                let r = self.info.lmr_table.reduction_table[usize::from(quiet)]
                     [depth.min(31) as usize][considered.min(31) as usize]
                     + i32::from(!improving);
                 let lmr_depth = i32::from(depth) - 1 - r.max(0);
@@ -366,17 +378,6 @@ impl Thread<'_> {
                     if !m.see(position, threshold) {
                         continue;
                     }
-                }
-
-                //Late Move Pruning: after a certain point start skipping all quiets after the current
-                //move. The threshold I'm currently using comes from Weiss
-                let lmp_threshold = if improving {
-                    depth * depth + 2
-                } else {
-                    depth * depth / 2
-                };
-                if depth <= read_param!(LMP_DEPTH) && considered > lmp_threshold && !in_check {
-                    skip_quiets = true;
                 }
             }
 
@@ -437,8 +438,11 @@ impl Thread<'_> {
                 // then if we are unable to prove so
 
                 let mut reduction_eval = if legal
-                    > (FULL_DEPTH_MOVES + u8::from(pv_node) + u8::from(!tt_move) + u8::from(root))
-                        + u8::from(tactical)
+                    > (FULL_DEPTH_MOVES
+                        + u8::from(pv_node)
+                        + u8::from(!tt_move)
+                        + u8::from(root)
+                        + u8::from(tactical))
                     && depth >= REDUCTION_LIMIT
                     && !in_check
                 {
@@ -567,14 +571,14 @@ impl Thread<'_> {
         let mut eval = evaluate(position);
         eval = self.eval_with_corrhist(position, eval);
 
+        let in_check = position.checkers != 0;
+
         if eval >= beta {
             return beta;
         }
         let mut best_score = eval;
 
         alpha = alpha.max(best_score);
-
-        let in_check = position.checkers != 0;
 
         let mut captures = if in_check {
             //try generating all moves in the case that we're in check because it's unsound to rely
