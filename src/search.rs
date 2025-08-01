@@ -25,6 +25,8 @@ const CORRHIST_SCALE: i32 = 256;
 const CORRHIST_MAX: i32 = 256 * 32;
 pub const CORRHIST_SIZE: usize = 16_384;
 
+const HISTORY_MAX: i32 = 16_384;
+
 // name, type, val, min, max
 
 tuneable_params! {
@@ -462,13 +464,7 @@ impl Thread<'_> {
 
                         r -= i32::from(is_check);
 
-                        let history_threshold = ((self.nodes / read_param!(HISTORY_NODE_DIVISOR))
-                            as i32)
-                            .max(read_param!(HISTORY_MIN_THRESHOLD));
-                        // use nodes to contextualise history score based on how much we've searched
-                        r -= (self.info.history_table[m.piece_moved(position)][m.square_to()]
-                            / history_threshold)
-                            .clamp(-2, 1);
+                        r -= self.info.history_table[m.piece_moved(position)][m.square_to()] / 8192;
                     }
 
                     let mut reduced_depth = (i32::from(new_depth) - r).max(1) as u8;
@@ -739,13 +735,16 @@ impl Thread<'_> {
         depth: u8,
         moves_played: usize,
     ) {
+        let bonus = (300 * depth as i32 - 250).clamp(-HISTORY_MAX, HISTORY_MAX);
         //penalise all moves that have been checked and have not caused beta cutoff
         for &m in moves.moves.iter().take(moves_played) {
             let piece = m.piece_moved(b);
             let target = m.square_to();
+            let history = &mut self.info.history_table[piece][target];
+            let s = if m == cutoff_move { 1 } else { -1 };
+            let delta = (s * bonus) - *history * bonus / HISTORY_MAX;
             if !m.is_capture(b) {
-                self.info.history_table[piece][target] +=
-                    i32::from(depth * depth) * if m == cutoff_move { 1 } else { -1 };
+                self.info.history_table[piece][target] += delta;
             }
         }
     }
