@@ -444,7 +444,7 @@ impl Thread<'_> {
                         + u8::from(root)
                         + u8::from(tactical))
                     && depth >= REDUCTION_LIMIT
-                    && !in_check
+                    && not_mated
                 {
                     let mut r = 1;
                     if quiet {
