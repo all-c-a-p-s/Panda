@@ -136,10 +136,12 @@ impl Thread<'_> {
         }
     }
 
-    // Node Types:
-    // - PV-node: a node in which the value returned is between alpha and beta (exact)
-    // - Cutnode: a node in which a beta cutoff occurred, value returned >= beta (lower bound)
-    // - All-node: a node in which all moves were searched and alpha returned (upper bound)
+    /// Negamax:
+    /// Alpha-Beta search with various enhancements.
+    /// Node Types:
+    /// - PV-node: a node in which the value returned is between alpha and beta (exact)
+    /// - Cutnode: a node in which a beta cutoff occurred, value returned >= beta (lower bound)
+    /// - All-node: a node in which all moves were searched and alpha returned (upper bound)
     pub fn negamax(
         &mut self,
         position: &mut Board,
@@ -328,13 +330,13 @@ impl Thread<'_> {
         let (mut quiets, mut caps) = (vec![], vec![]);
 
         let mut move_list = MoveList::gen_moves::<false>(position);
-        move_list.order_moves(position, self, &best_move);
+        let mut scores = move_list.get_scores(self, position, &best_move);
 
         let (mut legal, mut considered) = (0, 0);
         let mut skip_quiets = false;
         let mut best_score = -INFINITY;
 
-        for &m in move_list.moves.iter().take_while(|m| !m.is_null()) {
+        while let Some((m, _ms)) = move_list.get_next(&mut scores) {
             if let Some(n) = self.info.excluded[self.ply] {
                 if n == m {
                     considered += 1;
@@ -549,6 +551,9 @@ impl Thread<'_> {
         best_score
     }
 
+    /// Quiescence Search:
+    /// Search all noisy moves, or all moves if in check.
+    /// This is done to prevent the horizon effect.
     pub fn qsearch(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
 
@@ -596,13 +601,13 @@ impl Thread<'_> {
             MoveList::gen_moves::<true>(position)
         };
 
-        captures.order_moves(position, self, &best_move);
+        let mut scores = captures.get_scores(self, position, &best_move);
 
-        for &c in captures.moves.iter().take_while(|c| !c.is_null()) {
-            if c.is_capture(position) {
+        while let Some((m, _ms)) = captures.get_next(&mut scores) {
+            if m.is_capture(position) {
                 // if not capture then must be a check evasion
-                let best_case = eval + SEE_VALUES[piece_type(position.get_piece_at(c.square_to()))];
-                let worst_case = best_case - SEE_VALUES[piece_type(c.piece_moved(position))];
+                let best_case = eval + SEE_VALUES[piece_type(position.get_piece_at(m.square_to()))];
+                let worst_case = best_case - SEE_VALUES[piece_type(m.piece_moved(position))];
 
                 //first check if we beat beta even in the worst case
                 if worst_case > beta {
@@ -611,13 +616,13 @@ impl Thread<'_> {
             }
 
             //next check if we fail SEE by threshold
-            if !c.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
+            if !m.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
                 continue;
             }
 
             //if we're far behind, only consider moves which win significant material
             if best_score + read_param!(QSEARCH_FP_MARGIN) <= alpha
-                && !c.see(
+                && !m.see(
                     position,
                     SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1,
                 )
@@ -625,14 +630,14 @@ impl Thread<'_> {
                 continue;
             }
 
-            let Ok(commit) = position.try_move(c) else {
+            let Ok(commit) = position.try_move(m) else {
                 continue;
             };
 
             self.ply += 1;
 
             let eval = -self.qsearch(position, -beta, -alpha);
-            position.undo_move(c, &commit);
+            position.undo_move(m, &commit);
             self.ply -= 1;
 
             if self.is_stopped() {
@@ -643,7 +648,7 @@ impl Thread<'_> {
             if eval > alpha {
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
-                best_move = c;
+                best_move = m;
             }
             if alpha >= beta {
                 break;

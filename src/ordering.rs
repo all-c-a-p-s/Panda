@@ -1,5 +1,5 @@
 use crate::movegen::get_attackers;
-use crate::r#move::{Move, MoveList, NULL_MOVE};
+use crate::r#move::{Move, MoveList};
 use crate::search::{params, INFINITY};
 use crate::thread::Thread;
 use crate::types::{Piece, PieceType, BLACK_PIECES, WHITE_PIECES};
@@ -196,7 +196,7 @@ impl Move {
         } else if self.is_en_passant() {
             MVV[PieceType::Pawn]
         } else {
-            ({
+            let cont_bonus = {
                 let mut bonus = 0;
                 s.info.ss[s.ply].previous_piece.inspect(|x| {
                     s.info.ss[s.ply].previous_square.inspect(|y| {
@@ -216,46 +216,58 @@ impl Move {
                     });
                 }
                 bonus
-            }) + if s.info.killer_moves[s.ply] == Some(self) {
-                read_param!(FIRST_KILLER_MOVE) //after captures
-            } else {
-                s.info.history_table[self.piece_moved(b)][self.square_to()] as i32
-            }
+            };
+
+            cont_bonus
+                + if s.info.killer_moves[s.ply] == Some(self) {
+                    read_param!(FIRST_KILLER_MOVE) //after captures
+                } else {
+                    s.info.history_table[self.piece_moved(b)][self.square_to()] as i32
+                }
         }
     }
 }
 
-#[derive(Copy, Clone)]
-pub struct MoveOrderEntry<'a> {
-    m: &'a Move,
-    score: i32,
-}
-
 impl MoveList {
-    pub fn order_moves(&mut self, board: &mut Board, s: &Thread, best_move: &Move) {
-        let mut ordered_moves = [MoveOrderEntry {
-            m: &NULL_MOVE,
-            score: -INFINITY,
-        }; MAX_MOVES];
-
-        for (i, m) in self.moves.iter().enumerate() {
-            if m.is_null() {
-                break;
-            }
-            ordered_moves[i].m = m;
-            ordered_moves[i].score = m.score_move(board, s, best_move);
+    const ALREADY_SEARCHED: i32 = -INFINITY / 2;
+    pub fn get_scores(&self, s: &Thread, b: &mut Board, best_move: &Move) -> [i32; MAX_MOVES] {
+        let mut scores = [Self::ALREADY_SEARCHED; MAX_MOVES];
+        for (i, &m) in self.moves.iter().take_while(|m| !m.is_null()).enumerate() {
+            scores[i] = m.score_move(b, s, best_move);
         }
 
-        ordered_moves.sort_by(|a, b| b.score.cmp(&a.score));
+        scores
+    }
 
-        let mut final_moves = [NULL_MOVE; MAX_MOVES];
-
-        for i in 0..MAX_MOVES {
-            if ordered_moves[i].m.is_null() {
-                break;
-            }
-            final_moves[i] = *ordered_moves[i].m;
+    // "Sorts" the moves using insertion sort
+    // In practice this is expected to be faster than O(n log n) sorting since in most cases we
+    // will only have to find a few of the highest scoring moves
+    pub fn get_next(&mut self, scores: &mut [i32; MAX_MOVES]) -> Option<(Move, i32)> {
+        if scores[0] == Self::ALREADY_SEARCHED {
+            return None;
         }
-        self.moves = final_moves;
+
+        let (mut best, mut choice, mut idx) = (scores[0], self.moves[0], 0);
+        let mut count = 0;
+        for (i, &m) in self
+            .moves
+            .iter()
+            .enumerate()
+            .take_while(|&(i, _)| scores[i] > Self::ALREADY_SEARCHED)
+            .skip(1)
+        {
+            if scores[i] > best {
+                idx = i;
+                best = scores[i];
+                choice = m;
+            }
+            count = i;
+        }
+
+        self.moves.swap(idx, count);
+        scores.swap(idx, count);
+        scores[count] = Self::ALREADY_SEARCHED;
+
+        Some((choice, best))
     }
 }
