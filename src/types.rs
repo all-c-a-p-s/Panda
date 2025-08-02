@@ -46,6 +46,19 @@ pub enum PieceType {
     King,
 }
 
+pub enum OccupancyIndex {
+    WhiteOccupancies,
+    BlackOccupancies,
+    BothOccupancies,
+}
+
+pub enum CastlingType {
+    WhiteKingside,
+    WhiteQueenside,
+    BlackKingside,
+    BlackQueenside,
+}
+
 pub const PIECES: [Piece; 12] = [
     Piece::WP,
     Piece::WB,
@@ -139,6 +152,38 @@ impl<T> Index<PieceType> for [T; 5] {
 // SAFETY: used for caphist only so in this case PieceType will never be king
 impl<T> IndexMut<PieceType> for [T; 5] {
     fn index_mut(&mut self, index: PieceType) -> &mut Self::Output {
+        // SAFETY: the legal values for this type are all in bounds.
+        unsafe { self.get_unchecked_mut(index as usize) }
+    }
+}
+
+impl<T> Index<OccupancyIndex> for [T; 3] {
+    type Output = T;
+
+    fn index(&self, index: OccupancyIndex) -> &Self::Output {
+        // SAFETY: the legal values for this type are all in bounds.
+        unsafe { self.get_unchecked(index as usize) }
+    }
+}
+
+impl<T> IndexMut<OccupancyIndex> for [T; 3] {
+    fn index_mut(&mut self, index: OccupancyIndex) -> &mut Self::Output {
+        // SAFETY: the legal values for this type are all in bounds.
+        unsafe { self.get_unchecked_mut(index as usize) }
+    }
+}
+
+impl<T> Index<CastlingType> for [T; 4] {
+    type Output = T;
+
+    fn index(&self, index: CastlingType) -> &Self::Output {
+        // SAFETY: the legal values for this type are all in bounds.
+        unsafe { self.get_unchecked(index as usize) }
+    }
+}
+
+impl<T> IndexMut<CastlingType> for [T; 4] {
+    fn index_mut(&mut self, index: CastlingType) -> &mut Self::Output {
         // SAFETY: the legal values for this type are all in bounds.
         unsafe { self.get_unchecked_mut(index as usize) }
     }

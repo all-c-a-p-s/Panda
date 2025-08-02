@@ -6,12 +6,12 @@
 /// 1000 0000 0000 0000 castling flag      0x8000
 /// 1100 0000 0000 0000 promotion flag     0xc000
 use crate::board::{BitBoard, Board, Colour};
-use crate::helper::{BLACK, BOTH, MAX_MOVES, WHITE, coordinate, count, lsfb, piece_type, pop_bit, rank, set_bit};
+use crate::helper::{coordinate, count, lsfb, piece_type, pop_bit, rank, set_bit, MAX_MOVES};
 use crate::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS};
-use crate::movegen::{RAY_BETWEEN, check_en_passant, is_attacked};
-use crate::zobrist::{CASTLING_KEYS, hash_update};
+use crate::movegen::{check_en_passant, is_attacked, RAY_BETWEEN};
+use crate::zobrist::{hash_update, CASTLING_KEYS};
 
-use crate::types::{Piece, PieceType, Square};
+use crate::types::{OccupancyIndex, Piece, PieceType, Square};
 
 pub const SQUARE_FROM_MASK: u16 = 0b0000_0000_0011_1111;
 pub const SQUARE_TO_MASK: u16 = 0b0000_1111_1100_0000;
@@ -48,7 +48,8 @@ pub struct Commit {
 }
 
 impl Move {
-    #[must_use] pub fn from_promotion(from: Square, to: Square, promoted_piece: PieceType) -> Self {
+    #[must_use]
+    pub fn from_promotion(from: Square, to: Square, promoted_piece: PieceType) -> Self {
         Self {
             data: from as u16
                 | (to as u16) << 6
@@ -57,51 +58,62 @@ impl Move {
         }
     }
 
-    #[must_use] pub fn from_flags(from: Square, to: Square, flags: u16) -> Self {
+    #[must_use]
+    pub fn from_flags(from: Square, to: Square, flags: u16) -> Self {
         Self {
             data: from as u16 | (to as u16) << 6 | flags,
         }
     }
 
-    #[must_use] pub fn square_from(self) -> Square {
+    #[must_use]
+    pub fn square_from(self) -> Square {
         unsafe { Square::from((self.data & SQUARE_FROM_MASK) as u8) }
     }
 
-    #[must_use] pub fn square_to(self) -> Square {
+    #[must_use]
+    pub fn square_to(self) -> Square {
         unsafe { Square::from(((self.data & SQUARE_TO_MASK) >> 6) as u8) }
     }
 
-    #[must_use] pub fn promoted_piece(self) -> PieceType {
+    #[must_use]
+    pub fn promoted_piece(self) -> PieceType {
         //must be called only if self.is_promotion() is true
         //also only given piece type, not colour
         unsafe { PieceType::from((((self.data & PROMOTION_MASK) >> 12) + 1) as u8) }
     }
 
-    #[must_use] pub fn is_promotion(self) -> bool {
+    #[must_use]
+    pub fn is_promotion(self) -> bool {
         self.data & PROMOTION_FLAG == PROMOTION_FLAG
     }
 
-    #[must_use] pub fn is_castling(self) -> bool {
+    #[must_use]
+    pub fn is_castling(self) -> bool {
         (self.data & CASTLING_FLAG) > 0 && (self.data & EN_PASSANT_FLAG == 0)
     }
 
-    #[must_use] pub fn is_en_passant(self) -> bool {
+    #[must_use]
+    pub fn is_en_passant(self) -> bool {
         (self.data & EN_PASSANT_FLAG) > 0 && (self.data & CASTLING_FLAG == 0)
     }
 
-    #[must_use] pub fn is_null(self) -> bool {
+    #[must_use]
+    pub fn is_null(self) -> bool {
         self.data == 0
     }
 
-    #[must_use] pub fn piece_moved(self, b: &Board) -> Piece {
+    #[must_use]
+    pub fn piece_moved(self, b: &Board) -> Piece {
         b.get_piece_at(self.square_from())
     }
 
-    #[must_use] pub fn is_capture(self, b: &Board) -> bool {
+    #[must_use]
+    pub fn is_capture(self, b: &Board) -> bool {
         b.pieces_array[self.square_to()].is_some()
     }
 
-    #[must_use] pub fn is_double_push(self, b: &Board) -> bool {
+    #[must_use]
+    pub fn is_double_push(self, b: &Board) -> bool {
         if rank(self.square_to()) != 3 && rank(self.square_to()) != 4
             || rank(self.square_from()) != 1 && rank(self.square_from()) != 6
         {
@@ -110,11 +122,13 @@ impl Move {
         piece_type(self.piece_moved(b)) == PieceType::Pawn
     }
 
-    #[must_use] pub fn piece_captured(self, b: &Board) -> Piece {
+    #[must_use]
+    pub fn piece_captured(self, b: &Board) -> Piece {
         b.get_piece_at(self.square_to())
     }
 
-    #[must_use] pub fn is_tactical(self, b: &Board) -> bool {
+    #[must_use]
+    pub fn is_tactical(self, b: &Board) -> bool {
         self.is_promotion() || self.is_capture(b) || self.is_en_passant()
     }
 }
@@ -148,7 +162,8 @@ impl Move {
     }
 }
 
-#[must_use] pub fn encode_move(from: Square, to: Square, promoted_piece: Option<PieceType>, flag: u16) -> Move {
+#[must_use]
+pub fn encode_move(from: Square, to: Square, promoted_piece: Option<PieceType>, flag: u16) -> Move {
     if flag & PROMOTION_FLAG == PROMOTION_FLAG {
         //move is a promotion
         Move::from_promotion(from, to, unsafe { promoted_piece.unwrap_unchecked() })
@@ -205,11 +220,15 @@ impl Board {
 
         let to = m.square_to();
         let from = m.square_from();
-        let piece = if m.is_promotion() { match self.pieces_array[to] {
-            Some(Piece::WN | Piece::WB | Piece::WR | Piece::WQ) => Piece::WP,
-            Some(Piece::BN | Piece::BB | Piece::BR | Piece::BQ) => Piece::BP,
-            _ => unreachable!(),
-        } } else { self.get_piece_at(to) }; //not m.piece_moved(&self) because board has been mutated
+        let piece = if m.is_promotion() {
+            match self.pieces_array[to] {
+                Some(Piece::WN | Piece::WB | Piece::WR | Piece::WQ) => Piece::WP,
+                Some(Piece::BN | Piece::BB | Piece::BR | Piece::BQ) => Piece::BP,
+                _ => unreachable!(),
+            }
+        } else {
+            self.get_piece_at(to)
+        }; //not m.piece_moved(&self) because board has been mutated
 
         if m.is_promotion() {
             let promoted_piece = self.get_piece_at(to);
@@ -293,21 +312,23 @@ impl Board {
             }
         }
 
-        self.occupancies[WHITE] = self.bitboards[Piece::WP]
+        self.occupancies[OccupancyIndex::WhiteOccupancies] = self.bitboards[Piece::WP]
             | self.bitboards[Piece::WN]
             | self.bitboards[Piece::WB]
             | self.bitboards[Piece::WR]
             | self.bitboards[Piece::WQ]
             | self.bitboards[Piece::WK];
 
-        self.occupancies[BLACK] = self.bitboards[Piece::BP]
+        self.occupancies[OccupancyIndex::BlackOccupancies] = self.bitboards[Piece::BP]
             | self.bitboards[Piece::BN]
             | self.bitboards[Piece::BB]
             | self.bitboards[Piece::BR]
             | self.bitboards[Piece::BQ]
             | self.bitboards[Piece::BK];
 
-        self.occupancies[BOTH] = self.occupancies[WHITE] | self.occupancies[BLACK];
+        self.occupancies[OccupancyIndex::BothOccupancies] = self.occupancies
+            [OccupancyIndex::WhiteOccupancies]
+            | self.occupancies[OccupancyIndex::BlackOccupancies];
 
         self.en_passant = c.ep_reset;
         self.castling = c.castling_reset;
@@ -518,31 +539,33 @@ impl Board {
             }
         }
 
-        self.occupancies[WHITE] = self.bitboards[Piece::WP]
+        self.occupancies[OccupancyIndex::WhiteOccupancies] = self.bitboards[Piece::WP]
             | self.bitboards[Piece::WN]
             | self.bitboards[Piece::WB]
             | self.bitboards[Piece::WR]
             | self.bitboards[Piece::WQ]
             | self.bitboards[Piece::WK];
 
-        self.occupancies[BLACK] = self.bitboards[Piece::BP]
+        self.occupancies[OccupancyIndex::BlackOccupancies] = self.bitboards[Piece::BP]
             | self.bitboards[Piece::BN]
             | self.bitboards[Piece::BB]
             | self.bitboards[Piece::BR]
             | self.bitboards[Piece::BQ]
             | self.bitboards[Piece::BK];
 
-        self.occupancies[BOTH] = self.occupancies[WHITE] | self.occupancies[BLACK];
+        self.occupancies[OccupancyIndex::BothOccupancies] = self.occupancies
+            [OccupancyIndex::WhiteOccupancies]
+            | self.occupancies[OccupancyIndex::BlackOccupancies];
         //update occupancies
 
         let mut our_attackers = if colour == Colour::White {
-            self.occupancies[WHITE]
+            self.occupancies[OccupancyIndex::WhiteOccupancies]
                 & ((BISHOP_EDGE_RAYS[enemy_king]
                     & (self.bitboards[Piece::WB] | self.bitboards[Piece::WQ]))
                     | ROOK_EDGE_RAYS[enemy_king]
                         & (self.bitboards[Piece::WR] | self.bitboards[Piece::WQ]))
         } else {
-            self.occupancies[BLACK]
+            self.occupancies[OccupancyIndex::BlackOccupancies]
                 & ((BISHOP_EDGE_RAYS[enemy_king]
                     & (self.bitboards[Piece::BB] | self.bitboards[Piece::BQ]))
                     | ROOK_EDGE_RAYS[enemy_king]
@@ -550,7 +573,8 @@ impl Board {
         };
 
         while let Some(sq) = lsfb(our_attackers) {
-            let ray_between = RAY_BETWEEN[sq][enemy_king] & self.occupancies[BOTH];
+            let ray_between =
+                RAY_BETWEEN[sq][enemy_king] & self.occupancies[OccupancyIndex::BothOccupancies];
             match count(ray_between) {
                 0 => self.checkers |= set_bit(sq, 0),
                 1 => self.pinned |= ray_between,
@@ -633,9 +657,9 @@ impl Board {
             )
             .unwrap_unchecked()
         };
-        self.occupancies[BOTH] ^= set_bit(king_sq, 0);
+        self.occupancies[OccupancyIndex::BothOccupancies] ^= set_bit(king_sq, 0);
         let ok = !is_attacked(m.square_to(), self.side_to_move.opponent(), self);
-        self.occupancies[BOTH] ^= set_bit(king_sq, 0);
+        self.occupancies[OccupancyIndex::BothOccupancies] ^= set_bit(king_sq, 0);
 
         ok
     }
@@ -663,8 +687,8 @@ impl Board {
 
         targets
             & !self.occupancies[match colour {
-                Colour::White => WHITE,
-                Colour::Black => BLACK,
+                Colour::White => OccupancyIndex::WhiteOccupancies,
+                Colour::Black => OccupancyIndex::BlackOccupancies,
             }]
     }
 }

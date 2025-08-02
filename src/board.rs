@@ -1,7 +1,8 @@
-use crate::helper::{coordinate, count, lsfb, pop_bit, set_bit, square, BLACK, BOTH, WHITE};
+use crate::helper::{coordinate, count, lsfb, pop_bit, set_bit, square};
 use crate::magic::{BISHOP_EDGE_RAYS, ROOK_EDGE_RAYS};
 use crate::movegen::RAY_BETWEEN;
 use crate::nnue::Accumulator;
+use crate::types::OccupancyIndex;
 use crate::types::{Piece, Square};
 use crate::zobrist::{hash, pawn_hash};
 use crate::zobrist::{BLACK_TO_MOVE, EP_KEYS};
@@ -175,21 +176,23 @@ impl Board {
             }
         }
 
-        new_board.occupancies[WHITE] = new_board.bitboards[Piece::WP]
+        new_board.occupancies[OccupancyIndex::WhiteOccupancies] = new_board.bitboards[Piece::WP]
             | new_board.bitboards[Piece::WN]
             | new_board.bitboards[Piece::WB]
             | new_board.bitboards[Piece::WR]
             | new_board.bitboards[Piece::WQ]
             | new_board.bitboards[Piece::WK];
 
-        new_board.occupancies[BLACK] = new_board.bitboards[Piece::BP]
+        new_board.occupancies[OccupancyIndex::BlackOccupancies] = new_board.bitboards[Piece::BP]
             | new_board.bitboards[Piece::BN]
             | new_board.bitboards[Piece::BB]
             | new_board.bitboards[Piece::BR]
             | new_board.bitboards[Piece::BQ]
             | new_board.bitboards[Piece::BK];
 
-        new_board.occupancies[BOTH] = new_board.occupancies[WHITE] | new_board.occupancies[BLACK];
+        new_board.occupancies[OccupancyIndex::BothOccupancies] = new_board.occupancies
+            [OccupancyIndex::WhiteOccupancies]
+            | new_board.occupancies[OccupancyIndex::BlackOccupancies];
 
         new_board.hash_key = hash(&new_board);
         new_board.compute_checkers_and_pins();
@@ -281,7 +284,7 @@ impl Board {
     pub fn is_kp_endgame(&self) -> bool {
         //used to avoid null move pruning in king and pawn endgames
         //where zugzwang is very common
-        self.occupancies[BOTH]
+        self.occupancies[OccupancyIndex::BothOccupancies]
             ^ (self.bitboards[Piece::WP]
                 | self.bitboards[Piece::WK]
                 | self.bitboards[Piece::BP]
@@ -391,13 +394,13 @@ impl Board {
         //SAFETY: there MUST be a king on the board
 
         let mut their_attackers = if colour == Colour::White {
-            self.occupancies[BLACK]
+            self.occupancies[OccupancyIndex::BlackOccupancies]
                 & ((BISHOP_EDGE_RAYS[our_king]
                     & (self.bitboards[Piece::BB] | self.bitboards[Piece::BQ]))
                     | ROOK_EDGE_RAYS[our_king]
                         & (self.bitboards[Piece::BR] | self.bitboards[Piece::BQ]))
         } else {
-            self.occupancies[WHITE]
+            self.occupancies[OccupancyIndex::WhiteOccupancies]
                 & ((BISHOP_EDGE_RAYS[our_king]
                     & (self.bitboards[Piece::WB] | self.bitboards[Piece::WQ]))
                     | ROOK_EDGE_RAYS[our_king]
@@ -405,7 +408,8 @@ impl Board {
         };
 
         while let Some(sq) = lsfb(their_attackers) {
-            let ray_between = RAY_BETWEEN[sq][our_king] & self.occupancies[BOTH];
+            let ray_between =
+                RAY_BETWEEN[sq][our_king] & self.occupancies[OccupancyIndex::BothOccupancies];
             match count(ray_between) {
                 0 => self.checkers |= set_bit(sq, 0),
                 1 => self.pinned |= ray_between,
@@ -468,13 +472,13 @@ impl Board {
         };
 
         let mut their_attackers = if colour == Colour::White {
-            self.occupancies[BLACK]
+            self.occupancies[OccupancyIndex::BlackOccupancies]
                 & ((BISHOP_EDGE_RAYS[our_king]
                     & (self.bitboards[Piece::BB] | self.bitboards[Piece::BQ]))
                     | ROOK_EDGE_RAYS[our_king]
                         & (self.bitboards[Piece::BR] | self.bitboards[Piece::BQ]))
         } else {
-            self.occupancies[WHITE]
+            self.occupancies[OccupancyIndex::WhiteOccupancies]
                 & ((BISHOP_EDGE_RAYS[our_king]
                     & (self.bitboards[Piece::WB] | self.bitboards[Piece::WQ]))
                     | ROOK_EDGE_RAYS[our_king]
@@ -482,7 +486,8 @@ impl Board {
         };
 
         while let Some(sq) = lsfb(their_attackers) {
-            let ray_between = RAY_BETWEEN[sq][our_king] & self.occupancies[BOTH];
+            let ray_between =
+                RAY_BETWEEN[sq][our_king] & self.occupancies[OccupancyIndex::BothOccupancies];
             if count(ray_between) == 1 {
                 self.pinned |= ray_between;
             }

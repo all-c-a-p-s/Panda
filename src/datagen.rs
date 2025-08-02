@@ -8,7 +8,8 @@ use std::time::{Duration, Instant};
 
 use crate::thread::{Searcher, Thread};
 use crate::transposition::TranspositionTable;
-use crate::{BOTH, Board, Colour, INFINITY, Move, MoveList, NULL_MOVE, STARTPOS, iterative_deepening};
+use crate::types::OccupancyIndex;
+use crate::{iterative_deepening, Board, Colour, Move, MoveList, INFINITY, NULL_MOVE, STARTPOS};
 
 const OPENING_CP_MARGIN: i32 = 20;
 const OPENING_PLIES: usize = 16;
@@ -59,7 +60,8 @@ pub struct Node {
 }
 
 impl Node {
-    #[must_use] pub fn from_position(pos: &Board) -> Self {
+    #[must_use]
+    pub fn from_position(pos: &Board) -> Self {
         Self {
             position: *pos,
             value: 0,
@@ -187,7 +189,8 @@ impl Game {
         Ok(true)
     }
 
-    #[must_use] pub fn generate() -> Option<Self> {
+    #[must_use]
+    pub fn generate() -> Option<Self> {
         let tt = TranspositionTable::in_megabytes(16);
 
         let mut g = Self::new();
@@ -314,7 +317,8 @@ fn game_result(found_move: bool, board: &Board, history: &[u64]) -> Option<f32> 
     }
 }
 
-#[must_use] pub fn play_one_game() -> Vec<(String, i32, f32)> {
+#[must_use]
+pub fn play_one_game() -> Vec<(String, i32, f32)> {
     // **Very** occasionally the engine can fail to find a move in 10ms / within node limit which leads
     // it to not find a move to play. In this case we just throw away the game and try again until one works.
     // To make sure that there isn't some bigger problem if we somehow fail to generate 3 games in
@@ -341,7 +345,8 @@ fn game_result(found_move: bool, board: &Board, history: &[u64]) -> Option<f32> 
     {
         let quiet = n.position.checkers == 0 && !n.choice.unwrap().is_capture(&n.position);
         let within_bounds = n.value.abs() < i32::from(i16::MAX);
-        let enough_pieces = n.position.occupancies[BOTH].count_ones() > 3;
+        let enough_pieces =
+            n.position.occupancies[OccupancyIndex::BothOccupancies].count_ones() > 3;
 
         let value = match n.position.side_to_move {
             Colour::White => n.value,
@@ -356,7 +361,8 @@ fn game_result(found_move: bool, board: &Board, history: &[u64]) -> Option<f32> 
     filtered
 }
 
-#[must_use] pub fn play_parallel_games(num_games: usize, num_threads: usize) -> Vec<(String, i32, f32)> {
+#[must_use]
+pub fn play_parallel_games(num_games: usize, num_threads: usize) -> Vec<(String, i32, f32)> {
     let num_threads = std::cmp::min(num_threads, num_games);
 
     let games_per_thread = num_games / num_threads;

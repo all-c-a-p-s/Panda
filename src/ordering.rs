@@ -2,10 +2,10 @@ use crate::movegen::get_attackers;
 use crate::r#move::{Move, MoveList};
 use crate::search::{params, INFINITY};
 use crate::thread::Thread;
-use crate::types::{Piece, PieceType, BLACK_PIECES, WHITE_PIECES};
+use crate::types::{OccupancyIndex, Piece, PieceType, BLACK_PIECES, WHITE_PIECES};
 use crate::{
     get_bishop_attacks, get_rook_attacks, lsfb, piece_type, read_param, set_bit, Board, Colour,
-    BLACK, BOTH, MAX_MOVES, WHITE,
+    MAX_MOVES,
 };
 
 const MVV: [i32; 6] = [0, 2400, 2400, 4800, 9600, 0];
@@ -63,7 +63,8 @@ impl Move {
             | b.bitboards[Piece::WQ]
             | b.bitboards[Piece::BQ];
 
-        let mut occupancies = b.occupancies[BOTH] ^ (set_bit(sq_from, 0) | set_bit(sq_to, 0));
+        let mut occupancies = b.occupancies[OccupancyIndex::BothOccupancies]
+            ^ (set_bit(sq_from, 0) | set_bit(sq_to, 0));
 
         let mut attackers = get_attackers(sq_to, Colour::White, b, occupancies)
             | get_attackers(sq_to, Colour::Black, b, occupancies);
@@ -76,8 +77,8 @@ impl Move {
         loop {
             let side_attackers = attackers
                 & b.occupancies[match colour {
-                    Colour::White => WHITE,
-                    Colour::Black => BLACK,
+                    Colour::White => OccupancyIndex::WhiteOccupancies,
+                    Colour::Black => OccupancyIndex::BlackOccupancies,
                 }];
             //doesn't matter that actual board struct isn't getting updated because attackers
             //that get traded off will get popped from the attackers bitboard
@@ -133,8 +134,8 @@ impl Move {
                 if next_victim == Piece::WK
                     && (attackers
                         & b.occupancies[match colour {
-                            Colour::White => WHITE,
-                            Colour::Black => BLACK,
+                            Colour::White => OccupancyIndex::WhiteOccupancies,
+                            Colour::Black => OccupancyIndex::BlackOccupancies,
                         }])
                         > 0
                 {
