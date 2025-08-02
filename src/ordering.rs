@@ -14,6 +14,9 @@ const MVV: [i32; 6] = [0, 2400, 2400, 4800, 9600, 0];
 pub const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, INFINITY];
 
 impl Move {
+    /// Static Exchange Evalutaion (SEE):
+    /// If we already have an advantage of 'threshold', and play this move, will we still be ahead
+    /// after the dust settles?
     #[must_use]
     pub fn see(self, b: &Board, threshold: i32) -> bool {
         // Iterative approach to SEE inspired by Ethereal.
