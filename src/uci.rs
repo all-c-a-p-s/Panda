@@ -1,11 +1,18 @@
 use std::time::Instant;
 
 #[cfg(feature = "tuning")]
-use crate::search::params;
+use crate::set_param;
+
+#[cfg(feature = "tuning")]
+use crate::search::{list_params, params};
+
 use crate::thread::{Searcher, Thread};
 use crate::transposition::TranspositionTable;
 use crate::types::{Piece, PieceType, Square};
-use crate::{Board, CASTLING_FLAG, Colour, EN_PASSANT_FLAG, INFINITY, Move, MoveData, NO_FLAG, PROMOTION_FLAG, coordinate, encode_move, perft, piece_type, square};
+use crate::{
+    coordinate, encode_move, perft, piece_type, square, Board, Colour, Move, MoveData,
+    CASTLING_FLAG, EN_PASSANT_FLAG, INFINITY, NO_FLAG, PROMOTION_FLAG,
+};
 
 pub enum CommandType {
     Unknown,
@@ -36,7 +43,8 @@ impl Default for UciOptions {
 }
 
 impl Move {
-    #[must_use] pub fn uci(self) -> String {
+    #[must_use]
+    pub fn uci(self) -> String {
         let mut res = String::new();
         res += coordinate(self.square_from()).as_str();
         res += coordinate(self.square_to()).as_str();
@@ -54,7 +62,8 @@ impl Move {
     }
 }
 
-#[must_use] pub fn recognise_command(command: &str) -> CommandType {
+#[must_use]
+pub fn recognise_command(command: &str) -> CommandType {
     let words = command.split_whitespace().collect::<Vec<&str>>();
     match words[0] {
         "uci" => CommandType::Uci,
@@ -80,7 +89,8 @@ impl Move {
 
 pub const STARTPOS: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-#[must_use] pub fn parse_move(input: &str, board: &Board) -> Move {
+#[must_use]
+pub fn parse_move(input: &str, board: &Board) -> Move {
     let sq_from = unsafe { Square::from(square(&input[0..2]) as u8) };
     let sq_to = unsafe { Square::from(square(&input[2..4]) as u8) };
     let piece = board.get_piece_at(sq_from);
@@ -344,9 +354,7 @@ fn parse_perft(command: &str, position: &mut Board) {
             (nodes / time) * 1000
         };
 
-        println!(
-            "\ninfo depth {x} nodes {nodes} time {time} nps {nps}"
-        );
+        println!("\ninfo depth {x} nodes {nodes} time {time} nps {nps}");
     } else {
         eprintln!("expected integer depth in perft command (go perft <depth>)");
     }
@@ -370,12 +378,6 @@ fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable
             }
             ["ASPIRATION_WINDOW", "value", x] => {
                 set_param!(ASPIRATION_WINDOW, x.parse().expect("should be integer"))
-            }
-            ["RAZORING_MARGIN", "value", x] => {
-                set_param!(RAZORING_MARGIN, x.parse().expect("should be integer"))
-            }
-            ["MAX_RAZOR_DEPTH", "value", x] => {
-                set_param!(MAX_RAZOR_DEPTH, x.parse().expect("should be integer"))
             }
             ["BETA_PRUNING_DEPTH", "value", x] => {
                 set_param!(BETA_PRUNING_DEPTH, x.parse().expect("should be integer"))
@@ -433,6 +435,24 @@ fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable
             }
             ["QSEARCH_FP_MARGIN", "value", x] => {
                 set_param!(QSEARCH_FP_MARGIN, x.parse().expect("should be integer"))
+            }
+            ["NMP_BASE", "value", x] => {
+                set_param!(NMP_BASE, x.parse().expect("should be integer"))
+            }
+            ["NMP_FACTOR", "value", x] => {
+                set_param!(NMP_FACTOR, x.parse().expect("should be integer"))
+            }
+            ["LMR_TACTICAL_BASE", "value", x] => {
+                set_param!(LMR_TACTICAL_BASE, x.parse().expect("should be integer"))
+            }
+            ["LMR_TACTICAL_DIVISOR", "value", x] => {
+                set_param!(LMR_TACTICAL_DIVISOR, x.parse().expect("should be integer"))
+            }
+            ["LMR_QUIET_BASE", "value", x] => {
+                set_param!(LMR_QUIET_BASE, x.parse().expect("should be integer"))
+            }
+            ["LMR_QUIET_DIVISOR", "value", x] => {
+                set_param!(LMR_QUIET_DIVISOR, x.parse().expect("should be integer"))
             }
             _ => {}
         },

@@ -23,7 +23,8 @@ impl std::ops::Deref for TTRef<'_> {
 }
 
 impl<'a> TTRef<'a> {
-    #[must_use] pub fn new(tt: &'a TranspositionTable) -> Self {
+    #[must_use]
+    pub fn new(tt: &'a TranspositionTable) -> Self {
         Self { tt }
     }
 }
@@ -70,7 +71,8 @@ impl TTEntry {
     const BEST_MOVE_SHIFT: u64 = 32;
     const DEPTH_SHIFT: u64 = 48;
     const FLAG_SHIFT: u64 = 56;
-    #[must_use] pub fn new(depth: u8, eval: i32, flag: EntryFlag, best_move: Move, hash_key: u64) -> Self {
+    #[must_use]
+    pub fn new(depth: u8, eval: i32, flag: EntryFlag, best_move: Move, hash_key: u64) -> Self {
         Self {
             hash_key,
             eval,
@@ -108,7 +110,8 @@ pub trait TT {
 }
 
 impl TranspositionTable {
-    #[must_use] pub fn with_log2_capacity(n: usize) -> Self {
+    #[must_use]
+    pub fn with_log2_capacity(n: usize) -> Self {
         let capacity: usize = 1 << n;
         TranspositionTable {
             tt: (0..capacity)
@@ -119,19 +122,22 @@ impl TranspositionTable {
         }
     }
 
-    #[must_use] pub fn in_megabytes(n: usize) -> Self {
+    #[must_use]
+    pub fn in_megabytes(n: usize) -> Self {
         let mbs = n.max(1);
         let x = (mbs as f32).log2() as usize;
 
         Self::with_log2_capacity(16 + x)
     }
 
-    #[must_use] pub fn index(&self, hash_key: u64) -> usize {
+    #[must_use]
+    pub fn index(&self, hash_key: u64) -> usize {
         //return index to allocate in table
         (hash_key as usize) & self.mask
     }
 
-    #[must_use] pub fn get(&self, hash: u64) -> Option<TTEntry> {
+    #[must_use]
+    pub fn get(&self, hash: u64) -> Option<TTEntry> {
         let index = self.index(hash);
         let entry = TTEntry::from_internal(self.tt[index].clone());
         match entry.flag {

@@ -20,12 +20,16 @@ use std::error::Error;
 
 use crate::board::{BitBoard, Board, Colour};
 use crate::datagen::gen_data;
-use crate::helper::{BLACK, BOTH, MAX_MOVES, WHITE, coordinate, lsfb, piece_type, pop_bit, set_bit, square};
+use crate::helper::{
+    coordinate, lsfb, piece_type, pop_bit, set_bit, square, BLACK, BOTH, MAX_MOVES, WHITE,
+};
 use crate::magic::{get_bishop_attacks, get_rook_attacks, init_slider_attacks};
 use crate::perft::{full_perft, perft};
-use crate::r#move::{CASTLING_FLAG, EN_PASSANT_FLAG, Move, MoveList, NO_FLAG, NULL_MOVE, PROMOTION_FLAG, encode_move};
-use crate::search::{INFINITY, MAX_GAME_PLY, MAX_PLY, MoveData, iterative_deepening};
-use crate::uci::{STARTPOS, uci_loop};
+use crate::r#move::{
+    encode_move, Move, MoveList, CASTLING_FLAG, EN_PASSANT_FLAG, NO_FLAG, NULL_MOVE, PROMOTION_FLAG,
+};
+use crate::search::{iterative_deepening, MoveData, INFINITY, MAX_GAME_PLY, MAX_PLY};
+use crate::uci::{uci_loop, STARTPOS};
 
 fn init_all() {
     // initialise all constants
@@ -43,8 +47,8 @@ enum Mode {
 #[allow(unused)]
 const ONE_HOUR: u64 = 3600;
 #[allow(unused)]
-const DATAGEN_PATH: &str = "/Users/seba/rs/bullet/datagen/set-backtracking-001.txt";
-//running entry count: 72.7M
+const DATAGEN_PATH: &str = "/Users/seba/rs/bullet/datagen/set-backtracking-002.txt";
+//running entry count: 0
 //this comment is here so I don't have to load the whole file into a string to count entries
 //instead I keep track of the number of entries added each session
 //for reference, 1M entries ~= 78MB (txt format)

@@ -50,6 +50,7 @@ pub struct SearchInfo {
     pub ss: [SearchStackEntry; MAX_PLY],
     pub lmr_table: LMRTable,
     pub history_table: [[i32; 64]; 12],
+    pub caphist_table: [[[i32; 5]; 64]; 12],
     pub counter_moves: [[Move; 64]; 12],
     pub followup_moves: [[Move; 64]; 12],
     pub corrhist: [[i32; CORRHIST_SIZE as usize]; 2],
@@ -98,7 +99,8 @@ impl Default for SearchInfo {
         Self {
             ss: [SearchStackEntry::default(); MAX_PLY],
             lmr_table: LMRTable::default(),
-            history_table: [[0i32; 64]; 12],
+            history_table: [[0; 64]; 12],
+            caphist_table: [[[0; 5]; 64]; 12],
             corrhist: [[0; CORRHIST_SIZE as usize]; 2],
             followup_moves: [[NULL_MOVE; 64]; 12],
             counter_moves: [[NULL_MOVE; 64]; 12],

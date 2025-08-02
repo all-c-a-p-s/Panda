@@ -464,7 +464,8 @@ impl Thread<'_> {
 
                         r -= i32::from(is_check);
 
-                        r -= self.info.history_table[m.piece_moved(position)][m.square_to()] / 8192;
+                        r -= self.info.history_table[m.piece_moved(position)][m.square_to()] as i32
+                            / 8192;
                     }
 
                     let mut reduced_depth = (i32::from(new_depth) - r).max(1) as u8;
@@ -667,9 +668,16 @@ impl Thread<'_> {
         depth: u8,
         moves_played: u8,
     ) {
+        self.update_history(
+            b,
+            moves,
+            cutoff_move,
+            tactical,
+            depth,
+            moves_played as usize,
+        );
         if !tactical {
             self.update_killer_moves(cutoff_move);
-            self.update_history_table(b, moves, cutoff_move, depth, moves_played as usize);
             self.update_counter_moves(cutoff_move);
             self.update_followup(cutoff_move);
         }
@@ -705,7 +713,7 @@ impl Thread<'_> {
         let entry = &mut self.info.corrhist[side][idx];
 
         let new_weight = (depth + 1).min(16) as i32;
-        let scaled_diff = diff + CORRHIST_GRAIN;
+        let scaled_diff = diff as i32 + CORRHIST_GRAIN;
 
         *entry =
             (*entry * (CORRHIST_SCALE - new_weight) + scaled_diff * new_weight) / CORRHIST_SCALE;
@@ -716,8 +724,8 @@ impl Thread<'_> {
         let idx = (b.pawn_hash() % 16384) as usize;
         let side = usize::from(b.side_to_move == Colour::White);
 
-        let entry = self.info.corrhist[side][idx];
-        (raw_eval + entry / CORRHIST_GRAIN).clamp(-MATE + 1, MATE - 1)
+        let entry = self.info.corrhist[side][idx] as i32;
+        (raw_eval + entry / CORRHIST_GRAIN as i32).clamp(-MATE + 1, MATE - 1)
     }
 
     pub fn age_corrhist(&mut self) {
@@ -727,24 +735,50 @@ impl Thread<'_> {
             .for_each(|side| side.iter_mut().for_each(|k| *k /= 2))
     }
 
-    pub fn update_history_table(
+    pub fn update_history(
         &mut self,
         b: &Board,
         moves: &MoveList,
         cutoff_move: Move,
+        tactical: bool,
         depth: u8,
         moves_played: usize,
     ) {
         let bonus = (300 * depth as i32 - 250).clamp(-HISTORY_MAX, HISTORY_MAX);
         //penalise all moves that have been checked and have not caused beta cutoff
-        for &m in moves.moves.iter().take(moves_played) {
-            let piece = m.piece_moved(b);
-            let target = m.square_to();
-            let history = &mut self.info.history_table[piece][target];
-            let s = if m == cutoff_move { 1 } else { -1 };
-            let delta = (s * bonus) - *history * bonus / HISTORY_MAX;
-            if !m.is_capture(b) {
-                self.info.history_table[piece][target] += delta;
+
+        let update = |entry: &mut i32, m: Move| {
+            let sign = if m == cutoff_move { 1 } else { -1 };
+            let delta = (sign * bonus) - *entry * bonus / HISTORY_MAX;
+            *entry += delta;
+        };
+
+        let moves_tried = moves.moves.iter().take(moves_played);
+
+        if tactical {
+            // penalise all captures that failed to cause cutoff
+            for &m in moves_tried.filter(|&x| x.is_capture(b)) {
+                let piece = m.piece_moved(b);
+                let target = m.square_to();
+                let captured = piece_type(m.piece_captured(b));
+
+                let entry = &mut self.info.caphist_table[piece][target][captured];
+                update(entry, m);
+            }
+        } else {
+            // penalise all moves quiets that failed to cause cutoff
+            for &m in moves_tried {
+                let piece = m.piece_moved(b);
+                let target = m.square_to();
+
+                if m.is_capture(b) {
+                    let captured = piece_type(m.piece_captured(b));
+                    let entry = &mut self.info.caphist_table[piece][target][captured];
+                    update(entry, m);
+                } else {
+                    let entry = &mut self.info.history_table[piece][target];
+                    update(entry, m);
+                }
             }
         }
     }
@@ -759,6 +793,7 @@ impl Thread<'_> {
         //reset tables
         self.info.killer_moves = [None; MAX_PLY];
         self.info.history_table = [[0; 64]; 12];
+        self.info.caphist_table = [[[0; 5]; 64]; 12];
         self.age_corrhist();
     }
 }

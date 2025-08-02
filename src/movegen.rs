@@ -1,7 +1,12 @@
 use crate::board::{BitBoard, Board, Colour};
-use crate::helper::{BLACK, BOTH, MAX_MOVES, WHITE, file, get_bit, lsfb, pop_bit, rank, set_bit};
-use crate::magic::{BP_ATTACKS, K_ATTACKS, N_ATTACKS, WP_ATTACKS, get_bishop_attacks, get_queen_attacks, get_rook_attacks};
-use crate::r#move::{CASTLING_FLAG, EN_PASSANT_FLAG, Move, MoveList, NO_FLAG, NULL_MOVE, PROMOTION_FLAG, encode_move};
+use crate::helper::{file, get_bit, lsfb, pop_bit, rank, set_bit, BLACK, BOTH, MAX_MOVES, WHITE};
+use crate::magic::{
+    get_bishop_attacks, get_queen_attacks, get_rook_attacks, BP_ATTACKS, K_ATTACKS, N_ATTACKS,
+    WP_ATTACKS,
+};
+use crate::r#move::{
+    encode_move, Move, MoveList, CASTLING_FLAG, EN_PASSANT_FLAG, NO_FLAG, NULL_MOVE, PROMOTION_FLAG,
+};
 
 use crate::types::{Piece, PieceType, Square};
 
@@ -11,12 +16,14 @@ pub struct MoveListEntry {
 }
 
 impl MoveListEntry {
-    #[must_use] pub fn from(m: Move) -> Self {
+    #[must_use]
+    pub fn from(m: Move) -> Self {
         MoveListEntry { m, score: 0 }
     }
 }
 
-#[must_use] pub fn is_attacked(square: Square, colour: Colour, board: &Board) -> bool {
+#[must_use]
+pub fn is_attacked(square: Square, colour: Colour, board: &Board) -> bool {
     //attacked BY colour
     let square = square as usize;
     //have to convert because get_rook_attacks() and get_bishop_attacks() need a usize
@@ -48,7 +55,8 @@ impl MoveListEntry {
     }
 }
 
-#[must_use] pub fn get_attackers(square: Square, colour: Colour, b: &Board, occupancies: BitBoard) -> BitBoard {
+#[must_use]
+pub fn get_attackers(square: Square, colour: Colour, b: &Board, occupancies: BitBoard) -> BitBoard {
     //attacked BY colour
 
     let square = square as usize;
@@ -77,7 +85,8 @@ impl MoveListEntry {
 }
 
 impl MoveList {
-    #[must_use] pub const fn empty() -> Self {
+    #[must_use]
+    pub const fn empty() -> Self {
         MoveList {
             moves: [NULL_MOVE; MAX_MOVES],
         }
@@ -517,7 +526,8 @@ impl MoveList {
         first_unused
     }
 
-    #[must_use] pub fn gen_moves<const CAPS_ONLY: bool>(board: &Board) -> Self {
+    #[must_use]
+    pub fn gen_moves<const CAPS_ONLY: bool>(board: &Board) -> Self {
         let mut moves = MoveList::empty();
 
         let mut first_unused = 0;
@@ -692,7 +702,8 @@ pub static RAY_BETWEEN: [[BitBoard; 64]; 64] = {
     res
 };
 
-#[must_use] pub fn check_en_passant(m: Move, b: &Board) -> bool {
+#[must_use]
+pub fn check_en_passant(m: Move, b: &Board) -> bool {
     //checks en passant edge case where en passant reveals check on the king
     match m.piece_moved(b) {
         Piece::WP => {

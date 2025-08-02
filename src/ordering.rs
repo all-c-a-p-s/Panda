@@ -8,15 +8,7 @@ use crate::{
     BLACK, BOTH, MAX_MOVES, WHITE,
 };
 
-const MVV_LVA: [[i32; 6]; 6] = [
-    //most valuable victim least valuable attacker
-    [205, 204, 203, 202, 201, 200], //victim pawn
-    [305, 304, 303, 302, 301, 300], //victim knight
-    [405, 404, 403, 402, 401, 400], //victim bishop
-    [505, 504, 503, 502, 501, 500], //victim rook
-    [605, 604, 603, 602, 601, 600], //victim queen
-    [0, 0, 0, 0, 0, 0],             //victim king
-];
+const MVV: [i32; 6] = [0, 2400, 2400, 4800, 9600, 0];
 
 //same as MG evaluation weights (haven't updated these in a while)
 pub const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, INFINITY];
@@ -177,12 +169,14 @@ impl Move {
             read_param!(HASH_MOVE_SCORE)
             //before pv move because this has been verified by >= search depth
         } else if self.is_capture(b) {
-            let victim_type =
-                piece_type(unsafe { b.pieces_array[self.square_to()].unwrap_unchecked() });
-            let attacker_type = piece_type(self.piece_moved(b));
-            let winning_capture = self.see(b, 0);
+            let victim_type = piece_type(self.piece_captured(b));
+            let pc = self.piece_moved(b);
+            let winning_capture = self.see(b, 0); //try 1?
 
-            MVV_LVA[victim_type][attacker_type]
+            let hist = s.info.caphist_table[pc][self.square_to()][victim_type];
+
+            hist as i32
+                + MVV[victim_type]
                 + if winning_capture {
                     read_param!(WINNING_CAPTURE)
                 } else {
@@ -200,7 +194,7 @@ impl Move {
                 _ => unreachable!(),
             }
         } else if self.is_en_passant() {
-            MVV_LVA[PieceType::Pawn][PieceType::Pawn] //winning capture?
+            MVV[PieceType::Pawn]
         } else {
             ({
                 let mut bonus = 0;
@@ -211,11 +205,21 @@ impl Move {
                         }
                     });
                 });
+
+                if s.ply >= 1 {
+                    s.info.ss[s.ply - 1].previous_piece.inspect(|x| {
+                        s.info.ss[s.ply - 1].previous_square.inspect(|y| {
+                            if self == s.info.followup_moves[*x][*y] {
+                                bonus += read_param!(FOLLOWUP_BONUS);
+                            }
+                        });
+                    });
+                }
                 bonus
             }) + if s.info.killer_moves[s.ply] == Some(self) {
                 read_param!(FIRST_KILLER_MOVE) //after captures
             } else {
-                s.info.history_table[self.piece_moved(b)][self.square_to()]
+                s.info.history_table[self.piece_moved(b)][self.square_to()] as i32
             }
         }
     }
