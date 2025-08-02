@@ -325,6 +325,8 @@ impl Thread<'_> {
             depth -= 1;
         }
 
+        let (mut quiets, mut caps) = (vec![], vec![]);
+
         let mut move_list = MoveList::gen_moves::<false>(position);
         move_list.order_moves(position, self, &best_move);
 
@@ -503,6 +505,12 @@ impl Thread<'_> {
                 // at least one move has been searched fully
             }
 
+            if quiet {
+                quiets.push(m);
+            } else {
+                caps.push(m);
+            }
+
             best_score = best_score.max(eval);
 
             if eval > alpha {
@@ -513,7 +521,7 @@ impl Thread<'_> {
             }
 
             if eval >= beta {
-                self.update_search_tables(position, &move_list, m, tactical, depth, legal);
+                self.update_search_tables(position, &quiets, &caps, m, tactical, depth);
                 hash_flag = EntryFlag::LowerBound;
                 break;
             }
@@ -662,20 +670,13 @@ impl Thread<'_> {
     pub fn update_search_tables(
         &mut self,
         b: &Board,
-        moves: &MoveList,
+        quiets: &Vec<Move>,
+        caps: &Vec<Move>,
         cutoff_move: Move,
         tactical: bool,
         depth: u8,
-        moves_played: u8,
     ) {
-        self.update_history(
-            b,
-            moves,
-            cutoff_move,
-            tactical,
-            depth,
-            moves_played as usize,
-        );
+        self.update_history(b, quiets, caps, cutoff_move, tactical, depth);
         if !tactical {
             self.update_killer_moves(cutoff_move);
             self.update_counter_moves(cutoff_move);
@@ -738,11 +739,11 @@ impl Thread<'_> {
     pub fn update_history(
         &mut self,
         b: &Board,
-        moves: &MoveList,
+        quiets: &Vec<Move>,
+        caps: &Vec<Move>,
         cutoff_move: Move,
         tactical: bool,
         depth: u8,
-        moves_played: usize,
     ) {
         let bonus = (300 * depth as i32 - 250).clamp(-HISTORY_MAX, HISTORY_MAX);
         //penalise all moves that have been checked and have not caused beta cutoff
@@ -753,11 +754,9 @@ impl Thread<'_> {
             *entry += delta;
         };
 
-        let moves_tried = moves.moves.iter().take(moves_played);
-
         if tactical {
             // penalise all captures that failed to cause cutoff
-            for &m in moves_tried.filter(|&x| x.is_capture(b)) {
+            for &m in caps {
                 let piece = m.piece_moved(b);
                 let target = m.square_to();
                 let captured = piece_type(m.piece_captured(b));
@@ -767,18 +766,20 @@ impl Thread<'_> {
             }
         } else {
             // penalise all moves quiets that failed to cause cutoff
-            for &m in moves_tried {
+            for &m in quiets {
                 let piece = m.piece_moved(b);
                 let target = m.square_to();
 
-                if m.is_capture(b) {
-                    let captured = piece_type(m.piece_captured(b));
-                    let entry = &mut self.info.caphist_table[piece][target][captured];
-                    update(entry, m);
-                } else {
-                    let entry = &mut self.info.history_table[piece][target];
-                    update(entry, m);
-                }
+                let entry = &mut self.info.history_table[piece][target];
+                update(entry, m);
+            }
+
+            for &m in caps {
+                let piece = m.piece_moved(b);
+                let target = m.square_to();
+                let captured = piece_type(m.piece_captured(b));
+                let entry = &mut self.info.caphist_table[piece][target][captured];
+                update(entry, m);
             }
         }
     }
