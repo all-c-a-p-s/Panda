@@ -175,13 +175,15 @@ impl Move {
         } else if self.is_capture(b) {
             let victim_type = piece_type(self.piece_captured(b));
             let pc = self.piece_moved(b);
-            let winning_capture = self.see(b, 0); //try 1?
+            let good_capture = self.see(
+                b,
+                SEE_VALUES[PieceType::Bishop] - SEE_VALUES[PieceType::Knight],
+            );
 
             let hist = s.info.caphist_table[pc][self.square_to()][victim_type];
 
-            hist as i32
-                + MVV[victim_type]
-                + if winning_capture {
+            hist + MVV[victim_type]
+                + if good_capture {
                     read_param!(WINNING_CAPTURE)
                 } else {
                     read_param!(LOSING_CAPTURE)
@@ -226,7 +228,7 @@ impl Move {
                 + if s.info.killer_moves[s.ply] == Some(self) {
                     read_param!(FIRST_KILLER_MOVE) //after captures
                 } else {
-                    s.info.history_table[self.piece_moved(b)][self.square_to()] as i32
+                    s.info.history_table[self.piece_moved(b)][self.square_to()]
                 }
         }
     }

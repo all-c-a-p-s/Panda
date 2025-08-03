@@ -481,8 +481,7 @@ impl Thread<'_> {
 
                         r -= i32::from(is_check);
 
-                        r -= self.info.history_table[m.piece_moved(position)][m.square_to()] as i32
-                            / 8192;
+                        r -= self.info.history_table[m.piece_moved(position)][m.square_to()] / 8192;
                     }
 
                     let mut reduced_depth = (i32::from(new_depth) - r).max(1) as u8;
