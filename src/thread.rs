@@ -23,7 +23,7 @@ pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize)
     let time_until_flag = time - MOVE_OVERHEAD;
 
     let m = if moves_to_go == 0 {
-        20 //very low compared to what I've seen but fsr this works best for Panda
+        25 //very low compared to what I've seen but fsr this works best for Panda
     } else {
         moves_to_go.clamp(2, 40)
     };
@@ -49,6 +49,7 @@ pub struct SearchStackEntry {
 pub struct SearchInfo {
     pub ss: [SearchStackEntry; MAX_PLY],
     pub lmr_table: LMRTable,
+    pub nodetable: NodeTable,
     pub history_table: [[i32; 64]; 12],
     pub caphist_table: [[[i32; 5]; 64]; 12],
     pub counter_moves: [[Move; 64]; 12],
@@ -56,6 +57,29 @@ pub struct SearchInfo {
     pub corrhist: [[i32; CORRHIST_SIZE as usize]; 2],
     pub killer_moves: [Option<Move>; MAX_PLY],
     pub excluded: [Option<Move>; MAX_PLY],
+}
+
+#[derive(Clone, Copy)]
+pub struct NodeTable {
+    table: [[usize; 64]; 64],
+}
+
+impl NodeTable {
+    pub fn add(&mut self, mv: Move, nodes: usize) {
+        self.table[mv.square_from()][mv.square_to()] += nodes;
+    }
+
+    pub fn get(self, mv: Move) -> usize {
+        self.table[mv.square_from()][mv.square_to()]
+    }
+}
+
+impl Default for NodeTable {
+    fn default() -> Self {
+        Self {
+            table: [[0; 64]; 64],
+        }
+    }
 }
 
 pub struct LMRTable {
@@ -99,6 +123,7 @@ impl Default for SearchInfo {
         Self {
             ss: [SearchStackEntry::default(); MAX_PLY],
             lmr_table: LMRTable::default(),
+            nodetable: NodeTable::default(),
             history_table: [[0; 64]; 12],
             caphist_table: [[[0; 5]; 64]; 12],
             corrhist: [[0; CORRHIST_SIZE as usize]; 2],

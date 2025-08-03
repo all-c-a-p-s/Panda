@@ -406,6 +406,8 @@ impl Thread<'_> {
                 }
             }
 
+            let nodes_before = self.nodes;
+
             let Ok(commit) = position.try_move(m) else {
                 continue;
             };
@@ -515,6 +517,7 @@ impl Thread<'_> {
             }
 
             if root {
+                self.info.nodetable.add(m, self.nodes - nodes_before);
                 self.moves_fully_searched += 1;
                 // used to ensure in the iterative deepening search that
                 // at least one move has been searched fully
@@ -836,11 +839,10 @@ struct IterDeepData {
 
     show_thinking: bool,
     start_time: Instant,
-    soft_limit: Instant,
 }
 
 impl IterDeepData {
-    fn new(start_time: Instant, show_thinking: bool, soft_limit: Instant) -> Self {
+    fn new(start_time: Instant, show_thinking: bool) -> Self {
         Self {
             eval: 0,
             pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
@@ -851,7 +853,6 @@ impl IterDeepData {
             depth: 1,
             show_thinking,
             start_time,
-            soft_limit,
         }
     }
 }
@@ -917,8 +918,7 @@ pub fn iterative_deepening(
     s.reset_thread();
     s.timer.end_time = start + Duration::from_millis(hard_limit as u64);
 
-    let soft_limit = Instant::now() + Duration::from_millis(soft_limit as u64);
-    let mut id = IterDeepData::new(start, show_thinking, soft_limit);
+    let mut id = IterDeepData::new(start, show_thinking);
 
     while (id.depth as usize) < MAX_PLY {
         let eval = aspiration_window(position, s, &mut id);
@@ -930,9 +930,15 @@ pub fn iterative_deepening(
         id.eval = eval;
         id.depth += 1;
 
-        if Instant::now() > id.soft_limit {
+        let fraction = s.info.nodetable.get(id.pv[0][0]) as f64 / s.nodes as f64;
+        let multiplier = 2.0 - fraction * 1.5;
+
+        if Instant::now()
+            > id.start_time + Duration::from_millis((soft_limit as f64 * multiplier) as u64)
+        {
             //not the same as above break statement because eval was updated
             //which won't affect choice of move but will affect data we report
+            s.stop.store(true, Relaxed);
             break;
         }
     }
