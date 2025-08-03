@@ -21,15 +21,11 @@ pub const RANK_6: BitBoard = 0x0000FF0000000000;
 pub const RANK_7: BitBoard = 0x00FF000000000000;
 pub const RANK_8: BitBoard = 0xFF00000000000000;
 
-//these are the indices used for the board's occupancy arrays
-pub const WHITE: usize = 0;
-pub const BLACK: usize = 1;
-pub const BOTH: usize = 2;
-
 //max number of legal moves possible in a position (that has been found)
 pub const MAX_MOVES: usize = 218;
 
-#[must_use] pub fn file_indices() -> HashMap<char, usize> {
+#[must_use]
+pub fn file_indices() -> HashMap<char, usize> {
     let mut files = HashMap::new();
     files.insert('a', 0);
     files.insert('b', 1);
@@ -43,12 +39,14 @@ pub const MAX_MOVES: usize = 218;
 }
 
 #[inline(always)]
-#[must_use] pub const fn set_bit(square: Square, bitboard: BitBoard) -> BitBoard {
+#[must_use]
+pub const fn set_bit(square: Square, bitboard: BitBoard) -> BitBoard {
     bitboard | (1 << square as u8)
 }
 
 #[inline(always)]
-#[must_use] pub const fn get_bit(square: Square, bitboard: BitBoard) -> usize {
+#[must_use]
+pub const fn get_bit(square: Square, bitboard: BitBoard) -> usize {
     if bitboard & (1 << square as u8) != 0 {
         1
     } else {
@@ -57,7 +55,8 @@ pub const MAX_MOVES: usize = 218;
 }
 
 #[inline(always)]
-#[must_use] pub const fn pop_bit(square: Square, bitboard: BitBoard) -> BitBoard {
+#[must_use]
+pub const fn pop_bit(square: Square, bitboard: BitBoard) -> BitBoard {
     if get_bit(square, bitboard) == 1 {
         return bitboard ^ set_bit(square, 0);
     }
@@ -65,7 +64,8 @@ pub const MAX_MOVES: usize = 218;
 }
 
 #[inline(always)]
-#[must_use] pub const fn count(bitboard: BitBoard) -> usize {
+#[must_use]
+pub const fn count(bitboard: BitBoard) -> usize {
     let mut prev: BitBoard = bitboard;
     let mut count: usize = 0;
     while prev > 0 {
@@ -76,7 +76,8 @@ pub const MAX_MOVES: usize = 218;
 }
 
 #[inline(always)]
-#[must_use] pub const fn lsfb(bitboard: BitBoard) -> Option<Square> {
+#[must_use]
+pub const fn lsfb(bitboard: BitBoard) -> Option<Square> {
     if bitboard != 0 {
         Some(unsafe { Square::from(bitboard.trailing_zeros() as u8) })
     } else {
@@ -84,7 +85,8 @@ pub const MAX_MOVES: usize = 218;
     }
 }
 
-#[must_use] pub fn square(sq: &str) -> Square {
+#[must_use]
+pub fn square(sq: &str) -> Square {
     let square = sq.to_string();
     assert!((square.len() == 2), "invalid square name");
     let last: char = match square.chars().last() {
@@ -100,7 +102,8 @@ pub const MAX_MOVES: usize = 218;
     unsafe { Square::from(((rank - 1) * 8 + file) as u8) }
 }
 
-#[must_use] pub fn coordinate(sq: Square) -> String {
+#[must_use]
+pub fn coordinate(sq: Square) -> String {
     let mut files: HashMap<usize, char> = HashMap::new();
     for (file, idx) in file_indices() {
         files.insert(idx, file); //invert hashmap
@@ -113,17 +116,20 @@ pub const MAX_MOVES: usize = 218;
 }
 
 #[inline(always)]
-#[must_use] pub const fn rank(sq: Square) -> usize {
+#[must_use]
+pub const fn rank(sq: Square) -> usize {
     sq as usize / 8
 }
 
 #[inline(always)]
-#[must_use] pub const fn file(sq: Square) -> usize {
+#[must_use]
+pub const fn file(sq: Square) -> usize {
     sq as usize % 8
 }
 
 #[inline(always)]
-#[must_use] pub const fn piece_type(piece: Piece) -> PieceType {
+#[must_use]
+pub const fn piece_type(piece: Piece) -> PieceType {
     unsafe { PieceType::from(piece as u8 % 6) }
 }
 

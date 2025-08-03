@@ -37,6 +37,7 @@ tuneable_params! {
     RFP_DEPTH, u8, 6, 1, 12;
     RFP_MARGIN, u8, 27, 20, 200;
     TT_FUTILITY_MARGIN, i32, 150, 40, 400;
+    HISTORY_PRUNING_DEPTH, i32, 4, 1, 12;
     SEE_PRUNING_DEPTH, i32, 8, 1, 12;
     SEE_QUIET_MARGIN, i32, 51, 20, 300;
     SEE_NOISY_MARGIN, i32, 37, 20, 250;
@@ -336,7 +337,7 @@ impl Thread<'_> {
         let mut skip_quiets = false;
         let mut best_score = -INFINITY;
 
-        while let Some((m, _ms)) = move_list.get_next(&mut scores) {
+        while let Some((m, ms)) = move_list.get_next(&mut scores) {
             if let Some(n) = self.info.excluded[self.ply] {
                 if n == m {
                     considered += 1;
@@ -376,6 +377,18 @@ impl Thread<'_> {
                     [depth.min(31) as usize][considered.min(31) as usize]
                     + i32::from(!improving);
                 let lmr_depth = i32::from(depth) - 1 - r.max(0);
+
+                /*
+                // History Pruning:
+                // Prune moves with history scores below a depth-dependent threshold
+                if lmr_depth < read_param!(HISTORY_PRUNING_DEPTH)
+                    && ms < -2048 * lmr_depth.max(1)
+                    && !cutnode
+                {
+                    skip_quiets = true;
+                    continue;
+                }
+                */
 
                 // SEE Pruning:
                 // skip moves that fail SEE by a depth-dependent threshold

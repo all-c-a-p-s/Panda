@@ -20,9 +20,7 @@ use std::error::Error;
 
 use crate::board::{BitBoard, Board, Colour};
 use crate::datagen::gen_data;
-use crate::helper::{
-    coordinate, lsfb, piece_type, pop_bit, set_bit, square, BLACK, BOTH, MAX_MOVES, WHITE,
-};
+use crate::helper::{coordinate, lsfb, piece_type, pop_bit, set_bit, square, MAX_MOVES};
 use crate::magic::{get_bishop_attacks, get_rook_attacks, init_slider_attacks};
 use crate::perft::{full_perft, perft};
 use crate::r#move::{

@@ -1,9 +1,9 @@
 use std::mem;
 
 use crate::eval::MIRROR;
-use crate::{lsfb, pop_bit, Board, Colour, BOTH};
+use crate::{lsfb, pop_bit, Board, Colour};
 
-use crate::types::{Piece, Square, PIECES};
+use crate::types::{OccupancyIndex, Piece, Square, PIECES};
 
 // ON or OFF for each piece / colour / square
 const NUM_FEATURES: usize = 6 * 2 * 64;
@@ -66,7 +66,7 @@ impl Accumulator {
     pub fn from_board(board: &Board) -> Self {
         let mut a = Accumulator::default();
 
-        let mut occs = board.occupancies[BOTH];
+        let mut occs = board.occupancies[OccupancyIndex::BothOccupancies];
         while let Some(sq) = lsfb(occs) {
             a.set_weight::<ON>(board.get_piece_at(sq), sq);
             occs = pop_bit(sq, occs);
