@@ -46,6 +46,7 @@ pub enum PieceType {
     King,
 }
 
+#[derive(Clone, Copy)]
 pub enum OccupancyIndex {
     WhiteOccupancies,
     BlackOccupancies,
