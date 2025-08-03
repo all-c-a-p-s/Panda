@@ -859,7 +859,12 @@ impl IterDeepData {
 
 fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData) -> i32 {
     loop {
-        let eval = s.negamax(position, id.depth.max(1), id.alpha, id.beta, false);
+        let (a, b) = if id.depth >= 6 {
+            (id.alpha, id.beta)
+        } else {
+            (-INFINITY, INFINITY)
+        };
+        let eval = s.negamax(position, id.depth.max(1), a, b, false);
 
         if s.is_stopped() {
             if s.moves_fully_searched > 0 {
