@@ -337,7 +337,7 @@ impl Thread<'_> {
         let mut skip_quiets = false;
         let mut best_score = -INFINITY;
 
-        while let Some((m, ms)) = move_list.get_next(&mut scores) {
+        while let Some((m, _ms)) = move_list.get_next(&mut scores) {
             if let Some(n) = self.info.excluded[self.ply] {
                 if n == m {
                     considered += 1;
