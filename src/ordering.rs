@@ -175,10 +175,7 @@ impl Move {
         } else if self.is_capture(b) {
             let victim_type = piece_type(self.piece_captured(b));
             let pc = self.piece_moved(b);
-            let good_capture = self.see(
-                b,
-                SEE_VALUES[PieceType::Bishop] - SEE_VALUES[PieceType::Knight],
-            );
+            let good_capture = self.see(b, 0);
 
             let hist = s.info.caphist_table[pc][self.square_to()][victim_type];
 

@@ -316,6 +316,19 @@ impl Thread<'_> {
                 position.undo_null_move(&undo);
                 self.ply -= 1;
                 if null_move_eval >= beta {
+                    let (pc, sq) = (
+                        self.info.ss[self.ply - 1].previous_piece,
+                        self.info.ss[self.ply - 1].previous_square,
+                    );
+
+                    // give malus to the history score of the previous move since it was bad enough
+                    // to cause a NMP cutoff after being played
+                    if let Some(pc) = pc {
+                        let sq = sq.unwrap();
+                        let entry = &mut self.info.history_table[pc][sq];
+                        let malus = 300 * reduced_depth as i32 - 250;
+                        *entry = (*entry - malus).clamp(-HISTORY_MAX, HISTORY_MAX);
+                    }
                     return beta;
                 }
             }
@@ -377,18 +390,6 @@ impl Thread<'_> {
                     [depth.min(31) as usize][considered.min(31) as usize]
                     + i32::from(!improving);
                 let lmr_depth = i32::from(depth) - 1 - r.max(0);
-
-                /*
-                // History Pruning:
-                // Prune moves with history scores below a depth-dependent threshold
-                if lmr_depth < read_param!(HISTORY_PRUNING_DEPTH)
-                    && ms < -2048 * lmr_depth.max(1)
-                    && !cutnode
-                {
-                    skip_quiets = true;
-                    continue;
-                }
-                */
 
                 // SEE Pruning:
                 // skip moves that fail SEE by a depth-dependent threshold
