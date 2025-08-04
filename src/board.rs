@@ -425,7 +425,7 @@ impl Board {
         unsafe { self.pieces_array[sq].unwrap_unchecked() }
     }
 
-    pub fn is_insufficient_material(&self) -> bool {
+    #[must_use] pub fn is_insufficient_material(&self) -> bool {
         if count(
             self.bitboards[Piece::WP]
                 | self.bitboards[Piece::WR]
@@ -525,7 +525,7 @@ impl Board {
         self.hash_key = undo.hash_key;
     }
 
-    pub fn is_drawn(&self) -> bool {
+    #[must_use] pub fn is_drawn(&self) -> bool {
         if self.fifty_move == 100 {
             return true;
         }
@@ -566,6 +566,6 @@ impl Board {
 
     #[must_use]
     pub fn pawn_hash(&self) -> u64 {
-        pawn_hash(&self)
+        pawn_hash(self)
     }
 }

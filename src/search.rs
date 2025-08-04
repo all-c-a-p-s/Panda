@@ -89,7 +89,7 @@ impl Thread<'_> {
         self.stop.load(Relaxed)
     }
 
-    /// The purpose of the singularity() function is to prove that a move is better than alternatives by
+    /// The purpose of the `singularity()` function is to prove that a move is better than alternatives by
     /// a significant margin. If this is true, we should extend it since it is more important. This
     /// function determines how much we should extend by.
 
@@ -282,7 +282,7 @@ impl Thread<'_> {
             // If eval >= beta + some margin, assume that we can achieve at least beta
             if depth <= read_param!(RFP_DEPTH)
                 && static_eval
-                    - i32::from(read_param!(RFP_MARGIN) * (depth - u8::from(improving)).max(0))
+                    - i32::from(read_param!(RFP_MARGIN) * (depth - u8::from(improving)))
                     >= beta
             {
                 return static_eval;
@@ -737,27 +737,27 @@ impl Thread<'_> {
 
         let entry = &mut self.info.corrhist[side][idx];
 
-        let new_weight = (depth + 1).min(16) as i32;
-        let scaled_diff = diff as i32 + CORRHIST_GRAIN;
+        let new_weight = i32::from((depth + 1).min(16));
+        let scaled_diff = diff + CORRHIST_GRAIN;
 
         *entry =
             (*entry * (CORRHIST_SCALE - new_weight) + scaled_diff * new_weight) / CORRHIST_SCALE;
-        *entry = entry.clone().clamp(-CORRHIST_MAX, CORRHIST_MAX);
+        *entry = (*entry).clamp(-CORRHIST_MAX, CORRHIST_MAX);
     }
 
-    pub fn eval_with_corrhist(&self, b: &Board, raw_eval: i32) -> i32 {
+    #[must_use] pub fn eval_with_corrhist(&self, b: &Board, raw_eval: i32) -> i32 {
         let idx = (b.pawn_hash() % 16384) as usize;
         let side = usize::from(b.side_to_move == Colour::White);
 
-        let entry = self.info.corrhist[side][idx] as i32;
-        (raw_eval + entry / CORRHIST_GRAIN as i32).clamp(-MATE + 1, MATE - 1)
+        let entry = self.info.corrhist[side][idx];
+        (raw_eval + entry / CORRHIST_GRAIN).clamp(-MATE + 1, MATE - 1)
     }
 
     pub fn age_corrhist(&mut self) {
         self.info
             .corrhist
             .iter_mut()
-            .for_each(|side| side.iter_mut().for_each(|k| *k /= 2))
+            .for_each(|side| side.iter_mut().for_each(|k| *k /= 2));
     }
 
     pub fn update_history(
@@ -769,7 +769,7 @@ impl Thread<'_> {
         tactical: bool,
         depth: u8,
     ) {
-        let bonus = (300 * depth as i32 - 250).clamp(-HISTORY_MAX, HISTORY_MAX);
+        let bonus = (300 * i32::from(depth) - 250).clamp(-HISTORY_MAX, HISTORY_MAX);
         //penalise all moves that have been checked and have not caused beta cutoff
 
         let update = |entry: &mut i32, m: Move| {

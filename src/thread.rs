@@ -52,7 +52,7 @@ pub struct SearchInfo {
     pub caphist_table: [[[i32; 5]; 64]; 12],
     pub counter_moves: [[Move; 64]; 12],
     pub followup_moves: [[Move; 64]; 12],
-    pub corrhist: [[i32; CORRHIST_SIZE as usize]; 2],
+    pub corrhist: [[i32; CORRHIST_SIZE]; 2],
     pub killer_moves: [Option<Move>; MAX_PLY],
     pub excluded: [Option<Move>; MAX_PLY],
 }
@@ -71,7 +71,7 @@ impl NodeTable {
         self.table[mv.square_from()][mv.square_to()] += nodes;
     }
 
-    pub fn get(self, mv: Move) -> usize {
+    #[must_use] pub fn get(self, mv: Move) -> usize {
         self.table[mv.square_from()][mv.square_to()]
     }
 }
@@ -97,10 +97,10 @@ impl Default for SearchStackEntry {
 
 impl Default for LMRTable {
     fn default() -> Self {
-        let tb = (read_param!(LMR_TACTICAL_BASE) as f64) / 100.0;
-        let td = (read_param!(LMR_TACTICAL_DIVISOR) as f64) / 100.0;
-        let qb = (read_param!(LMR_QUIET_BASE) as f64) / 100.0;
-        let qd = (read_param!(LMR_QUIET_DIVISOR) as f64) / 100.0;
+        let tb = f64::from(read_param!(LMR_TACTICAL_BASE)) / 100.0;
+        let td = f64::from(read_param!(LMR_TACTICAL_DIVISOR)) / 100.0;
+        let qb = f64::from(read_param!(LMR_QUIET_BASE)) / 100.0;
+        let qd = f64::from(read_param!(LMR_QUIET_DIVISOR)) / 100.0;
         let mut reduction_table = [[[0; 32]; 32]; 2];
         for depth in 0..32 {
             for played in 0..32 {
@@ -125,7 +125,7 @@ impl Default for SearchInfo {
             nodetable: NodeTable::default(),
             history_table: [[0; 64]; 12],
             caphist_table: [[[0; 5]; 64]; 12],
-            corrhist: [[0; CORRHIST_SIZE as usize]; 2],
+            corrhist: [[0; CORRHIST_SIZE]; 2],
             followup_moves: [[NULL_MOVE; 64]; 12],
             counter_moves: [[NULL_MOVE; 64]; 12],
             killer_moves: [None; 64],
