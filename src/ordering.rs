@@ -196,7 +196,7 @@ impl Move {
                 _ => unreachable!(),
             }
         } else if self.is_en_passant() {
-            read_param!(WINNING_CAPTURE) + MVV[PieceType::Pawn]
+            MVV[PieceType::Pawn]
         } else {
             let cont_bonus = {
                 let mut bonus = 0;
