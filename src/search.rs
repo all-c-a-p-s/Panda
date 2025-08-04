@@ -196,6 +196,9 @@ impl Thread<'_> {
                 tt_depth = entry.depth;
                 tt_bound = entry.flag;
 
+                // We accept values from the TT if:
+                //      (1) the depth of the entry >= our depth
+                // OR   (2) we don't expect much from this node, and the eval is well below beta
                 if !singular {
                     if !pv_node
                         && depth <= entry.depth
@@ -248,6 +251,7 @@ impl Thread<'_> {
                 eval: static_eval,
                 previous_square: None,
                 previous_piece: None,
+                made_capture: false,
             };
         }
 
@@ -263,6 +267,11 @@ impl Thread<'_> {
 
         let opponent_worsening = match self.ply {
             3.. => self.info.ss[self.ply - 1].eval < self.info.ss[self.ply - 3].eval,
+            _ => false,
+        };
+
+        let opponent_captured = match self.ply {
+            1.. => self.info.ss[self.ply - 1].made_capture,
             _ => false,
         };
 
@@ -282,9 +291,15 @@ impl Thread<'_> {
             // Razoring:
             // If we're very far behind it's likely that the only way to raise alpha will be with
             // captures, so just run a qsearch
+            // todo: try depth + u8::from(improving) - u8::from(opponent_capture &&
+            // !opponent_worsening)
             if depth <= read_param!(MAX_RAZOR_DEPTH)
                 && static_eval
-                    + read_param!(RAZORING_MARGIN) * i32::from(depth + u8::from(improving))
+                    + read_param!(RAZORING_MARGIN)
+                        * i32::from(
+                            depth + u8::from(improving)
+                                - u8::from(opponent_captured && !opponent_worsening),
+                        )
                     <= alpha
             {
                 let qeval = self.qsearch(position, alpha, beta);
@@ -316,19 +331,6 @@ impl Thread<'_> {
                 position.undo_null_move(&undo);
                 self.ply -= 1;
                 if null_move_eval >= beta {
-                    let (pc, sq) = (
-                        self.info.ss[self.ply - 1].previous_piece,
-                        self.info.ss[self.ply - 1].previous_square,
-                    );
-
-                    // give malus to the history score of the previous move since it was bad enough
-                    // to cause a NMP cutoff after being played
-                    if let Some(pc) = pc {
-                        let sq = sq.unwrap();
-                        let entry = &mut self.info.history_table[pc][sq];
-                        let malus = 300 * reduced_depth as i32 - 250;
-                        *entry = (*entry - malus).clamp(-HISTORY_MAX, HISTORY_MAX);
-                    }
                     return beta;
                 }
             }
@@ -406,8 +408,6 @@ impl Thread<'_> {
                 }
             }
 
-            let nodes_before = self.nodes;
-
             let Ok(commit) = position.try_move(m) else {
                 continue;
             };
@@ -419,6 +419,10 @@ impl Thread<'_> {
             // update for countermove heuristic
             self.info.ss[self.ply].previous_piece = Some(position.get_piece_at(m.square_to()));
             self.info.ss[self.ply].previous_square = Some(m.square_to());
+
+            if m.is_capture(position) {
+                self.info.ss[self.ply].made_capture = true;
+            }
 
             // A singular move is a move which seems to be forced or at least much stronger than
             // others. We should therefore extend to investigate it further.
@@ -517,7 +521,6 @@ impl Thread<'_> {
             }
 
             if root {
-                self.info.nodetable.add(m, self.nodes - nodes_before);
                 self.moves_fully_searched += 1;
                 // used to ensure in the iterative deepening search that
                 // at least one move has been searched fully
@@ -623,6 +626,9 @@ impl Thread<'_> {
             if m.is_capture(position) {
                 // if not capture then must be a check evasion
                 let best_case = eval + SEE_VALUES[piece_type(position.get_piece_at(m.square_to()))];
+
+                // todo: if best_case + QSEARCH_FP_MARGIN < alpha {continue}
+
                 let worst_case = best_case - SEE_VALUES[piece_type(m.piece_moved(position))];
 
                 //first check if we beat beta even in the worst case
@@ -839,10 +845,11 @@ struct IterDeepData {
 
     show_thinking: bool,
     start_time: Instant,
+    soft_limit: Instant,
 }
 
 impl IterDeepData {
-    fn new(start_time: Instant, show_thinking: bool) -> Self {
+    fn new(start_time: Instant, show_thinking: bool, soft_limit: Instant) -> Self {
         Self {
             eval: 0,
             pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
@@ -853,18 +860,14 @@ impl IterDeepData {
             depth: 1,
             show_thinking,
             start_time,
+            soft_limit,
         }
     }
 }
 
 fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData) -> i32 {
     loop {
-        let (a, b) = if id.depth >= 6 {
-            (id.alpha, id.beta)
-        } else {
-            (-INFINITY, INFINITY)
-        };
-        let eval = s.negamax(position, id.depth.max(1), a, b, false);
+        let eval = s.negamax(position, id.depth.max(1), id.alpha, id.beta, false);
 
         if s.is_stopped() {
             if s.moves_fully_searched > 0 {
@@ -923,7 +926,8 @@ pub fn iterative_deepening(
     s.reset_thread();
     s.timer.end_time = start + Duration::from_millis(hard_limit as u64);
 
-    let mut id = IterDeepData::new(start, show_thinking);
+    let soft_limit = Instant::now() + Duration::from_millis(soft_limit as u64);
+    let mut id = IterDeepData::new(start, show_thinking, soft_limit);
 
     while (id.depth as usize) < MAX_PLY {
         let eval = aspiration_window(position, s, &mut id);
@@ -935,15 +939,9 @@ pub fn iterative_deepening(
         id.eval = eval;
         id.depth += 1;
 
-        let fraction = s.info.nodetable.get(id.pv[0][0]) as f64 / s.nodes as f64;
-        let multiplier = 2.0 - fraction * 1.5;
-
-        if Instant::now()
-            > id.start_time + Duration::from_millis((soft_limit as f64 * multiplier) as u64)
-        {
+        if Instant::now() > id.soft_limit {
             //not the same as above break statement because eval was updated
             //which won't affect choice of move but will affect data we report
-            s.stop.store(true, Relaxed);
             break;
         }
     }

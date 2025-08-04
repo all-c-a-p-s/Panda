@@ -175,12 +175,12 @@ impl Move {
         } else if self.is_capture(b) {
             let victim_type = piece_type(self.piece_captured(b));
             let pc = self.piece_moved(b);
-            let good_capture = self.see(b, 0);
+            let winning_capture = self.see(b, 0);
 
             let hist = s.info.caphist_table[pc][self.square_to()][victim_type];
 
             hist + MVV[victim_type]
-                + if good_capture {
+                + if winning_capture {
                     read_param!(WINNING_CAPTURE)
                 } else {
                     read_param!(LOSING_CAPTURE)
