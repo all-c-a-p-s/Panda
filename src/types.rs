@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 use crate::board::Colour;
 use std::ops::{Index, IndexMut};
 

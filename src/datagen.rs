@@ -420,7 +420,6 @@ fn next_checkpoint(path: &str, duration: Duration) -> Result<i32, std::io::Error
     let pb = ProgressBar::new(duration.as_secs());
     pb.set_position(0);
 
-    // Set a nice style for the progress bar
     pb.set_style(
         ProgressStyle::with_template(
             "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",

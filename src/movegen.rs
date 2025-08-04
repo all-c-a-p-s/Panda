@@ -180,29 +180,21 @@ impl MoveList {
                     }
                 }
 
-                if (board.castling & CASTLING_MASKS[CastlingType::WhiteQueenside]) > 0 {
-                    if board.occupancies[OccupancyIndex::BothOccupancies]
+                if (board.castling & CASTLING_MASKS[CastlingType::WhiteQueenside]) > 0 && board.occupancies[OccupancyIndex::BothOccupancies]
                         & CASTLING_PATHS[CastlingType::WhiteQueenside]
                         == 0
-                        && !is_attacked(Square::E1, Colour::Black, board)
-                        && !is_attacked(Square::D1, Colour::Black, board)
-                    {
-                        first_unused =
-                            add_castling(&mut self.moves, Square::E1, Square::C1, first_unused);
-                    }
+                        && !is_attacked(Square::E1, Colour::Black, board) && !is_attacked(Square::D1, Colour::Black, board) {
+                    first_unused =
+                        add_castling(&mut self.moves, Square::E1, Square::C1, first_unused);
                 }
             }
             Colour::Black => {
-                if (board.castling & CASTLING_MASKS[CastlingType::BlackKingside]) > 0 {
-                    if board.occupancies[OccupancyIndex::BothOccupancies]
+                if (board.castling & CASTLING_MASKS[CastlingType::BlackKingside]) > 0 && board.occupancies[OccupancyIndex::BothOccupancies]
                         & CASTLING_PATHS[CastlingType::BlackKingside]
                         == 0
-                        && !is_attacked(Square::E8, Colour::White, board)
-                        && !is_attacked(Square::F8, Colour::White, board)
-                    {
-                        first_unused =
-                            add_castling(&mut self.moves, Square::E8, Square::G8, first_unused);
-                    }
+                        && !is_attacked(Square::E8, Colour::White, board) && !is_attacked(Square::F8, Colour::White, board) {
+                    first_unused =
+                        add_castling(&mut self.moves, Square::E8, Square::G8, first_unused);
                 }
 
                 if (board.castling & CASTLING_MASKS[CastlingType::BlackQueenside]) > 0 {
