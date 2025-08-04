@@ -14,10 +14,7 @@ const MOVE_OVERHEAD: usize = 50;
 #[must_use]
 pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize) -> (usize, usize) {
     if time < MOVE_OVERHEAD {
-        return (
-            std::cmp::max(time / 2, MIN_MOVE_TIME),
-            std::cmp::max(time / 2, MIN_MOVE_TIME),
-        );
+        return ((time / 2).min(MIN_MOVE_TIME), (time / 2).min(MIN_MOVE_TIME));
     }
 
     let time_until_flag = time - MOVE_OVERHEAD;
@@ -32,11 +29,11 @@ pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize)
     let average_move_time = time_until_flag / m; // I guess this ignores increment so variable
                                                  // name is a lie
     let ideal_time = (average_move_time * 7) / 10 + increment / 2;
-    let t = std::cmp::min(ideal_time, time_until_flag);
+    let t = ideal_time.min(time_until_flag);
 
-    let max_time = std::cmp::min(2 * t, (time_until_flag * 3) / 5);
+    let max_time = (2 * t).min((time_until_flag * 3) / 5);
 
-    (std::cmp::max(t, MIN_MOVE_TIME), max_time)
+    (t.max(MIN_MOVE_TIME), max_time)
 }
 
 #[derive(Copy, Clone)]
@@ -229,10 +226,10 @@ impl<'a> Searcher<'a> {
 
             k => {
                 if k <= MOVE_OVERHEAD {
-                    let t = std::cmp::max(MIN_MOVE_TIME, k / 2);
+                    let t = MIN_MOVE_TIME.max(k / 2);
                     (t, t)
                 } else {
-                    let t = std::cmp::max(MIN_MOVE_TIME, k - MOVE_OVERHEAD);
+                    let t = MIN_MOVE_TIME.max(k - MOVE_OVERHEAD);
                     (t, t)
                 }
             }
@@ -260,12 +257,11 @@ impl<'a> Searcher<'a> {
         #[cfg(not(feature = "datagen"))]
         std::thread::scope(|s| {
             let main_handle = s.spawn(|| {
-                iterative_deepening(
+                iterative_deepening::<true>(
                     &mut position.clone(),
                     soft_limit,
                     hard_limit,
                     &mut main_thread,
-                    true,
                 )
             });
 
@@ -273,7 +269,7 @@ impl<'a> Searcher<'a> {
                 let mut pos = *position;
                 let mut worker = Thread::new(end_time, max_nodes, self.tt, &stop);
                 s.spawn(move || {
-                    iterative_deepening(&mut pos, soft_limit, hard_limit, &mut worker, false)
+                    iterative_deepening::<false>(&mut pos, soft_limit, hard_limit, &mut worker)
                 });
             }
 

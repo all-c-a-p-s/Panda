@@ -138,7 +138,7 @@ impl Node {
 
         let mut t = Thread::new(Instant::now() + Duration::from_millis(10), 8192, tt, &stop);
         t.info.excluded[0] = Some(m);
-        let move_data = iterative_deepening(&mut self.position, 10, 10, &mut t, false);
+        let move_data = iterative_deepening::<false>(&mut self.position, 10, 10, &mut t);
         self.choice = Some(move_data.m);
     }
 }

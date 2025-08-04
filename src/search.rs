@@ -845,7 +845,7 @@ struct IterDeepData {
 }
 
 impl IterDeepData {
-    fn new(start_time: Instant, show_thinking: bool) -> Self {
+    fn new<const SHOW_THINKING: bool>(start_time: Instant) -> Self {
         Self {
             eval: 0,
             pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
@@ -854,7 +854,7 @@ impl IterDeepData {
             alpha: -INFINITY,
             beta: INFINITY,
             depth: 1,
-            show_thinking,
+            show_thinking: SHOW_THINKING,
             start_time,
         }
     }
@@ -862,9 +862,13 @@ impl IterDeepData {
 
 fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData) -> i32 {
     loop {
+        // Most engines don't use aspiration windows for the first few depths since the search
+        // won't be very accurate. However, since Panda preserves the width of the window from the
+        // previous depth, it seems that doing aspiration windows on early depths is effective for
+        // setting up the window for the future. As of Panda 1.1, this approach does gain elo.
         let eval = s.negamax(position, id.depth.max(1), id.alpha, id.beta, false);
 
-        if s.is_stopped() {
+        if s.is_stopped() || Instant::now() >= s.timer.end_time {
             if s.moves_fully_searched > 0 {
                 id.pv = s.pv;
                 id.pv_length = s.pv_length;
@@ -909,19 +913,18 @@ fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData
     }
 }
 
-pub fn iterative_deepening(
+pub fn iterative_deepening<const SHOW_THINKING: bool>(
     position: &mut Board,
     soft_limit: usize,
     hard_limit: usize,
     s: &mut Thread,
-    show_thinking: bool,
 ) -> MoveData {
     let start = Instant::now();
 
     s.reset_thread();
     s.timer.end_time = start + Duration::from_millis(hard_limit as u64);
 
-    let mut id = IterDeepData::new(start, show_thinking);
+    let mut id = IterDeepData::new::<SHOW_THINKING>(start);
 
     while (id.depth as usize) < MAX_PLY {
         let eval = aspiration_window(position, s, &mut id);
