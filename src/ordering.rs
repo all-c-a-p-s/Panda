@@ -8,6 +8,7 @@ use crate::{
     MAX_MOVES,
 };
 
+//taken from Carp
 const MVV: [i32; 6] = [0, 2400, 2400, 4800, 9600, 0];
 
 //same as MG evaluation weights (haven't updated these in a while)
@@ -152,19 +153,15 @@ impl Move {
         b.side_to_move != colour
     }
 
+    /// Scores a move based on this order
+    /// - TT Move
+    /// - Queen Promotion
+    /// - Good Captures + E.P. (sorted by MVV-caphist)
+    /// - Killers     |
+    /// - Quiets      |----- these are also subject to continuation bonuses
+    /// - Losing Captures
+    /// - Underpromotion
     pub fn score_move(self, b: &mut Board, s: &Thread, hash_move: &Move) -> i32 {
-        /*
-          MOVE ORDER:
-        - TT Move
-        - PV Move
-        - Queen Promotion
-        - Winning Capture + E.P.
-        - Killers
-        - History
-        - Losing Capture
-        - Underpromotion
-         */
-
         if self.is_null() {
             -INFINITY
             //important for this to come before checking hash move
@@ -197,7 +194,7 @@ impl Move {
                 _ => unreachable!(),
             }
         } else if self.is_en_passant() {
-            MVV[PieceType::Pawn]
+            read_param!(WINNING_CAPTURE) + MVV[PieceType::Pawn]
         } else {
             let cont_bonus = {
                 let mut bonus = 0;
@@ -223,7 +220,7 @@ impl Move {
 
             cont_bonus
                 + if s.info.killer_moves[s.ply] == Some(self) {
-                    read_param!(FIRST_KILLER_MOVE) //after captures
+                    read_param!(FIRST_KILLER_MOVE)
                 } else {
                     s.info.history_table[self.piece_moved(b)][self.square_to()]
                 }
@@ -242,9 +239,9 @@ impl MoveList {
         scores
     }
 
-    // "Sorts" the moves using insertion sort
-    // In practice this is expected to be faster than O(n log n) sorting since in most cases we
-    // will only have to find a few of the highest scoring moves
+    /// "Sorts" the moves using insertion sort
+    /// In practice this is expected to be faster than O(n log n) sorting since in most cases we
+    /// will only have to find a few of the highest scoring moves
     pub fn get_next(&mut self, scores: &mut [i32; MAX_MOVES]) -> Option<(Move, i32)> {
         if scores[0] == Self::ALREADY_SEARCHED {
             return None;
