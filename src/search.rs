@@ -291,8 +291,6 @@ impl Thread<'_> {
             // Razoring:
             // If we're very far behind it's likely that the only way to raise alpha will be with
             // captures, so just run a qsearch
-            // todo: try depth + u8::from(improving) - u8::from(opponent_capture &&
-            // !opponent_worsening)
             if depth <= read_param!(MAX_RAZOR_DEPTH)
                 && static_eval
                     + read_param!(RAZORING_MARGIN)
@@ -412,6 +410,7 @@ impl Thread<'_> {
                 continue;
             };
 
+            let nodes_before = self.nodes;
             legal += 1;
             self.ply += 1;
             // update after pruning above
@@ -521,6 +520,7 @@ impl Thread<'_> {
             }
 
             if root {
+                self.info.nodetable.add(m, self.nodes - nodes_before);
                 self.moves_fully_searched += 1;
                 // used to ensure in the iterative deepening search that
                 // at least one move has been searched fully
@@ -626,9 +626,6 @@ impl Thread<'_> {
             if m.is_capture(position) {
                 // if not capture then must be a check evasion
                 let best_case = eval + SEE_VALUES[piece_type(position.get_piece_at(m.square_to()))];
-
-                // todo: if best_case + QSEARCH_FP_MARGIN < alpha {continue}
-
                 let worst_case = best_case - SEE_VALUES[piece_type(m.piece_moved(position))];
 
                 //first check if we beat beta even in the worst case
@@ -845,11 +842,10 @@ struct IterDeepData {
 
     show_thinking: bool,
     start_time: Instant,
-    soft_limit: Instant,
 }
 
 impl IterDeepData {
-    fn new(start_time: Instant, show_thinking: bool, soft_limit: Instant) -> Self {
+    fn new(start_time: Instant, show_thinking: bool) -> Self {
         Self {
             eval: 0,
             pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
@@ -860,7 +856,6 @@ impl IterDeepData {
             depth: 1,
             show_thinking,
             start_time,
-            soft_limit,
         }
     }
 }
@@ -926,8 +921,7 @@ pub fn iterative_deepening(
     s.reset_thread();
     s.timer.end_time = start + Duration::from_millis(hard_limit as u64);
 
-    let soft_limit = Instant::now() + Duration::from_millis(soft_limit as u64);
-    let mut id = IterDeepData::new(start, show_thinking, soft_limit);
+    let mut id = IterDeepData::new(start, show_thinking);
 
     while (id.depth as usize) < MAX_PLY {
         let eval = aspiration_window(position, s, &mut id);
@@ -939,9 +933,17 @@ pub fn iterative_deepening(
         id.eval = eval;
         id.depth += 1;
 
-        if Instant::now() > id.soft_limit {
+        let fraction = s.info.nodetable.get(id.pv[0][0]) as f64 / s.nodes as f64;
+        let multiplier = 2.2 * (1.3 * fraction).cos(); //guessed with some desmos eyeballing
+
+        let soft_end =
+            id.start_time + Duration::from_millis((soft_limit as f64 * multiplier) as u64);
+        let end = s.timer.end_time.min(soft_end);
+
+        if Instant::now() > end {
             //not the same as above break statement because eval was updated
             //which won't affect choice of move but will affect data we report
+            s.stop.store(true, Relaxed);
             break;
         }
     }
