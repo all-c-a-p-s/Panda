@@ -7,9 +7,9 @@ Panda is a chess engine written in Rust (still a work in progress). I like worki
 
 ## Stats
 |                           Version                            |     Release Date    | [CCRL 40/15](https://www.computerchess.org.uk/ccrl/4040/) | [CCRL Blitz](https://computerchess.org.uk/ccrl/404/) | Notes |
-| :-----------------------------------------------------------:|:-------------------:|:----:|:----:|:---------------------------:|
-| [1.0](https://github.com/all-c-a-p-s/Panda/releases/tag/1.0) |  20th    April 2024 | 3134 |  -   |       First Release         |
-
+| :-----------------------------------------------------------:|:-------------------:|:---------:|:----:|:---------------------------:|
+| [1.1](https://github.com/all-c-a-p-s/Panda/releases/tag/1.1) |  5th    August 2025 |3240 (est.)|  -   | Major Search Improvements   |
+| [1.0](https://github.com/all-c-a-p-s/Panda/releases/tag/1.0) |  20th    April 2025 | 3134      |  -   |       First Release         |
 
 
 ## What Makes Panda Interesting?
@@ -33,8 +33,6 @@ I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lich
 [Panda Lichess Bot](https://lichess.org/@/RedPandaBot)
 
 ## Todo
-- faster perft results
-- tune thresholds in search function
 - endgame tablebases
 - stronger NNUE
 
@@ -51,3 +49,4 @@ I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lich
 - [Carp](https://github.com/dede1751/carp) - extremely clear Rust code, which is always useful to read when I'm struggling to understand something
 - Jamie Whiting for creating [bullet](https://github.com/jw1912/bullet/tree/main), which I use to train Panda's networks, and [akimbo](https://github.com/jw1912/akimbo/tree/main), which Panda's Lazy SMP implementation is inspired by
 - [@mcthouacbb](https://github.com/mcthouacbb) for several helpful suggestions
+- [weather-factory](https://github.com/jnlt3/weather-factory) for SPSA tuning search parameters
