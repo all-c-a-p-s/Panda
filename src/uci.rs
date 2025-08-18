@@ -28,6 +28,9 @@ pub enum CommandType {
     D, //not an actual UCI command but can be used to debug and display the board
 }
 
+const DEFAULT_HASH_SIZE: usize = 16;
+const DEFAULT_THREAD_COUNT: usize = 1;
+
 pub struct UciOptions {
     pub hash_size: usize,
     pub threads: usize,
@@ -36,8 +39,8 @@ pub struct UciOptions {
 impl Default for UciOptions {
     fn default() -> Self {
         Self {
-            hash_size: 16,
-            threads: 1,
+            hash_size: DEFAULT_HASH_SIZE,
+            threads: DEFAULT_THREAD_COUNT,
         }
     }
 }
@@ -126,7 +129,7 @@ pub fn parse_move(input: &str, board: &Board) -> Move {
 
 pub fn parse_uci(command: &str) {
     if command == "uci" {
-        println!("id name Panda 1.1.1");
+        println!("id name Panda 1.1");
         println!("option name Threads type spin default 1 min 1 max 256");
         println!("option name Hash type spin default 16 min 1 max 1048576");
 
@@ -490,7 +493,7 @@ pub fn print_thinking(depth: u8, eval: i32, s: &Thread, start: Instant) {
 
 pub fn uci_loop() {
     let mut board = Board::from(STARTPOS);
-    let mut tt = TranspositionTable::in_megabytes(16);
+    let mut tt = TranspositionTable::in_megabytes(DEFAULT_HASH_SIZE);
 
     let mut opts = UciOptions::default();
 
