@@ -36,7 +36,7 @@ pub struct UciOptions {
 impl Default for UciOptions {
     fn default() -> Self {
         Self {
-            hash_size: 256,
+            hash_size: 16,
             threads: 1,
         }
     }
