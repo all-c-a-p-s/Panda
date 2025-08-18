@@ -37,7 +37,7 @@ impl Default for UciOptions {
     fn default() -> Self {
         Self {
             hash_size: 256,
-            threads: 4,
+            threads: 1,
         }
     }
 }
