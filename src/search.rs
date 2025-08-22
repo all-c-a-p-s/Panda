@@ -369,6 +369,7 @@ impl Thread<'_> {
 
             // Early Pruning: try to prune moves before we search them properly
             // by showing that they're not worth investigating
+            #[cfg(not(feature = "datagen"))]
             if !root && not_mated {
                 if quiet && skip_quiets && !is_killer {
                     continue;
