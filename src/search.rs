@@ -281,8 +281,7 @@ impl Thread<'_> {
             // Reverse Futility Pruning:
             // If eval >= beta + some margin, assume that we can achieve at least beta
             if depth <= read_param!(RFP_DEPTH)
-                && static_eval
-                    - i32::from(read_param!(RFP_MARGIN) * (depth - u8::from(improving)))
+                && static_eval - i32::from(read_param!(RFP_MARGIN) * (depth - u8::from(improving)))
                     >= beta
             {
                 return static_eval;
@@ -746,7 +745,8 @@ impl Thread<'_> {
         *entry = (*entry).clamp(-CORRHIST_MAX, CORRHIST_MAX);
     }
 
-    #[must_use] pub fn eval_with_corrhist(&self, b: &Board, raw_eval: i32) -> i32 {
+    #[must_use]
+    pub fn eval_with_corrhist(&self, b: &Board, raw_eval: i32) -> i32 {
         let idx = (b.pawn_hash() % 16384) as usize;
         let side = usize::from(b.side_to_move == Colour::White);
 

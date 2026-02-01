@@ -93,7 +93,7 @@ impl TTEntry {
     fn to_u64s(&self) -> (u64, u64) {
         let key = self.hash_key;
 
-        let eval_data = u64::from(unsafe { std::mem::transmute::<i32, u32>(self.eval) });
+        let eval_data = u64::from(i32::cast_unsigned(self.eval));
         let bm_data = u64::from(self.best_move.data) << Self::BEST_MOVE_SHIFT;
         let depth_data = u64::from(self.depth) << Self::DEPTH_SHIFT;
         let flag_data = u64::from(self.flag as u8) << Self::FLAG_SHIFT;

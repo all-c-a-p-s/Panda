@@ -52,6 +52,7 @@ pub struct SearchInfo {
     pub caphist_table: [[[i32; 5]; 64]; 12],
     pub counter_moves: [[Move; 64]; 12],
     pub followup_moves: [[Move; 64]; 12],
+    // TODO - mutable reference between threads to one table
     pub corrhist: [[i32; CORRHIST_SIZE]; 2],
     pub killer_moves: [Option<Move>; MAX_PLY],
     pub excluded: [Option<Move>; MAX_PLY],
@@ -71,7 +72,8 @@ impl NodeTable {
         self.table[mv.square_from()][mv.square_to()] += nodes;
     }
 
-    #[must_use] pub fn get(self, mv: Move) -> usize {
+    #[must_use]
+    pub fn get(self, mv: Move) -> usize {
         self.table[mv.square_from()][mv.square_to()]
     }
 }
