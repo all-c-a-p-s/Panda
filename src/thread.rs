@@ -205,7 +205,7 @@ impl<'a> Searcher<'a> {
             tt,
         }
     }
-    //comment is for threads variable which is unused in datagen mode
+    //this is for threads variable which is unused in datagen mode
     #[allow(unused)]
     #[allow(clippy::too_many_arguments)]
     pub fn start_search(
@@ -228,8 +228,7 @@ impl<'a> Searcher<'a> {
 
             k => {
                 if k <= MOVE_OVERHEAD {
-                    let t = MIN_MOVE_TIME.max(k / 2);
-                    (t, t)
+                    (k, k)
                 } else {
                     let t = MIN_MOVE_TIME.max(k - MOVE_OVERHEAD);
                     (t, t)
@@ -247,12 +246,11 @@ impl<'a> Searcher<'a> {
         //datagen is already multi-threaded so only search on one thread
         #[cfg(feature = "datagen")]
         {
-            return iterative_deepening(
+            return iterative_deepening::<false>(
                 &mut position.clone(),
                 soft_limit,
                 hard_limit,
                 &mut main_thread,
-                false,
             );
         }
 

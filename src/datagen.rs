@@ -16,8 +16,6 @@ const OPENING_PLIES: usize = 16;
 
 const BATCH_SIZE: usize = 64;
 
-//if we find this in the data file we know there's an error
-
 // assuming branching factor 5:
 // 5^10 = 10e7 different openings
 // 5^12 = 10e8     "        "
@@ -131,7 +129,7 @@ impl Node {
     }
 
     // must be called when choice is not None and when choice is not the only legal move
-    pub fn choose_second(&mut self, tt: &TranspositionTable) {
+    pub fn choose_second(&mut self, tt: &TranspositionTable) -> i32 {
         let m = self.choice.unwrap();
 
         let stop = AtomicBool::new(false);
@@ -140,6 +138,7 @@ impl Node {
         t.info.excluded[0] = Some(m);
         let move_data = iterative_deepening::<false>(&mut self.position, 10, 10, &mut t);
         self.choice = Some(move_data.m);
+        move_data.eval
     }
 }
 
@@ -212,9 +211,7 @@ impl Game {
     // playing the game to more accurately score the nodes in the game
     fn backtrack(&mut self, tt: &TranspositionTable) {
         use rand::Rng;
-        fn wdl(x: i32) -> f32 {
-            1.0 / (1.0 + ((-x as f32) * 2.55 / 400.0).exp())
-        }
+        let wdl = |x: i32| -> f32 { 1.0 / (1.0 + ((-x as f32) * 2.55 / 400.0).exp()) };
 
         for ply in (OPENING_PLIES..self.positions.len()).rev() {
             if ply != self.positions.len() - 1 {
@@ -258,9 +255,9 @@ impl Game {
                 let it = movelist.moves.iter().filter(|x| !x.is_null());
 
                 if it.count() != 1 {
-                    p.choose_second(tt);
                     if !p.choice.unwrap().is_null() {
                         pos.play_unchecked(p.choice.unwrap());
+
                         let mut n = Node::from_position(&pos);
                         let s = -n.value(tt);
 

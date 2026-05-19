@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "datagen", allow(dead_code, unused))]
+
 use crate::board::Board;
 use crate::eval::evaluate;
 use crate::helper::{piece_type, read_param, tuneable_params};
@@ -188,38 +190,37 @@ impl Thread<'_> {
             if r_alpha >= r_beta {
                 return r_alpha;
             }
+        }
 
-            if let Some(entry) = self.tt.lookup(position.hash_key) {
-                best_move = entry.best_move;
-                tt_hit = true;
-                tt_score = entry.eval;
-                tt_depth = entry.depth;
-                tt_bound = entry.flag;
+        if let Some(entry) = self.tt.lookup(position.hash_key) {
+            best_move = entry.best_move;
+            tt_hit = true;
+            tt_score = entry.eval;
+            tt_depth = entry.depth;
+            tt_bound = entry.flag;
 
-                // We accept values from the TT if:
-                //      (1) the depth of the entry >= our depth
-                // OR   (2) we don't expect much from this node, and the eval is well below beta
-                if !singular {
-                    if !pv_node
-                        && depth <= entry.depth
-                        && match entry.flag {
-                            EntryFlag::Exact => true,
-                            EntryFlag::LowerBound => entry.eval >= beta,
-                            EntryFlag::UpperBound => entry.eval <= alpha,
-                            EntryFlag::Missing => false,
-                        }
-                    {
-                        return entry.eval;
-                    } else if cutnode
-                        && entry.eval
-                            - read_param!(TT_FUTILITY_MARGIN)
-                                * i32::from(depth - entry.depth).max(1)
-                            >= beta
-                        && entry.flag != EntryFlag::UpperBound
-                        && !in_check
-                    {
-                        return entry.eval;
+            // We accept values from the TT if:
+            //      (1) the depth of the entry >= our depth
+            // OR   (2) we don't expect much from this node, and the eval is well below beta
+            if !singular && !root {
+                if !pv_node
+                    && depth <= entry.depth
+                    && match entry.flag {
+                        EntryFlag::Exact => true,
+                        EntryFlag::LowerBound => entry.eval >= beta,
+                        EntryFlag::UpperBound => entry.eval <= alpha,
+                        EntryFlag::Missing => false,
                     }
+                {
+                    return entry.eval;
+                } else if cutnode
+                    && entry.eval
+                        - read_param!(TT_FUTILITY_MARGIN) * i32::from(depth - entry.depth).max(1)
+                        >= beta
+                    && entry.flag != EntryFlag::UpperBound
+                    && !in_check
+                {
+                    return entry.eval;
                 }
             }
         }
@@ -522,8 +523,6 @@ impl Thread<'_> {
             if root {
                 self.info.nodetable.add(m, self.nodes - nodes_before);
                 self.moves_fully_searched += 1;
-                // used to ensure in the iterative deepening search that
-                // at least one move has been searched fully
             }
 
             if quiet {
@@ -867,6 +866,12 @@ fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData
         // won't be very accurate. However, since Panda preserves the width of the window from the
         // previous depth, it seems that doing aspiration windows on early depths is effective for
         // setting up the window for the future. As of Panda 1.1, this approach does gain elo.
+
+        #[cfg(feature = "datagen")]
+        {
+            (id.alpha, id.beta) = (-INFINITY, INFINITY);
+        }
+
         let eval = s.negamax(position, id.depth.max(1), id.alpha, id.beta, false);
 
         if s.is_stopped() || Instant::now() >= s.timer.end_time {
@@ -874,8 +879,10 @@ fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData
                 id.pv = s.pv;
                 id.pv_length = s.pv_length;
             }
-            return 0;
-            //this return value will not actually be used
+
+            return eval;
+            //this return value will not be used outside of datagen mode,
+            //in which case it comes from a full window search
         }
 
         s.moves_fully_searched = 0;

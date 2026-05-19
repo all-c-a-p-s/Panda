@@ -382,18 +382,6 @@ fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable
             ["ASPIRATION_WINDOW", "value", x] => {
                 set_param!(ASPIRATION_WINDOW, x.parse().expect("should be integer"))
             }
-            ["BETA_PRUNING_DEPTH", "value", x] => {
-                set_param!(BETA_PRUNING_DEPTH, x.parse().expect("should be integer"))
-            }
-            ["BETA_PRUNING_MARGIN", "value", x] => {
-                set_param!(BETA_PRUNING_MARGIN, x.parse().expect("should be integer"))
-            }
-            ["ALPHA_PRUNING_DEPTH", "value", x] => {
-                set_param!(ALPHA_PRUNING_DEPTH, x.parse().expect("should be integer"))
-            }
-            ["ALPHA_PRUNING_MARGIN", "value", x] => {
-                set_param!(ALPHA_PRUNING_MARGIN, x.parse().expect("should be integer"))
-            }
             ["SEE_PRUNING_DEPTH", "value", x] => {
                 set_param!(SEE_PRUNING_DEPTH, x.parse().expect("should be integer"))
             }
@@ -423,9 +411,6 @@ fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable
             }
             ["FIRST_KILLER_MOVE", "value", x] => {
                 set_param!(FIRST_KILLER_MOVE, x.parse().expect("should be integer"))
-            }
-            ["SECOND_KILLER_MOVE", "value", x] => {
-                set_param!(SECOND_KILLER_MOVE, x.parse().expect("should be integer"))
             }
             ["LOSING_CAPTURE", "value", x] => {
                 set_param!(LOSING_CAPTURE, x.parse().expect("should be integer"))
