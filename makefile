@@ -1,4 +1,5 @@
 EXE = Panda
+TEST_EXE = panda_test
 
 ifeq ($(OS),Windows_NT)
 	NAME := $(EXE).exe
@@ -6,8 +7,17 @@ else
 	NAME := $(EXE)
 endif
 
+ifeq ($(OS),Windows_NT)
+	TEST_NAME := $(TEST_EXE).exe
+else
+	TEST_NAME := $(TEST_EXE)
+endif
+
 build:
 	cargo rustc --release -- -C target-cpu=native --emit link=$(NAME)
+
+for_sprt:
+	cargo rustc --release -- -C target-cpu=native --emit link=$(TEST_NAME)
 
 run:
 	cargo rustc --release -- -C target-cpu=native --emit link=$(NAME)
@@ -24,6 +34,9 @@ profile:
 debug:
 	cargo rustc --release -- -C target-cpu=native --emit link=$(NAME)
 	./$(NAME) debug
+
+tune:
+	cargo rustc --release --features tuning -- -C target-cpu=native --emit link=$(NAME)
 
 test:
 	cargo test --release
