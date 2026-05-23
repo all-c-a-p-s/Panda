@@ -94,7 +94,6 @@ impl Thread<'_> {
     /// The purpose of the `singularity()` function is to prove that a move is better than alternatives by
     /// a significant margin. If this is true, we should extend it since it is more important. This
     /// function determines how much we should extend by.
-
     #[allow(clippy::too_many_arguments)]
     fn singularity(
         &mut self,
@@ -202,8 +201,9 @@ impl Thread<'_> {
             // We accept values from the TT if:
             //      (1) the depth of the entry >= our depth
             // OR   (2) we don't expect much from this node, and the eval is well below beta
-            if !singular && !root {
-                if !pv_node
+            if !singular
+                && !root
+                && (!pv_node
                     && depth <= entry.depth
                     && match entry.flag {
                         EntryFlag::Exact => true,
@@ -211,17 +211,15 @@ impl Thread<'_> {
                         EntryFlag::UpperBound => entry.eval <= alpha,
                         EntryFlag::Missing => false,
                     }
-                {
-                    return entry.eval;
-                } else if cutnode
-                    && entry.eval
-                        - read_param!(TT_FUTILITY_MARGIN) * i32::from(depth - entry.depth).max(1)
-                        >= beta
-                    && entry.flag != EntryFlag::UpperBound
-                    && !in_check
-                {
-                    return entry.eval;
-                }
+                    || (cutnode
+                        && entry.eval
+                            - read_param!(TT_FUTILITY_MARGIN)
+                                * i32::from(depth - entry.depth).max(1)
+                            >= beta
+                        && entry.flag != EntryFlag::UpperBound
+                        && !in_check))
+            {
+                return entry.eval;
             }
         }
 
@@ -908,7 +906,7 @@ fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData
         if eval <= id.alpha {
             //failed low -> widen window down, do not update pv
             id.alpha = (id.alpha - id.delta).max(-INFINITY);
-            id.beta = (id.alpha + id.beta) / 2;
+            id.beta = i32::midpoint(id.alpha, id.beta);
             id.delta += id.delta / 2;
         } else if eval >= id.beta {
             //failed high -> widen window up, also update pv

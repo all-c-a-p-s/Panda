@@ -161,6 +161,7 @@ impl Move {
     /// - Quiets      |----- these are also subject to continuation bonuses
     /// - Losing Captures
     /// - Underpromotion
+    ///
     /// To me it seems intuitive that en passant should be considered a "good capture", but doing
     /// this loses elo. At the moment, en passant just gets the MVV bonus for capturing a pawn.
     pub fn score_move(self, b: &mut Board, s: &Thread, hash_move: &Move) -> i32 {

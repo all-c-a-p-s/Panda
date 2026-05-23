@@ -29,11 +29,12 @@ pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize)
     let average_move_time = time_until_flag / m; // I guess this ignores increment so variable
                                                  // name is a lie
     let ideal_time = (average_move_time * 7) / 10 + increment / 2;
+
     let t = ideal_time.min(time_until_flag);
 
     let max_time = (2 * t).min((time_until_flag * 3) / 5);
 
-    (t.max(MIN_MOVE_TIME), max_time)
+    (t.max(MIN_MOVE_TIME), max_time.max(MIN_MOVE_TIME))
 }
 
 #[derive(Copy, Clone)]
@@ -104,6 +105,8 @@ impl Default for LMRTable {
         let qb = f64::from(read_param!(LMR_QUIET_BASE)) / 100.0;
         let qd = f64::from(read_param!(LMR_QUIET_DIVISOR)) / 100.0;
         let mut reduction_table = [[[0; 32]; 32]; 2];
+
+        #[allow(clippy::needless_range_loop)]
         for depth in 0..32 {
             for played in 0..32 {
                 reduction_table[0][depth][played] =

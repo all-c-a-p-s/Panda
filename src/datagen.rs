@@ -129,7 +129,7 @@ impl Node {
     }
 
     // must be called when choice is not None and when choice is not the only legal move
-    pub fn choose_second(&mut self, tt: &TranspositionTable) -> i32 {
+    pub fn choose_second(&mut self, tt: &TranspositionTable) {
         let m = self.choice.unwrap();
 
         let stop = AtomicBool::new(false);
@@ -138,7 +138,6 @@ impl Node {
         t.info.excluded[0] = Some(m);
         let move_data = iterative_deepening::<false>(&mut self.position, 10, 10, &mut t);
         self.choice = Some(move_data.m);
-        move_data.eval
     }
 }
 
@@ -255,6 +254,7 @@ impl Game {
                 let it = movelist.moves.iter().filter(|x| !x.is_null());
 
                 if it.count() != 1 {
+                    p.choose_second(tt);
                     if !p.choice.unwrap().is_null() {
                         pos.play_unchecked(p.choice.unwrap());
 
@@ -368,7 +368,7 @@ pub fn play_parallel_games(num_games: usize, num_threads: usize) -> Vec<(String,
     let mut handles = vec![];
 
     for i in 0..num_threads {
-        let thread_games = games_per_thread + if i < remainder { 1 } else { 0 };
+        let thread_games = games_per_thread + usize::from(i < remainder);
 
         let handle = thread::spawn(move || {
             let mut results = Vec::new();
