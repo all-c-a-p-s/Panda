@@ -1,11 +1,11 @@
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::time::{Duration, Instant};
-use types::{Piece, Square};
+use types::Square;
 
 use crate::read_param;
-use crate::search::{params, CORRHIST_SIZE};
+use crate::search::{CORRHIST_SIZE, params};
 use crate::transposition::{TTRef, TranspositionTable};
-use crate::{iterative_deepening, types, Board, Move, MoveData, INFINITY, MAX_PLY, NULL_MOVE};
+use crate::{Board, INFINITY, MAX_PLY, Move, MoveData, NULL_MOVE, iterative_deepening, types};
 
 const MIN_MOVE_TIME: usize = 1; //make sure move time is never 0
 const MOVE_OVERHEAD: usize = 50;
@@ -27,7 +27,7 @@ pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize)
 
     //note time - increment must be +ve since we got increment last turn
     let average_move_time = time_until_flag / m; // I guess this ignores increment so variable
-                                                 // name is a lie
+    // name is a lie
     let ideal_time = (average_move_time * 7) / 10 + increment / 2;
 
     let t = ideal_time.min(time_until_flag);
@@ -39,8 +39,7 @@ pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize)
 
 #[derive(Copy, Clone)]
 pub struct SearchStackEntry {
-    pub previous_piece: Option<Piece>,
-    pub previous_square: Option<Square>,
+    pub square_moved_to: Option<Square>,
     pub made_capture: bool,
     pub eval: i32,
 }
@@ -51,8 +50,10 @@ pub struct SearchInfo {
     pub nodetable: NodeTable,
     pub history_table: [[i32; 64]; 12],
     pub caphist_table: [[[i32; 5]; 64]; 12],
-    pub counter_moves: [[Move; 64]; 12],
-    pub followup_moves: [[Move; 64]; 12],
+
+    pub counter_correlation: [[[i32; 64]; 64]; 2],
+    pub followup_correlation: [[[i32; 64]; 64]; 2],
+
     // TODO - mutable reference between threads to one table
     pub corrhist: [[i32; CORRHIST_SIZE]; 2],
     pub killer_moves: [Option<Move>; MAX_PLY],
@@ -91,8 +92,7 @@ impl Default for SearchStackEntry {
     fn default() -> Self {
         Self {
             eval: -INFINITY,
-            previous_piece: None,
-            previous_square: None,
+            square_moved_to: None,
             made_capture: false,
         }
     }
@@ -131,8 +131,10 @@ impl Default for SearchInfo {
             history_table: [[0; 64]; 12],
             caphist_table: [[[0; 5]; 64]; 12],
             corrhist: [[0; CORRHIST_SIZE]; 2],
-            followup_moves: [[NULL_MOVE; 64]; 12],
-            counter_moves: [[NULL_MOVE; 64]; 12],
+
+            counter_correlation: [[[0; 64]; 64]; 2],
+            followup_correlation: [[[0; 64]; 64]; 2],
+
             killer_moves: [None; 64],
             excluded: [None; 64],
         }

@@ -255,6 +255,7 @@ impl Game {
 
                 if it.count() != 1 {
                     p.choose_second(tt);
+
                     if !p.choice.unwrap().is_null() {
                         pos.play_unchecked(p.choice.unwrap());
 

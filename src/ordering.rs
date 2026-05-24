@@ -1,11 +1,11 @@
-use crate::movegen::get_attackers;
 use crate::r#move::{Move, MoveList};
-use crate::search::{params, INFINITY};
+use crate::movegen::get_attackers;
+use crate::search::{INFINITY, params};
 use crate::thread::Thread;
-use crate::types::{OccupancyIndex, Piece, PieceType, BLACK_PIECES, WHITE_PIECES};
+use crate::types::{BLACK_PIECES, OccupancyIndex, Piece, PieceType, WHITE_PIECES};
 use crate::{
-    get_bishop_attacks, get_rook_attacks, lsfb, piece_type, read_param, set_bit, Board, Colour,
-    MAX_MOVES,
+    Board, Colour, MAX_MOVES, get_bishop_attacks, get_rook_attacks, lsfb, piece_type, read_param,
+    set_bit,
 };
 
 //taken from Carp
@@ -165,6 +165,8 @@ impl Move {
     /// To me it seems intuitive that en passant should be considered a "good capture", but doing
     /// this loses elo. At the moment, en passant just gets the MVV bonus for capturing a pawn.
     pub fn score_move(self, b: &mut Board, s: &Thread, hash_move: &Move) -> i32 {
+        let sq = self.square_to();
+
         if self.is_null() {
             -INFINITY
             //important for this to come before checking hash move
@@ -177,7 +179,7 @@ impl Move {
             let pc = self.piece_moved(b);
             let good_capture = self.see(b, 0);
 
-            let hist = s.info.caphist_table[pc][self.square_to()][victim_type];
+            let hist = s.info.caphist_table[pc][sq][victim_type];
 
             hist + MVV[victim_type]
                 + if good_capture {
@@ -199,26 +201,22 @@ impl Move {
         } else if self.is_en_passant() {
             MVV[PieceType::Pawn]
         } else {
-            let cont_bonus = {
-                let mut bonus = 0;
-                s.info.ss[s.ply].previous_piece.inspect(|x| {
-                    s.info.ss[s.ply].previous_square.inspect(|y| {
-                        if self == s.info.counter_moves[*x][*y] {
-                            bonus = read_param!(COUNTERMOVE_BONUS);
-                        }
-                    });
-                });
+            let mut cont_bonus = if s.ply > 0
+                && let Some(prev) = s.info.ss[s.ply - 1].square_moved_to
+            {
+                let side = usize::from(b.side_to_move == Colour::White);
+                s.info.counter_correlation[side][prev][sq]
+            } else {
+                0
+            };
 
-                if s.ply >= 1 {
-                    s.info.ss[s.ply - 1].previous_piece.inspect(|x| {
-                        s.info.ss[s.ply - 1].previous_square.inspect(|y| {
-                            if self == s.info.followup_moves[*x][*y] {
-                                bonus += read_param!(FOLLOWUP_BONUS);
-                            }
-                        });
-                    });
-                }
-                bonus
+            cont_bonus += if s.ply > 1
+                && let Some(prev) = s.info.ss[s.ply - 2].square_moved_to
+            {
+                let side = usize::from(b.side_to_move == Colour::White);
+                s.info.followup_correlation[side][prev][sq]
+            } else {
+                0
             };
 
             cont_bonus

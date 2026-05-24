@@ -194,7 +194,7 @@ impl Square {
     /// must not pass in a value outside of [0, 63]
     #[must_use]
     pub const unsafe fn from(x: u8) -> Self {
-        std::mem::transmute(x)
+        unsafe { std::mem::transmute(x) }
     }
 
     /// # Safety
@@ -202,7 +202,7 @@ impl Square {
     /// must not pass in a value greater than 64 - self as u8
     #[must_use]
     pub const unsafe fn add_unchecked(self, x: u8) -> Self {
-        Self::from(self as u8 + x)
+        unsafe { Self::from(self as u8 + x) }
     }
 
     /// # Safety
@@ -210,7 +210,7 @@ impl Square {
     /// must not pass in a value which is greater than self as u8
     #[must_use]
     pub const unsafe fn sub_unchecked(self, x: u8) -> Self {
-        Self::from(self as u8 - x)
+        unsafe { Self::from(self as u8 - x) }
     }
 }
 
@@ -220,7 +220,7 @@ impl Piece {
     /// must not pass a value outside of [0, 11]
     #[must_use]
     pub const unsafe fn from(x: u8) -> Self {
-        std::mem::transmute(x)
+        unsafe { std::mem::transmute(x) }
     }
 
     #[must_use]
@@ -268,6 +268,6 @@ impl PieceType {
     /// must not pass a value outside of [0, 5]
     #[must_use]
     pub const unsafe fn from(x: u8) -> Self {
-        std::mem::transmute(x)
+        unsafe { std::mem::transmute(x) }
     }
 }

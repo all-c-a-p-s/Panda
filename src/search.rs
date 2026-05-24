@@ -1,15 +1,15 @@
 #![cfg_attr(feature = "datagen", allow(dead_code, unused))]
 
+use crate::Colour;
 use crate::board::Board;
 use crate::eval::evaluate;
 use crate::helper::{piece_type, read_param, tuneable_params};
-use crate::ordering::SEE_VALUES;
 use crate::r#move::{Commit, Move, MoveList, NULL_MOVE};
+use crate::ordering::SEE_VALUES;
 use crate::thread::{SearchStackEntry, Thread};
-use crate::transposition::{EntryFlag, TTEntry, TT};
+use crate::transposition::{EntryFlag, TT, TTEntry};
 use crate::types::PieceType;
 use crate::uci::print_thinking;
-use crate::Colour;
 
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
@@ -28,6 +28,7 @@ const CORRHIST_MAX: i32 = 256 * 32;
 pub const CORRHIST_SIZE: usize = 16_384;
 
 const HISTORY_MAX: i32 = 16_384;
+const CORRELATION_MAX: i32 = 4_096;
 
 // name, type, val, min, max
 
@@ -53,7 +54,7 @@ tuneable_params! {
     FIRST_KILLER_MOVE, i32, 94_419, -999_999, 999_999;
     LOSING_CAPTURE, i32, -300_000, -999_999, 999_999;
     UNDER_PROMOTION, i32, -500_000, -999_999, 999_999;
-    COUNTERMOVE_BONUS, i32, 55_151, -999_999, 999999;
+    COUNTERMOVE_BONUS, i32, 55_151, -999_999, 999_999;
     FOLLOWUP_BONUS, i32, 20_000, -999_999, 999_999;
     NMP_FACTOR, i32, 20, 1, 100;
     NMP_BASE, i32, 200, 50, 500;
@@ -248,8 +249,7 @@ impl Thread<'_> {
         if self.ply < MAX_PLY {
             self.info.ss[self.ply] = SearchStackEntry {
                 eval: static_eval,
-                previous_square: None,
-                previous_piece: None,
+                square_moved_to: None,
                 made_capture: false,
             };
         }
@@ -409,15 +409,18 @@ impl Thread<'_> {
                 continue;
             };
 
+            // update for countermove heuristic
+            if self.ply < MAX_PLY {
+                self.info.ss[self.ply].square_moved_to = Some(m.square_to());
+            }
+
             let nodes_before = self.nodes;
+
             legal += 1;
             self.ply += 1;
             // update after pruning above
 
-            // update for countermove heuristic
-            self.info.ss[self.ply].previous_piece = Some(position.get_piece_at(m.square_to()));
-            self.info.ss[self.ply].previous_square = Some(m.square_to());
-
+            // TODO: should be moved up?
             if m.is_capture(position) {
                 self.info.ss[self.ply].made_capture = true;
             }
@@ -698,10 +701,10 @@ impl Thread<'_> {
         depth: u8,
     ) {
         self.update_history(b, quiets, caps, cutoff_move, tactical, depth);
+        self.update_counter_correlation(cutoff_move, depth, tactical, caps, quiets, b);
+        self.update_followup_correlation(cutoff_move, depth, tactical, caps, quiets, b);
         if !tactical {
             self.update_killer_moves(cutoff_move);
-            self.update_counter_moves(cutoff_move);
-            self.update_followup(cutoff_move);
         }
     }
 
@@ -709,23 +712,105 @@ impl Thread<'_> {
         self.info.killer_moves[self.ply] = Some(cutoff_move);
     }
 
-    pub fn update_counter_moves(&mut self, cutoff_move: Move) {
-        self.info.ss[self.ply].previous_piece.inspect(|x| {
-            self.info.ss[self.ply].previous_square.inspect(|y| {
-                self.info.counter_moves[*x][*y] = cutoff_move;
-            });
-        });
+    pub fn update_followup_correlation(
+        &mut self,
+        cutoff_move: Move,
+        depth: u8,
+        tactical: bool,
+        caps: &Vec<Move>,
+        quiets: &Vec<Move>,
+        b: &Board,
+    ) {
+        if self.ply <= 1 {
+            return;
+        }
+        let bonus = (30 * i32::from(depth) - 20).clamp(-CORRELATION_MAX, CORRELATION_MAX);
+
+        let update = |entry: &mut i32, m: Move| {
+            let sign = if m == cutoff_move { 1 } else { -1 };
+            let delta = (sign * bonus) - *entry * bonus / CORRELATION_MAX;
+            *entry += delta;
+        };
+
+        let Some(prev) = self.info.ss[self.ply - 2].square_moved_to else {
+            return;
+        };
+
+        let side = usize::from(b.side_to_move == Colour::White);
+
+        if tactical {
+            for &m in caps {
+                let sq = m.square_to();
+
+                let entry = &mut self.info.followup_correlation[side][prev][sq];
+                update(entry, m);
+            }
+        } else {
+            for &m in caps {
+                let sq = m.square_to();
+
+                let entry = &mut self.info.followup_correlation[side][prev][sq];
+                update(entry, m);
+            }
+
+            for &m in quiets {
+                let sq = m.square_to();
+
+                let entry = &mut self.info.followup_correlation[side][prev][sq];
+                update(entry, m);
+            }
+        }
     }
 
-    pub fn update_followup(&mut self, cutoff_move: Move) {
+    pub fn update_counter_correlation(
+        &mut self,
+        cutoff_move: Move,
+        depth: u8,
+        tactical: bool,
+        caps: &Vec<Move>,
+        quiets: &Vec<Move>,
+        b: &Board,
+    ) {
         if self.ply == 0 {
             return;
         }
-        self.info.ss[self.ply - 1].previous_piece.inspect(|x| {
-            self.info.ss[self.ply - 1].previous_square.inspect(|y| {
-                self.info.followup_moves[*x][*y] = cutoff_move;
-            });
-        });
+        let bonus = (100 * i32::from(depth) - 50).clamp(-CORRELATION_MAX, CORRELATION_MAX);
+
+        let update = |entry: &mut i32, m: Move| {
+            let sign = if m == cutoff_move { 1 } else { -1 };
+            let delta = (sign * bonus) - *entry * bonus / CORRELATION_MAX;
+            *entry += delta;
+        };
+
+        let Some(prev) = self.info.ss[self.ply - 1].square_moved_to else {
+            return;
+        };
+
+        let side = usize::from(b.side_to_move == Colour::White);
+
+        if tactical {
+            for &m in caps {
+                let sq = m.square_to();
+
+                let entry = &mut self.info.counter_correlation[side][prev][sq];
+                update(entry, m);
+            }
+        } else {
+            for &m in caps {
+                let sq = m.square_to();
+
+                let entry = &mut self.info.counter_correlation[side][prev][sq];
+                update(entry, m);
+            }
+
+            for &m in quiets {
+                let sq = m.square_to();
+
+                let entry = &mut self.info.counter_correlation[side][prev][sq];
+
+                update(entry, m);
+            }
+        }
     }
 
     pub fn update_corrhist(&mut self, b: &Board, depth: u8, diff: i32) {
