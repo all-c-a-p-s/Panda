@@ -1,11 +1,11 @@
 use crate::board::{BitBoard, Board, Colour};
-use crate::helper::{file, get_bit, lsfb, pop_bit, rank, set_bit, MAX_MOVES};
+use crate::helper::{MAX_MOVES, file, get_bit, lsfb, pop_bit, rank, set_bit};
 use crate::magic::{
-    get_bishop_attacks, get_queen_attacks, get_rook_attacks, BP_ATTACKS, K_ATTACKS, N_ATTACKS,
-    WP_ATTACKS,
+    BP_ATTACKS, K_ATTACKS, N_ATTACKS, WP_ATTACKS, get_bishop_attacks, get_queen_attacks,
+    get_rook_attacks,
 };
 use crate::r#move::{
-    encode_move, Move, MoveList, CASTLING_FLAG, EN_PASSANT_FLAG, NO_FLAG, NULL_MOVE, PROMOTION_FLAG,
+    CASTLING_FLAG, EN_PASSANT_FLAG, Move, MoveList, NO_FLAG, NULL_MOVE, PROMOTION_FLAG, encode_move,
 };
 
 use crate::types::{CastlingType, OccupancyIndex, Piece, PieceType, Square};
@@ -180,19 +180,25 @@ impl MoveList {
                     }
                 }
 
-                if (board.castling & CASTLING_MASKS[CastlingType::WhiteQueenside]) > 0 && board.occupancies[OccupancyIndex::BothOccupancies]
+                if (board.castling & CASTLING_MASKS[CastlingType::WhiteQueenside]) > 0
+                    && board.occupancies[OccupancyIndex::BothOccupancies]
                         & CASTLING_PATHS[CastlingType::WhiteQueenside]
                         == 0
-                        && !is_attacked(Square::E1, Colour::Black, board) && !is_attacked(Square::D1, Colour::Black, board) {
+                    && !is_attacked(Square::E1, Colour::Black, board)
+                    && !is_attacked(Square::D1, Colour::Black, board)
+                {
                     first_unused =
                         add_castling(&mut self.moves, Square::E1, Square::C1, first_unused);
                 }
             }
             Colour::Black => {
-                if (board.castling & CASTLING_MASKS[CastlingType::BlackKingside]) > 0 && board.occupancies[OccupancyIndex::BothOccupancies]
+                if (board.castling & CASTLING_MASKS[CastlingType::BlackKingside]) > 0
+                    && board.occupancies[OccupancyIndex::BothOccupancies]
                         & CASTLING_PATHS[CastlingType::BlackKingside]
                         == 0
-                        && !is_attacked(Square::E8, Colour::White, board) && !is_attacked(Square::F8, Colour::White, board) {
+                    && !is_attacked(Square::E8, Colour::White, board)
+                    && !is_attacked(Square::F8, Colour::White, board)
+                {
                     first_unused =
                         add_castling(&mut self.moves, Square::E8, Square::G8, first_unused);
                 }
@@ -613,6 +619,7 @@ pub fn check_en_passant(m: Move, b: &Board) -> bool {
             );
             relevant_blockers =
                 pop_bit(unsafe { m.square_to().sub_unchecked(8) }, relevant_blockers);
+            relevant_blockers = set_bit(m.square_to(), relevant_blockers);
             //SAFETY: there MUST be a king on the board
             get_rook_attacks(
                 unsafe { lsfb(b.bitboards[Piece::WK]).unwrap_unchecked() } as usize,
@@ -627,6 +634,8 @@ pub fn check_en_passant(m: Move, b: &Board) -> bool {
             );
             relevant_blockers =
                 pop_bit(unsafe { m.square_to().add_unchecked(8) }, relevant_blockers);
+            relevant_blockers = set_bit(m.square_to(), relevant_blockers);
+
             //SAFETY: there MUST be a king on the board
             get_rook_attacks(
                 unsafe { lsfb(b.bitboards[Piece::BK]).unwrap_unchecked() } as usize,
