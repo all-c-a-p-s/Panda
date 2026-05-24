@@ -22,11 +22,6 @@ pub const REDUCTION_LIMIT: u8 = 2;
 
 const FULL_DEPTH_MOVES: u8 = 1;
 
-const CORRHIST_GRAIN: i32 = 256;
-const CORRHIST_SCALE: i32 = 256;
-const CORRHIST_MAX: i32 = 256 * 32;
-pub const CORRHIST_SIZE: usize = 16_384;
-
 const HISTORY_MAX: i32 = 16_384;
 const CORRELATION_MAX: i32 = 4_096;
 
@@ -235,9 +230,6 @@ impl Thread<'_> {
         self.info.killer_moves[self.ply + 1] = None;
 
         let mut static_eval = evaluate(position);
-        if !singular {
-            static_eval = self.eval_with_corrhist(position, static_eval);
-        }
 
         if tt_hit
             && !((static_eval > tt_score && tt_bound == EntryFlag::LowerBound)
@@ -551,14 +543,6 @@ impl Thread<'_> {
                 TTEntry::new(depth, best_score, hash_flag, best_move, position.hash_key);
 
             self.tt.write(position.hash_key, hash_entry);
-
-            if !(in_check
-                || best_move.is_capture(position)
-                || (hash_flag == EntryFlag::LowerBound && best_score <= static_eval)
-                || (hash_flag == EntryFlag::UpperBound && best_score >= static_eval))
-            {
-                self.update_corrhist(position, depth, best_score - static_eval);
-            }
         }
 
         best_score
@@ -596,8 +580,7 @@ impl Thread<'_> {
             }
         }
 
-        let mut eval = evaluate(position);
-        eval = self.eval_with_corrhist(position, eval);
+        let eval = evaluate(position);
 
         let in_check = position.checkers != 0;
 
@@ -807,36 +790,6 @@ impl Thread<'_> {
         }
     }
 
-    pub fn update_corrhist(&mut self, b: &Board, depth: u8, diff: i32) {
-        let idx = (b.pawn_hash() % 16384) as usize;
-        let side = usize::from(b.side_to_move == Colour::White);
-
-        let entry = &mut self.info.corrhist[side][idx];
-
-        let new_weight = i32::from((depth + 1).min(16));
-        let scaled_diff = diff + CORRHIST_GRAIN;
-
-        *entry =
-            (*entry * (CORRHIST_SCALE - new_weight) + scaled_diff * new_weight) / CORRHIST_SCALE;
-        *entry = (*entry).clamp(-CORRHIST_MAX, CORRHIST_MAX);
-    }
-
-    #[must_use]
-    pub fn eval_with_corrhist(&self, b: &Board, raw_eval: i32) -> i32 {
-        let idx = (b.pawn_hash() % 16384) as usize;
-        let side = usize::from(b.side_to_move == Colour::White);
-
-        let entry = self.info.corrhist[side][idx];
-        (raw_eval + entry / CORRHIST_GRAIN).clamp(-MATE + 1, MATE - 1)
-    }
-
-    pub fn age_corrhist(&mut self) {
-        self.info
-            .corrhist
-            .iter_mut()
-            .for_each(|side| side.iter_mut().for_each(|k| *k /= 2));
-    }
-
     pub fn update_history(
         &mut self,
         b: &Board,
@@ -896,7 +849,6 @@ impl Thread<'_> {
         self.info.killer_moves = [None; MAX_PLY];
         self.info.history_table = [[0; 64]; 12];
         self.info.caphist_table = [[[0; 5]; 64]; 12];
-        self.age_corrhist();
     }
 }
 

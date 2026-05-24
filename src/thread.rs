@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use types::Square;
 
 use crate::read_param;
-use crate::search::{CORRHIST_SIZE, params};
+use crate::search::params;
 use crate::transposition::{TTRef, TranspositionTable};
 use crate::{Board, INFINITY, MAX_PLY, Move, MoveData, NULL_MOVE, iterative_deepening, types};
 
@@ -54,8 +54,6 @@ pub struct SearchInfo {
     pub counter_correlation: [[[i32; 64]; 64]; 2],
     pub followup_correlation: [[[i32; 64]; 64]; 2],
 
-    // TODO - mutable reference between threads to one table
-    pub corrhist: [[i32; CORRHIST_SIZE]; 2],
     pub killer_moves: [Option<Move>; MAX_PLY],
     pub excluded: [Option<Move>; MAX_PLY],
 }
@@ -130,7 +128,6 @@ impl Default for SearchInfo {
             nodetable: NodeTable::default(),
             history_table: [[0; 64]; 12],
             caphist_table: [[[0; 5]; 64]; 12],
-            corrhist: [[0; CORRHIST_SIZE]; 2],
 
             counter_correlation: [[[0; 64]; 64]; 2],
             followup_correlation: [[[0; 64]; 64]; 2],
