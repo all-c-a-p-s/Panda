@@ -258,7 +258,7 @@ impl Thread<'_> {
         // useful for considering whether or not to prune in the search:
         // - if improving then we should expect to fail high more
         // - and to fail low less
-        // opposite goes for opponent_worsening
+        // same goes for opponent_worsening
         let improving = match self.ply {
             2.. => self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval,
             _ => false,
@@ -269,10 +269,7 @@ impl Thread<'_> {
             _ => false,
         };
 
-        let opponent_captured = match self.ply {
-            1.. => self.info.ss[self.ply - 1].made_capture,
-            _ => false,
-        };
+        let opponent_captured = self.ply > 0 && self.info.ss[self.ply - 1].made_capture;
 
         // Static pruning: here we attempt to show that the position does not require any further
         // search
@@ -294,7 +291,7 @@ impl Thread<'_> {
                     + read_param!(RAZORING_MARGIN)
                         * i32::from(
                             depth + u8::from(improving)
-                                - u8::from(opponent_captured && !opponent_worsening),
+                                - u8::from(opponent_captured || !opponent_worsening),
                         )
                     <= alpha
             {
@@ -409,9 +406,11 @@ impl Thread<'_> {
                 continue;
             };
 
-            // update for countermove heuristic
             if self.ply < MAX_PLY {
                 self.info.ss[self.ply].square_moved_to = Some(m.square_to());
+                if tactical {
+                    self.info.ss[self.ply].made_capture = true;
+                }
             }
 
             let nodes_before = self.nodes;
@@ -419,11 +418,6 @@ impl Thread<'_> {
             legal += 1;
             self.ply += 1;
             // update after pruning above
-
-            // TODO: should be moved up?
-            if m.is_capture(position) {
-                self.info.ss[self.ply].made_capture = true;
-            }
 
             // A singular move is a move which seems to be forced or at least much stronger than
             // others. We should therefore extend to investigate it further.
