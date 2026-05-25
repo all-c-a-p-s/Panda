@@ -10,6 +10,8 @@ use crate::{Board, INFINITY, MAX_PLY, Move, MoveData, NULL_MOVE, iterative_deepe
 const MIN_MOVE_TIME: usize = 1; //make sure move time is never 0
 const MOVE_OVERHEAD: usize = 50;
 
+pub const CORRHIST_SIZE: usize = 16_384;
+
 //returns ideal time window, hard deadline
 #[must_use]
 pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize) -> (usize, usize) {
@@ -53,6 +55,8 @@ pub struct SearchInfo {
 
     pub counter_correlation: [[[i32; 64]; 64]; 2],
     pub followup_correlation: [[[i32; 64]; 64]; 2],
+
+    pub corrhist: [[i32; CORRHIST_SIZE]; 2],
 
     pub killer_moves: [Option<Move>; MAX_PLY],
     pub excluded: [Option<Move>; MAX_PLY],
@@ -131,6 +135,8 @@ impl Default for SearchInfo {
 
             counter_correlation: [[[0; 64]; 64]; 2],
             followup_correlation: [[[0; 64]; 64]; 2],
+
+            corrhist: [[0; CORRHIST_SIZE]; 2],
 
             killer_moves: [None; 64],
             excluded: [None; 64],

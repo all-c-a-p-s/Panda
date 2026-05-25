@@ -192,7 +192,8 @@ impl Board {
             [OccupancyIndex::WhiteOccupancies]
             | new_board.occupancies[OccupancyIndex::BlackOccupancies];
 
-        new_board.hash_key = new_board.hash();
+        new_board.hash_key = new_board.compute_hash();
+        new_board.pawn_hash = new_board.compute_pawn_hash();
         new_board.compute_checkers_and_pins();
         new_board.nnue = Accumulator::from_board(&new_board);
 

@@ -35,19 +35,6 @@ pub static EP_KEYS: [u64; 64] = init_hash_keys().1;
 pub static CASTLING_KEYS: [u64; 16] = init_hash_keys().2;
 pub const BLACK_TO_MOVE: u64 = init_hash_keys().3;
 
-#[must_use]
-pub fn pawn_hash_check(b: &Board) -> u64 {
-    let mut hash_key: u64 = 0;
-
-    for (square, &piece) in b.pieces_array.iter().enumerate() {
-        if piece == Some(Piece::WP) || piece == Some(Piece::BP) {
-            hash_key ^= PIECE_KEYS[square][piece.unwrap()];
-        }
-    }
-
-    hash_key
-}
-
 impl Board {
     /// This updates everything about the hash key EXCEPT castling rights,
     /// which it is more efficient to simply do after making the move
@@ -61,6 +48,11 @@ impl Board {
         self.hash_key ^= PIECE_KEYS[sq_from][piece];
         self.hash_key ^= PIECE_KEYS[sq_to][piece];
 
+        if piece == Piece::WP || piece == Piece::BP {
+            self.pawn_hash ^= PIECE_KEYS[sq_from][piece];
+            self.pawn_hash ^= PIECE_KEYS[sq_to][piece];
+        }
+
         if let Some(sq) = self.en_passant {
             self.hash_key ^= EP_KEYS[sq];
         }
@@ -69,6 +61,10 @@ impl Board {
             //not including en passant
             let captured_piece = self.get_piece_at(sq_to);
             self.hash_key ^= PIECE_KEYS[sq_to][captured_piece];
+
+            if captured_piece == Piece::WP || captured_piece == Piece::BP {
+                self.pawn_hash ^= PIECE_KEYS[sq_to][captured_piece];
+            }
         }
 
         if m.is_castling() {
@@ -97,9 +93,11 @@ impl Board {
             match piece {
                 Piece::WP => {
                     self.hash_key ^= PIECE_KEYS[unsafe { sq_to.sub_unchecked(8) }][Piece::BP];
+                    self.pawn_hash ^= PIECE_KEYS[unsafe { sq_to.sub_unchecked(8) }][Piece::BP];
                 }
                 Piece::BP => {
                     self.hash_key ^= PIECE_KEYS[unsafe { sq_to.add_unchecked(8) }][Piece::WP];
+                    self.pawn_hash ^= PIECE_KEYS[unsafe { sq_to.add_unchecked(8) }][Piece::WP];
                 }
                 _ => unreachable!(),
             }
@@ -107,7 +105,8 @@ impl Board {
 
         if m.is_promotion() {
             self.hash_key ^= PIECE_KEYS[sq_to][piece];
-            //undo operation from before (works bc XOR is its own inverse)
+            self.pawn_hash ^= PIECE_KEYS[sq_to][piece];
+            //undo operation from before
             let promoted_piece = match piece {
                 Piece::WP => m.promoted_piece().to_white_piece(),
                 Piece::BP => m.promoted_piece().to_white_piece().opposite(), //only type is encoded in the move
@@ -128,7 +127,22 @@ impl Board {
     }
 
     #[must_use]
-    pub fn hash(&self) -> u64 {
+    pub fn compute_pawn_hash(&self) -> u64 {
+        let mut hash_key: u64 = 0;
+
+        for (square, &piece) in self.pieces_array.iter().enumerate() {
+            piece.inspect(|&x| {
+                if x == Piece::WP || x == Piece::BP {
+                    hash_key ^= PIECE_KEYS[square][x];
+                }
+            });
+        }
+
+        hash_key
+    }
+
+    #[must_use]
+    pub fn compute_hash(&self) -> u64 {
         let mut hash_key: u64 = 0;
 
         for (square, &piece) in self.pieces_array.iter().enumerate() {
@@ -172,12 +186,19 @@ mod tests {
                     panic!("invalid move {}", moves.moves[i].uci());
                 };
 
-                let correct_hash = b.hash();
+                let correct_hash = b.compute_hash();
+                let correct_pawn_hash = b.compute_pawn_hash();
 
                 if b.hash_key != correct_hash {
                     b.print_board();
                     moves.moves[i].print_move();
                     panic!("hash update failed");
+                }
+
+                if b.pawn_hash != correct_pawn_hash {
+                    b.print_board();
+                    moves.moves[i].print_move();
+                    panic!("pawn hash update failed");
                 }
 
                 added = hash_update_test(depth - 1, b);

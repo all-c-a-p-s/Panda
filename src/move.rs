@@ -43,6 +43,7 @@ pub struct Commit {
     pub fifty_move_reset: u8,
     pub piece_captured: Option<Piece>,
     pub hash_key: u64,
+    pub pawn_hash: u64,
     pub pinned: BitBoard,
     pub checkers: BitBoard,
 }
@@ -217,6 +218,7 @@ impl Board {
             Colour::Black => Colour::White,
         };
         self.hash_key = c.hash_key;
+        self.pawn_hash = c.pawn_hash;
 
         let to = m.square_to();
         let from = m.square_from();
@@ -357,6 +359,7 @@ impl Board {
             fifty_move_reset: self.fifty_move,
             piece_captured: None,
             hash_key: self.hash_key,
+            pawn_hash: self.pawn_hash,
             pinned: self.pinned,
             checkers: self.checkers,
         };
