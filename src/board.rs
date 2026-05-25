@@ -531,7 +531,7 @@ impl Board {
             return true;
         }
 
-        for key in self.history.iter().take(self.ply).rev() {
+        for key in self.history.iter().take(self.ply - 1) {
             if *key == self.hash_key {
                 return true;
                 //return true on one repetition because otherwise the third
