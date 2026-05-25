@@ -599,6 +599,8 @@ impl Thread<'_> {
 
         let mut scores = captures.get_scores(self, position, &best_move);
 
+        let mut not_mated = false;
+
         while let Some((m, _ms)) = captures.get_next(&mut scores) {
             if m.is_capture(position) {
                 // if not capture then must be a check evasion
@@ -609,6 +611,8 @@ impl Thread<'_> {
                 if worst_case > beta {
                     return beta;
                 }
+            } else if not_mated {
+                continue;
             }
 
             //next check if we fail SEE by threshold
@@ -629,6 +633,8 @@ impl Thread<'_> {
             let Ok(commit) = position.try_move(m) else {
                 continue;
             };
+
+            not_mated = true;
 
             self.ply += 1;
 
