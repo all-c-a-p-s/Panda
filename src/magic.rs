@@ -1,5 +1,7 @@
 use crate::board::{BitBoard, Colour};
-use crate::helper::{A_FILE, B_FILE, G_FILE, H_FILE, coordinate, count, get_bit, lsfb, pop_bit, set_bit};
+use crate::helper::{
+    A_FILE, B_FILE, G_FILE, H_FILE, coordinate, count, get_bit, lsfb, pop_bit, set_bit,
+};
 use crate::rng::magic_candidate;
 use crate::types::Square;
 // max number of relevant blocker bits
@@ -8,6 +10,23 @@ pub enum SliderType {
     Bishop,
     Rook,
 }
+
+#[macro_export]
+macro_rules! cfor {
+    ($init: stmt; $cond: expr; $step: expr; $body: block) => {
+        {
+            $init
+            #[allow(while_true)]
+            while $cond {
+                $body;
+
+                $step;
+            }
+        }
+    }
+}
+
+pub(crate) use cfor;
 
 // bits attacked for each square
 #[rustfmt::skip]
@@ -78,94 +97,75 @@ pub const ROOK_EDGE_RAYS: [BitBoard; 64] = {
 
 //includes edge of board
 const fn bishop_edge_rays(square: usize) -> BitBoard {
-    let mut attacks: BitBoard = 0;
-    let square_rank: usize = square / 8;
-    let square_file: usize = square % 8;
-    let mut rank: usize = square_rank;
-    let mut file: usize = square_file;
-    while rank >= 1 && file >= 1 {
-        rank -= 1;
-        file -= 1; //file and rank decreasing
-        attacks = set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, attacks);
-    }
+    let mut attacks = 0;
+    let square_rank = square / 8;
+    let square_file = square % 8;
 
-    rank = square_rank;
-    file = square_file;
-    while rank <= 6 && file >= 1 {
-        rank += 1;
-        file -= 1; // rank increasing, file decreasing
+    cfor!(let (mut rank, mut file) = (square_rank, square_file); rank >= 1 && file >= 1; ();{
+        (rank, file) = (rank - 1, file - 1);
         attacks = set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, attacks);
-    }
+    });
 
-    rank = square_rank;
-    file = square_file;
-    while rank >= 1 && file <= 6 {
-        rank -= 1;
-        file += 1; //rank increasing, file decreasing
+    cfor!(let (mut rank, mut file) = (square_rank, square_file); rank <= 6 && file >= 1; ();{
+        (rank, file) = (rank + 1, file - 1);
         attacks = set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, attacks);
-    }
+    });
 
-    rank = square_rank;
-    file = square_file;
-    while rank <= 6 && file <= 6 {
-        rank += 1;
-        file += 1; //both increasing
+    cfor!(let (mut rank, mut file) = (square_rank, square_file); rank >= 1 && file <= 6; ();{
+        (rank, file) = (rank - 1, file + 1);
         attacks = set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, attacks);
-    }
+    });
+
+    cfor!(let (mut rank, mut file) = (square_rank, square_file); rank <= 6 && file <= 6; ();{
+        (rank, file) = (rank + 1, file + 1);
+        attacks = set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, attacks);
+    });
+
     attacks
 }
 
 const fn rook_edge_rays(square: usize) -> BitBoard {
-    let mut attacks: BitBoard = 0;
-    let square_rank: usize = square / 8;
-    let square_file: usize = square % 8;
-    let mut rank = square_rank;
-    let mut file = square_file;
-    while rank <= 6 {
+    let mut attacks = 0;
+    let square_rank = square / 8;
+    let square_file = square % 8;
+
+    cfor!(let mut rank = square_rank; rank <= 6; ();{
         rank += 1;
-        attacks = set_bit(
-            unsafe { Square::from((rank * 8 + square_file) as u8) },
-            attacks,
-        );
-    }
-    rank = square_rank;
-    while rank >= 1 {
+        attacks = set_bit(unsafe { Square::from((rank * 8 + square_file) as u8) }, attacks);
+    });
+
+    cfor!(let mut rank = square_rank; rank >= 1; ();{
         rank -= 1;
-        attacks = set_bit(
-            unsafe { Square::from((rank * 8 + square_file) as u8) },
-            attacks,
-        );
-    }
-    while file <= 6 {
+        attacks = set_bit(unsafe { Square::from((rank * 8 + square_file) as u8) }, attacks);
+    });
+
+    cfor!(let mut file = square_file; file <= 6; ();{
         file += 1;
-        attacks = set_bit(
-            unsafe { Square::from((square_rank * 8 + file) as u8) },
-            attacks,
-        );
-    }
-    file = square_file;
-    while file >= 1 {
+        attacks = set_bit(unsafe { Square::from((square_rank * 8 + file) as u8) }, attacks);
+    });
+
+    cfor!(let mut file = square_file; file >= 1; ();{
         file -= 1;
-        attacks = set_bit(
-            unsafe { Square::from((square_rank * 8 + file) as u8) },
-            attacks,
-        );
-    }
+        attacks = set_bit(unsafe { Square::from((square_rank * 8 + file) as u8) }, attacks);
+    });
+
     attacks
 }
 
 //functions with attack maps for non-sliders
-#[must_use] pub const fn mask_pawn_attacks(square: usize, side: Colour) -> BitBoard {
+#[must_use]
+pub const fn mask_pawn_attacks(square: usize, side: Colour) -> BitBoard {
     //generate capturing attacks
-    let p: BitBoard = set_bit(unsafe { Square::from(square as u8) }, 0);
+    let p = set_bit(unsafe { Square::from(square as u8) }, 0);
     match side {
         Colour::Black => ((p >> 9) & !H_FILE) | ((p >> 7) & !A_FILE),
         Colour::White => ((p << 7) & !H_FILE) | ((p << 9) & !A_FILE),
     }
 }
 
-#[must_use] pub const fn mask_knight_attacks(square: usize) -> BitBoard {
-    let n: BitBoard = set_bit(unsafe { Square::from(square as u8) }, 0);
+#[must_use]
+pub const fn mask_knight_attacks(square: usize) -> BitBoard {
+    let n = set_bit(unsafe { Square::from(square as u8) }, 0);
     ((n >> 17) & !H_FILE)
         | ((n >> 15) & !A_FILE)
         | ((n >> 10) & !(H_FILE | G_FILE))
@@ -176,8 +176,9 @@ const fn rook_edge_rays(square: usize) -> BitBoard {
         | ((n << 17) & !A_FILE)
 }
 
-#[must_use] pub const fn mask_king_attacks(square: usize) -> BitBoard {
-    let k: BitBoard = set_bit(unsafe { Square::from(square as u8) }, 0);
+#[must_use]
+pub const fn mask_king_attacks(square: usize) -> BitBoard {
+    let k = set_bit(unsafe { Square::from(square as u8) }, 0);
     ((k >> 9) & !H_FILE)
         | ((k >> 7) & !A_FILE)
         | ((k << 7) & !H_FILE)
@@ -188,219 +189,186 @@ const fn rook_edge_rays(square: usize) -> BitBoard {
         | (k >> 8)
 }
 
-#[must_use] pub const fn bishop_rays(square: usize) -> BitBoard {
+#[must_use]
+pub const fn bishop_rays(square: usize) -> BitBoard {
     //separate function needed for hashing
     //does not include squares on the edge of the board as
     //bishop cannot go past these anyway
     //blockers are treated as pieces of opposite colour (can be captured)
-    let mut attacks: BitBoard = 0;
-    let square_rank: usize = square / 8;
-    let square_file: usize = square % 8;
-    let mut rank: usize = square_rank;
-    let mut file: usize = square_file;
-    while rank > 1 && file > 1 {
+    let mut attacks = 0;
+    let square_rank = square / 8;
+    let square_file = square % 8;
+
+    cfor!(let (mut rank, mut file) = (square_rank, square_file); rank > 1 && file > 1; ();{
         rank -= 1;
-        file -= 1; //file and rank decreasing
+        file -= 1;
         attacks = set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, attacks);
-    }
+    });
 
-    rank = square_rank;
-    file = square_file;
-    while rank < 6 && file > 1 {
+    cfor!(let (mut rank, mut file) = (square_rank, square_file); rank < 6 && file > 1; ();{
         rank += 1;
-        file -= 1; // rank increasing, file decreasing
+        file -= 1;
         attacks = set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, attacks);
-    }
+    });
 
-    rank = square_rank;
-    file = square_file;
-    while rank > 1 && file < 6 {
+    cfor!(let (mut rank, mut file) = (square_rank, square_file); rank > 1 && file < 6; ();{
         rank -= 1;
-        file += 1; //rank increasing, file decreasing
+        file += 1;
         attacks = set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, attacks);
-    }
+    });
 
-    rank = square_rank;
-    file = square_file;
-    while rank < 6 && file < 6 {
+    cfor!(let (mut rank, mut file) = (square_rank, square_file); rank < 6 && file < 6; ();{
         rank += 1;
-        file += 1; //both increasing
+        file += 1;
         attacks = set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, attacks);
-    }
+    });
     attacks
 }
 
-#[must_use] pub const fn mask_bishop_attacks(square: usize, blockers: BitBoard) -> BitBoard {
+#[must_use]
+pub const fn mask_bishop_attacks(square: usize, blockers: BitBoard) -> BitBoard {
     //does not include squares on the edge of the board as
     //bishop cannot go past these anyway
     //blockers are treated as pieces of opposite colour (can be captured)
-    let mut attacks: BitBoard = 0;
-    let square_rank: usize = square / 8;
-    let square_file: usize = square % 8;
-    let mut rank: usize = square_rank;
-    let mut file: usize = square_file;
-    while rank > 0 && file > 0 {
+    let mut attacks = 0;
+    let square_rank = square / 8;
+    let square_file = square % 8;
+
+    cfor!(let (mut rank, mut file) = (square_rank, square_file); rank > 0 && file > 0; ();{
         rank -= 1;
-        file -= 1; //file and rank decreasing
+        file -= 1;
         attacks = set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, attacks);
         if (set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, 0) & blockers) > 0 {
             break;
         }
-    }
+    });
 
-    rank = square_rank;
-    file = square_file;
-    while rank < 7 && file > 0 {
+    cfor!(let (mut rank, mut file) = (square_rank, square_file); rank < 7 && file > 0; ();{
         rank += 1;
-        file -= 1; // rank increasing, file decreasing
+        file -= 1;
         attacks = set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, attacks);
         if (set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, 0) & blockers) > 0 {
             break;
         }
-    }
+    });
 
-    rank = square_rank;
-    file = square_file;
-    while rank > 0 && file < 7 {
+    cfor!(let (mut rank, mut file) = (square_rank, square_file); rank > 0 && file < 7; ();{
         rank -= 1;
-        file += 1; //rank increasing, file decreasing
+        file += 1;
         attacks = set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, attacks);
         if (set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, 0) & blockers) > 0 {
             break;
         }
-    }
+    });
 
-    rank = square_rank;
-    file = square_file;
-    while rank < 7 && file < 7 {
+    cfor!(let (mut rank, mut file) = (square_rank, square_file); rank < 7 && file < 7; ();{
         rank += 1;
-        file += 1; //both increasing
+        file += 1;
         attacks = set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, attacks);
         if (set_bit(unsafe { Square::from((rank * 8 + file) as u8) }, 0) & blockers) > 0 {
             break;
         }
-    }
+    });
+
     attacks
 }
 
-#[must_use] pub const fn rook_rays(square: usize) -> BitBoard {
+#[must_use]
+pub const fn rook_rays(square: usize) -> BitBoard {
     //rook attacks without blockers
     //separate function for hashing
-    let mut attacks: BitBoard = 0;
-    let square_rank: usize = square / 8;
-    let square_file: usize = square % 8;
-    let mut rank = square_rank;
-    let mut file = square_file;
-    while rank < 6 {
+    let mut attacks = 0;
+    let square_rank = square / 8;
+    let square_file = square % 8;
+
+    cfor!(let mut rank = square_rank; rank < 6; ();{
         rank += 1;
         attacks = set_bit(
             unsafe { Square::from((rank * 8 + square_file) as u8) },
             attacks,
         );
-    }
-    rank = square_rank;
-    while rank > 1 {
+    });
+
+    cfor!(let mut rank = square_rank; rank > 1; ();{
         rank -= 1;
         attacks = set_bit(
             unsafe { Square::from((rank * 8 + square_file) as u8) },
             attacks,
         );
-    }
-    while file < 6 {
+    });
+
+    cfor!(let mut file = square_file; file < 6; ();{
         file += 1;
         attacks = set_bit(
             unsafe { Square::from((square_rank * 8 + file) as u8) },
             attacks,
         );
-    }
-    file = square_file;
-    while file > 1 {
+    });
+
+    cfor!(let mut file = square_file; file > 1; ();{
         file -= 1;
         attacks = set_bit(
             unsafe { Square::from((square_rank * 8 + file) as u8) },
             attacks,
         );
-    }
+    });
+
     attacks
 }
 
-#[must_use] pub const fn mask_rook_attacks(square: usize, blockers: BitBoard) -> BitBoard {
+#[must_use]
+pub const fn mask_rook_attacks(square: usize, blockers: BitBoard) -> BitBoard {
     //rook attacks accounting for blockers
-    let mut attacks: BitBoard = 0;
-    let square_rank: usize = square / 8;
-    let square_file: usize = square % 8;
-    let mut rank = square_rank;
-    let mut file = square_file;
-    while rank < 7 {
+    let mut attacks = 0;
+    let square_rank = square / 8;
+    let square_file = square % 8;
+
+    cfor!(let mut rank = square_rank; rank < 7; ();{
         rank += 1;
-        attacks = set_bit(
-            unsafe { Square::from((rank * 8 + square_file) as u8) },
-            attacks,
-        );
-        if get_bit(
-            unsafe { Square::from((rank * 8 + square_file) as u8) },
-            blockers,
-        ) > 0
-        {
+        attacks = set_bit(unsafe { Square::from((rank * 8 + square_file) as u8) }, attacks);
+        if get_bit(unsafe { Square::from((rank * 8 + square_file) as u8) }, blockers) > 0 {
             break;
         }
-    }
-    rank = square_rank;
-    while rank > 0 {
+    });
+
+    cfor!(let mut rank = square_rank; rank > 0; ();{
         rank -= 1;
-        attacks = set_bit(
-            unsafe { Square::from((rank * 8 + square_file) as u8) },
-            attacks,
-        );
-        if get_bit(
-            unsafe { Square::from((rank * 8 + square_file) as u8) },
-            blockers,
-        ) > 0
-        {
+        attacks = set_bit(unsafe { Square::from((rank * 8 + square_file) as u8) }, attacks);
+        if get_bit(unsafe { Square::from((rank * 8 + square_file) as u8) }, blockers) > 0 {
             break;
         }
-    }
-    while file < 7 {
+    });
+
+    cfor!(let mut file = square_file; file < 7; ();{
         file += 1;
-        attacks = set_bit(
-            unsafe { Square::from((square_rank * 8 + file) as u8) },
-            attacks,
-        );
-        if get_bit(
-            unsafe { Square::from((square_rank * 8 + file) as u8) },
-            blockers,
-        ) > 0
-        {
+        attacks = set_bit(unsafe { Square::from((square_rank * 8 + file) as u8) }, attacks);
+        if get_bit(unsafe { Square::from((square_rank * 8 + file) as u8) }, blockers) > 0 {
             break;
         }
-    }
-    file = square_file;
-    while file > 0 {
+    });
+
+    cfor!(let mut file = square_file; file > 0; ();{
         file -= 1;
-        attacks = set_bit(
-            unsafe { Square::from((square_rank * 8 + file) as u8) },
-            attacks,
-        );
-        if get_bit(
-            unsafe { Square::from((square_rank * 8 + file) as u8) },
-            blockers,
-        ) > 0
-        {
+        attacks = set_bit(unsafe { Square::from((square_rank * 8 + file) as u8) }, attacks);
+        if get_bit(unsafe { Square::from((square_rank * 8 + file) as u8) }, blockers) > 0 {
             break;
         }
-    }
+    });
+
     attacks
 }
 
-#[must_use] pub const fn mask_queen_attacks(square: usize, blockers: BitBoard) -> BitBoard {
+#[must_use]
+pub const fn mask_queen_attacks(square: usize, blockers: BitBoard) -> BitBoard {
     mask_bishop_attacks(square, blockers) | mask_rook_attacks(square, blockers)
 }
 
-#[must_use] pub const fn set_blockers(index: usize, bits_in_mask: usize, m: BitBoard) -> BitBoard {
+#[must_use]
+pub const fn set_blockers(index: usize, bits_in_mask: usize, m: BitBoard) -> BitBoard {
     //essentially count to 2^bits_in_mask - 1 in binary by toggling
     //the bits in the attack mask
-    let mut blocker: u64 = 0;
-    let mut i: usize = 0;
+    let mut blocker = 0;
+    let mut i = 0;
     let mut mask = m;
     while i < bits_in_mask {
         let b = match lsfb(mask) {
@@ -417,7 +385,8 @@ const fn rook_edge_rays(square: usize) -> BitBoard {
 }
 
 //generate magic for given square
-#[must_use] pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> BitBoard {
+#[must_use]
+pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> BitBoard {
     let (mut blockers, mut attacks) = ([0u64; 4096], [0u64; 4096]);
     let attack_mask = match slider {
         SliderType::Bishop => bishop_rays(square),
@@ -445,7 +414,7 @@ const fn rook_edge_rays(square: usize) -> BitBoard {
             let magic_index: usize = ((blockers[i] * magic) >> (64 - relevant_bits))
                 .try_into()
                 .unwrap(); //shift ensures it is between 0 and 4095
-                           //test magic number multiplication
+            //test magic number multiplication
             if used_attacks[magic_index] == 0 {
                 used_attacks[magic_index] = attacks[i];
             } else {
@@ -662,7 +631,7 @@ pub static mut ROOK_ATTACKS: [[BitBoard; 4096]; 64] = [[0u64; 4096]; 64];
 // init() functions calculate BISHOP_RAYS, BISHOP_ATTACKS, ROOK_RAYS, ROOK_ATTACKS
 pub fn init_bishop_attacks() {
     for square in 0..64 {
-        let relevant_bits: usize = count(BISHOP_RAYS[square]);
+        let relevant_bits = count(BISHOP_RAYS[square]);
         let blocker_indices = 1 << relevant_bits;
         for i in 0..blocker_indices {
             let blockers = set_blockers(i, relevant_bits, BISHOP_RAYS[square]);
@@ -678,7 +647,7 @@ pub fn init_bishop_attacks() {
 
 pub fn init_rook_attacks() {
     for square in 0..64 {
-        let relevant_bits: usize = count(ROOK_RAYS[square]);
+        let relevant_bits = count(ROOK_RAYS[square]);
         let blocker_indices = 1 << relevant_bits;
         for i in 0..blocker_indices {
             let blockers = set_blockers(i, relevant_bits, ROOK_RAYS[square]);
@@ -696,25 +665,28 @@ pub fn init_slider_attacks() {
     init_rook_attacks();
 }
 
-#[must_use] pub fn get_bishop_attacks(square: usize, blockers: BitBoard) -> BitBoard {
-    let mut b: BitBoard = blockers;
+#[must_use]
+pub fn get_bishop_attacks(square: usize, blockers: BitBoard) -> BitBoard {
+    let mut b = blockers;
     b &= BISHOP_RAYS[square]; //bits where blockers block rays
     b = b.wrapping_mul(BISHOP_MAGICS[square]); //magic hashing
     b >>= 64 - BISHOP_RELEVANT_BITS[square];
     unsafe { BISHOP_ATTACKS[square][b as usize] }
 }
 
-#[must_use] pub fn get_rook_attacks(square: usize, blockers: BitBoard) -> BitBoard {
-    let mut b: BitBoard = blockers;
+#[must_use]
+pub fn get_rook_attacks(square: usize, blockers: BitBoard) -> BitBoard {
+    let mut b = blockers;
     b &= ROOK_RAYS[square];
     b = b.wrapping_mul(ROOK_MAGICS[square]);
     b >>= 64 - ROOK_RELEVANT_BITS[square];
     unsafe { ROOK_ATTACKS[square][b as usize] }
 }
 
-#[must_use] pub fn get_queen_attacks(square: usize, blockers: BitBoard) -> BitBoard {
-    let mut bishop_blockers: BitBoard = blockers;
-    let mut rook_blockers: BitBoard = blockers;
+#[must_use]
+pub fn get_queen_attacks(square: usize, blockers: BitBoard) -> BitBoard {
+    let mut bishop_blockers = blockers;
+    let mut rook_blockers = blockers;
 
     bishop_blockers &= BISHOP_RAYS[square];
     bishop_blockers = bishop_blockers.wrapping_mul(BISHOP_MAGICS[square]);

@@ -66,8 +66,8 @@ pub const fn pop_bit(square: Square, bitboard: BitBoard) -> BitBoard {
 #[inline(always)]
 #[must_use]
 pub const fn count(bitboard: BitBoard) -> usize {
-    let mut prev: BitBoard = bitboard;
-    let mut count: usize = 0;
+    let mut prev = bitboard;
+    let mut count = 0;
     while prev > 0 {
         prev &= prev - 1; //toggle least significant bit
         count += 1;
@@ -89,7 +89,7 @@ pub const fn lsfb(bitboard: BitBoard) -> Option<Square> {
 pub fn square(sq: &str) -> Square {
     let square = sq.to_string();
     assert!((square.len() == 2), "invalid square name");
-    let last: char = match square.chars().last() {
+    let last = match square.chars().last() {
         Some(c) => c,
         None => panic!("failed to get last character"),
     };
@@ -97,18 +97,18 @@ pub fn square(sq: &str) -> Square {
         Some(r) => r,
         None => panic!("failed to convert rank to int"),
     } as usize;
-    let first: char = square.chars().collect::<Vec<char>>()[0];
-    let file: usize = file_indices()[&first];
+    let first = square.chars().next().unwrap();
+    let file = file_indices()[&first];
     unsafe { Square::from(((rank - 1) * 8 + file) as u8) }
 }
 
 #[must_use]
 pub fn coordinate(sq: Square) -> String {
-    let mut files: HashMap<usize, char> = HashMap::new();
+    let mut files = HashMap::new();
     for (file, idx) in file_indices() {
         files.insert(idx, file); //invert hashmap
     }
-    let rank: u8 = sq as u8 / 8;
+    let rank = sq as u8 / 8;
     let r = format!("{}", rank + 1); //+1 for zero-indexed
     let file = unsafe { sq.sub_unchecked(rank * 8) } as usize;
     let f = files[&file];
@@ -134,12 +134,12 @@ pub const fn piece_type(piece: Piece) -> PieceType {
 }
 
 pub fn print_bitboard(bitboard: BitBoard) {
-    let mut board_ranks: Vec<String> = Vec::new();
+    let mut board_ranks = Vec::new();
     for rank in 0..8 {
         let mut rank_str = String::new();
         for file in 0..8 {
             let square = rank * 8 + file;
-            let mut d: String = String::from("0 ");
+            let mut d = String::from("0 ");
             if (bitboard & (1 << square)) != 0 {
                 d = String::from("1 ");
             }

@@ -1,41 +1,31 @@
+use crate::cfor;
 use crate::rng::XorShiftU64;
 use crate::types::{Piece, Square};
 use crate::{Board, Colour, Move};
 
-macro_rules! cfor {
-    ($init: stmt; $cond: expr; $step: expr; $body: block) => {
-        {
-            $init
-            #[allow(while_true)]
-            while $cond {
-                $body;
-
-                $step;
-            }
-        }
-    }
-}
-
 const fn init_hash_keys() -> ([[u64; 12]; 64], [u64; 64], [u64; 16], u64) {
     let mut rng = XorShiftU64::new();
-    let mut piece_keys = [[0; 12]; 64];
 
+    let mut piece_keys = [[0; 12]; 64];
     cfor!(let mut sq = 0; sq < 64; sq += 1; {
         cfor!(let mut i = 0; i < 12; i += 1; {
             let r = rng.next();
             piece_keys[sq][i] = r;
         });
     });
+
     let mut ep_keys = [0; 64];
     cfor!(let mut sq = 0; sq < 64; sq += 1; {
         let r = rng.next();
         ep_keys[sq] = r;
     });
+
     let mut castling_keys = [0; 16];
     cfor!(let mut i = 0; i < 16; i += 1; {
         let r = rng.next();
         castling_keys[i] = r;
     });
+
     let btm = rng.next();
     (piece_keys, ep_keys, castling_keys, btm)
 }
@@ -46,30 +36,7 @@ pub static CASTLING_KEYS: [u64; 16] = init_hash_keys().2;
 pub const BLACK_TO_MOVE: u64 = init_hash_keys().3;
 
 #[must_use]
-pub fn hash(b: &Board) -> u64 {
-    let mut hash_key: u64 = 0;
-
-    for (square, &piece) in b.pieces_array.iter().enumerate() {
-        if let Some(piece) = piece {
-            hash_key ^= PIECE_KEYS[square][piece];
-        }
-    }
-
-    if let Some(sq) = b.en_passant {
-        hash_key ^= EP_KEYS[sq];
-    }
-
-    hash_key ^= CASTLING_KEYS[b.castling as usize];
-
-    if b.side_to_move == Colour::Black {
-        hash_key ^= BLACK_TO_MOVE;
-    }
-
-    hash_key
-}
-
-#[must_use]
-pub fn pawn_hash(b: &Board) -> u64 {
+pub fn pawn_hash_check(b: &Board) -> u64 {
     let mut hash_key: u64 = 0;
 
     for (square, &piece) in b.pieces_array.iter().enumerate() {
@@ -81,95 +48,114 @@ pub fn pawn_hash(b: &Board) -> u64 {
     hash_key
 }
 
-/// This updates everything about the hash key EXCEPT castling rights,
-/// which it is more efficient to simply do after making the move
-#[must_use]
-pub fn hash_update(hash_key: u64, m: &Move, b: &Board) -> u64 {
-    //call with board state before move was made
-    let mut res = hash_key;
+impl Board {
+    /// This updates everything about the hash key EXCEPT castling rights,
+    /// which it is more efficient to simply do after making the move
+    pub fn hash_update(&mut self, m: &Move) {
+        //call with board state before move was made
 
-    let sq_to = m.square_to();
-    let sq_from = m.square_from();
-    let piece = m.piece_moved(b);
+        let sq_to = m.square_to();
+        let sq_from = m.square_from();
+        let piece = m.piece_moved(self);
 
-    res ^= PIECE_KEYS[sq_from][piece];
-    res ^= PIECE_KEYS[sq_to][piece];
+        self.hash_key ^= PIECE_KEYS[sq_from][piece];
+        self.hash_key ^= PIECE_KEYS[sq_to][piece];
 
-    if let Some(sq) = b.en_passant {
-        res ^= EP_KEYS[sq];
-    }
-
-    if m.is_capture(b) {
-        //not including en passant
-        let captured_piece = b.get_piece_at(sq_to);
-        res ^= PIECE_KEYS[sq_to][captured_piece];
-    }
-
-    if m.is_castling() {
-        match sq_to {
-            Square::C1 => {
-                res ^= PIECE_KEYS[Square::A1][Piece::WR];
-                res ^= PIECE_KEYS[Square::D1][Piece::WR];
-            }
-            Square::G1 => {
-                res ^= PIECE_KEYS[Square::H1][Piece::WR];
-                res ^= PIECE_KEYS[Square::F1][Piece::WR];
-            }
-            Square::C8 => {
-                res ^= PIECE_KEYS[Square::A8][Piece::BR];
-                res ^= PIECE_KEYS[Square::D8][Piece::BR];
-            }
-            Square::G8 => {
-                res ^= PIECE_KEYS[Square::H8][Piece::BR];
-                res ^= PIECE_KEYS[Square::F8][Piece::BR];
-            }
-            _ => unreachable!(),
+        if let Some(sq) = self.en_passant {
+            self.hash_key ^= EP_KEYS[sq];
         }
-    }
 
-    if m.is_en_passant() {
-        match piece {
-            Piece::WP => {
-                res ^= PIECE_KEYS[unsafe { sq_to.sub_unchecked(8) }][Piece::BP];
-            }
-            Piece::BP => {
-                res ^= PIECE_KEYS[unsafe { sq_to.add_unchecked(8) }][Piece::WP];
-            }
-            _ => unreachable!(),
+        if m.is_capture(self) {
+            //not including en passant
+            let captured_piece = self.get_piece_at(sq_to);
+            self.hash_key ^= PIECE_KEYS[sq_to][captured_piece];
         }
-    }
 
-    if m.is_promotion() {
-        res ^= PIECE_KEYS[sq_to][piece];
-        //undo operation from before (works bc XOR is its own inverse)
-        let promoted_piece = match piece {
-            Piece::WP => m.promoted_piece().to_white_piece(),
-            Piece::BP => m.promoted_piece().to_white_piece().opposite(), //only type is encoded in the move
-            _ => unreachable!(),
-        };
-        res ^= PIECE_KEYS[sq_to][promoted_piece];
-    }
-
-    if m.is_double_push(b) {
-        match piece {
-            Piece::WP => res ^= EP_KEYS[unsafe { sq_to.sub_unchecked(8) }],
-            Piece::BP => res ^= EP_KEYS[unsafe { sq_to.add_unchecked(8) }],
-            _ => unreachable!(),
+        if m.is_castling() {
+            match sq_to {
+                Square::C1 => {
+                    self.hash_key ^= PIECE_KEYS[Square::A1][Piece::WR];
+                    self.hash_key ^= PIECE_KEYS[Square::D1][Piece::WR];
+                }
+                Square::G1 => {
+                    self.hash_key ^= PIECE_KEYS[Square::H1][Piece::WR];
+                    self.hash_key ^= PIECE_KEYS[Square::F1][Piece::WR];
+                }
+                Square::C8 => {
+                    self.hash_key ^= PIECE_KEYS[Square::A8][Piece::BR];
+                    self.hash_key ^= PIECE_KEYS[Square::D8][Piece::BR];
+                }
+                Square::G8 => {
+                    self.hash_key ^= PIECE_KEYS[Square::H8][Piece::BR];
+                    self.hash_key ^= PIECE_KEYS[Square::F8][Piece::BR];
+                }
+                _ => unreachable!(),
+            }
         }
+
+        if m.is_en_passant() {
+            match piece {
+                Piece::WP => {
+                    self.hash_key ^= PIECE_KEYS[unsafe { sq_to.sub_unchecked(8) }][Piece::BP];
+                }
+                Piece::BP => {
+                    self.hash_key ^= PIECE_KEYS[unsafe { sq_to.add_unchecked(8) }][Piece::WP];
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        if m.is_promotion() {
+            self.hash_key ^= PIECE_KEYS[sq_to][piece];
+            //undo operation from before (works bc XOR is its own inverse)
+            let promoted_piece = match piece {
+                Piece::WP => m.promoted_piece().to_white_piece(),
+                Piece::BP => m.promoted_piece().to_white_piece().opposite(), //only type is encoded in the move
+                _ => unreachable!(),
+            };
+            self.hash_key ^= PIECE_KEYS[sq_to][promoted_piece];
+        }
+
+        if m.is_double_push(self) {
+            match piece {
+                Piece::WP => self.hash_key ^= EP_KEYS[unsafe { sq_to.sub_unchecked(8) }],
+                Piece::BP => self.hash_key ^= EP_KEYS[unsafe { sq_to.add_unchecked(8) }],
+                _ => unreachable!(),
+            }
+        }
+
+        self.hash_key ^= BLACK_TO_MOVE;
     }
 
-    res ^= BLACK_TO_MOVE;
-    res
+    #[must_use]
+    pub fn hash(&self) -> u64 {
+        let mut hash_key: u64 = 0;
+
+        for (square, &piece) in self.pieces_array.iter().enumerate() {
+            if let Some(piece) = piece {
+                hash_key ^= PIECE_KEYS[square][piece];
+            }
+        }
+
+        if let Some(sq) = self.en_passant {
+            hash_key ^= EP_KEYS[sq];
+        }
+
+        hash_key ^= CASTLING_KEYS[self.castling as usize];
+
+        if self.side_to_move == Colour::Black {
+            hash_key ^= BLACK_TO_MOVE;
+        }
+
+        hash_key
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::*;
     use std::time::{Duration, Instant};
     pub fn hash_update_test(depth: usize, b: &mut Board) -> usize {
-        let hash_before_move = hash(b);
-
         let mut total = 0;
         let moves = MoveList::gen_legal(b);
         let mut added = 0;
@@ -181,19 +167,14 @@ mod tests {
                 break;
             }
             if depth != 1 {
-                let mut updated_hash = hash_update(hash_before_move, &moves.moves[i], b);
-                let castling_rights_before = b.castling;
                 //must be done before making move
                 let Ok(commit) = b.try_move(moves.moves[i]) else {
                     panic!("invalid move {}", moves.moves[i].uci());
                 };
 
-                updated_hash ^= CASTLING_KEYS[castling_rights_before as usize];
-                updated_hash ^= CASTLING_KEYS[b.castling as usize];
+                let correct_hash = b.hash();
 
-                let hash_after_move = hash(b);
-
-                if updated_hash != hash_after_move {
+                if b.hash_key != correct_hash {
                     b.print_board();
                     moves.moves[i].print_move();
                     panic!("hash update failed");

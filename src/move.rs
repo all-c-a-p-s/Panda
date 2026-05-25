@@ -6,10 +6,10 @@
 /// 1000 0000 0000 0000 castling flag      0x8000
 /// 1100 0000 0000 0000 promotion flag     0xc000
 use crate::board::{BitBoard, Board, Colour};
-use crate::helper::{coordinate, count, lsfb, piece_type, pop_bit, rank, set_bit, MAX_MOVES};
+use crate::helper::{MAX_MOVES, coordinate, count, lsfb, piece_type, pop_bit, rank, set_bit};
 use crate::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS};
-use crate::movegen::{check_en_passant, is_attacked, RAY_BETWEEN};
-use crate::zobrist::{hash_update, CASTLING_KEYS};
+use crate::movegen::{RAY_BETWEEN, check_en_passant, is_attacked};
+use crate::zobrist::CASTLING_KEYS;
 
 use crate::types::{OccupancyIndex, Piece, PieceType, Square};
 
@@ -362,7 +362,7 @@ impl Board {
         };
 
         let castling_rights_before = self.castling;
-        self.hash_key = hash_update(self.hash_key, &m, self);
+        self.hash_update(&m);
         //MUST be done before any changes made on the board
         //this updates everything EXCEPT castling which is done at the end
 

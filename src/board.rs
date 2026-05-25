@@ -1,12 +1,11 @@
+use crate::MAX_GAME_PLY;
 use crate::helper::{coordinate, count, lsfb, pop_bit, set_bit, square};
 use crate::magic::{BISHOP_EDGE_RAYS, ROOK_EDGE_RAYS};
 use crate::movegen::RAY_BETWEEN;
 use crate::nnue::Accumulator;
 use crate::types::OccupancyIndex;
 use crate::types::{Piece, Square};
-use crate::zobrist::{hash, pawn_hash};
 use crate::zobrist::{BLACK_TO_MOVE, EP_KEYS};
-use crate::MAX_GAME_PLY;
 
 pub(crate) type BitBoard = u64;
 pub(crate) const EMPTY: BitBoard = 0;
@@ -26,6 +25,7 @@ pub struct Board {
     pub ply: usize,
     pub last_move_null: bool,
     pub hash_key: u64,
+    pub pawn_hash: u64,
     pub history: [u64; MAX_GAME_PLY],
 
     //Used in movegen
@@ -91,14 +91,15 @@ impl Board {
             ply: 0,
             last_move_null: false,
             hash_key: 0,
+            pawn_hash: 0,
             history: [0; MAX_GAME_PLY],
             checkers: 0,
             pinned: 0,
             nnue: Accumulator::default(),
         };
 
-        let mut board_fen: String = String::new();
-        let mut flags: usize = 0; //index where board ends and flags start
+        let mut board_fen = String::new();
+        let mut flags = 0; //index where board ends and flags start
         for i in fen.chars() {
             flags += 1;
             if i == ' ' {
@@ -107,7 +108,7 @@ impl Board {
             board_fen += i.to_string().as_str();
         }
 
-        let flags: Vec<&str> = (fen[flags..].split(' ')).clone().collect::<Vec<&str>>();
+        let flags = (fen[flags..].split(' ')).clone().collect::<Vec<&str>>();
 
         match flags[0] {
             "w" => new_board.side_to_move = Colour::White,
@@ -141,17 +142,15 @@ impl Board {
         }
 
         new_board.fifty_move = flags[3].to_string().parse::<u8>().unwrap();
-        let complete_moves: usize = flags[4].to_string().parse::<usize>().unwrap();
-        new_board.ply = (complete_moves - 1) * 2;
-        if new_board.side_to_move == Colour::Black {
-            new_board.ply += 1;
-        }
+        let complete_moves = flags[4].to_string().parse::<usize>().unwrap();
+        new_board.ply =
+            (complete_moves - 1) * 2 + usize::from(new_board.side_to_move == Colour::Black);
 
-        let mut file: usize = 0;
-        let mut rank: usize = 7;
+        let mut file = 0;
+        let mut rank = 7;
 
-        for c in board_fen.chars() {
-            if c == '/' {
+        for c in board_fen.bytes() {
+            if c == b'/' {
                 rank -= 1;
                 assert!((file == 8), "invalid file count on / {file}");
                 file = 0;
@@ -159,17 +158,16 @@ impl Board {
             }
             assert!((file != 8), "file count 8 and no newline {c}");
             match c {
-                '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' => {
-                    file +=
-                        <u32 as std::convert::TryInto<usize>>::try_into(c.to_digit(10).unwrap())
-                            .unwrap();
+                b'1' | b'2' | b'3' | b'4' | b'5' | b'6' | b'7' | b'8' => {
+                    file += (c - b'0') as usize;
                 }
-                'P' | 'N' | 'B' | 'R' | 'Q' | 'K' | 'p' | 'n' | 'b' | 'r' | 'q' | 'k' => {
-                    new_board.bitboards[ascii_to_piece(c)] = set_bit(
+                b'P' | b'N' | b'B' | b'R' | b'Q' | b'K' | b'p' | b'n' | b'b' | b'r' | b'q'
+                | b'k' => {
+                    new_board.bitboards[ascii_to_piece(c as char)] = set_bit(
                         unsafe { Square::from((rank * 8 + file) as u8) },
-                        new_board.bitboards[ascii_to_piece(c)],
+                        new_board.bitboards[ascii_to_piece(c as char)],
                     );
-                    new_board.pieces_array[rank * 8 + file] = Some(ascii_to_piece(c));
+                    new_board.pieces_array[rank * 8 + file] = Some(ascii_to_piece(c as char));
                     file += 1;
                 }
                 _ => panic!("unexpected character {c}"),
@@ -194,7 +192,7 @@ impl Board {
             [OccupancyIndex::WhiteOccupancies]
             | new_board.occupancies[OccupancyIndex::BlackOccupancies];
 
-        new_board.hash_key = hash(&new_board);
+        new_board.hash_key = new_board.hash();
         new_board.compute_checkers_and_pins();
         new_board.nnue = Accumulator::from_board(&new_board);
 
@@ -278,6 +276,7 @@ impl Board {
         }
 
         println!("FEN: {}", self.fen());
+        println!("Hash key: {:x}", self.hash_key);
     }
 
     #[must_use]
@@ -532,8 +531,7 @@ impl Board {
             return true;
         }
 
-        for key in self.history.iter().take(self.ply - 1) {
-            //take ply - 1 because the start position (with 0 ply) is included
+        for key in self.history.iter().take(self.ply).rev() {
             if *key == self.hash_key {
                 return true;
                 //return true on one repetition because otherwise the third
@@ -545,8 +543,8 @@ impl Board {
         self.is_insufficient_material()
     }
 
-    // finds maximum value of opponent pieces, regardless of whether it is actually possible to
-    // take them
+    // finds maximum value of any opponent piece, regardless of whether it is actually possible to
+    // take it
     #[must_use]
     pub fn get_max_gain(&self) -> i32 {
         let opponent_pieces = if self.side_to_move == Colour::White {
@@ -564,10 +562,5 @@ impl Board {
         }
 
         0
-    }
-
-    #[must_use]
-    pub fn pawn_hash(&self) -> u64 {
-        pawn_hash(self)
     }
 }

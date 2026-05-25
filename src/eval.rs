@@ -24,7 +24,8 @@ pub const MIRROR: [usize; 64] = {
     mirror
 };
 
-fn side_has_sufficient_matieral(b: &Board, side: Colour) -> bool {
+// technically misses some edge cases like 2 bishops of the same colour from promotions
+fn side_has_sufficient_material(b: &Board, side: Colour) -> bool {
     match side {
         Colour::White => {
             count(b.bitboards[Piece::WP]) > 0
@@ -32,8 +33,6 @@ fn side_has_sufficient_matieral(b: &Board, side: Colour) -> bool {
                 || count(b.bitboards[Piece::WQ]) > 0
                 || count(b.bitboards[Piece::WB]) > 1
                 || count(b.bitboards[Piece::WN]) > 2
-            //NOTE: atm this ignores exception of 2N vs P but I don't think we or our opponents can
-            //win that anyway
         }
         Colour::Black => {
             count(b.bitboards[Piece::BP]) > 0
@@ -45,18 +44,19 @@ fn side_has_sufficient_matieral(b: &Board, side: Colour) -> bool {
     }
 }
 
-#[must_use] pub fn evaluate(b: &Board) -> i32 {
+#[must_use]
+pub fn evaluate(b: &Board) -> i32 {
     let s = b.nnue.evaluate(b.side_to_move);
 
     //TODO: endgame tablebase for better draw detection
-    let side_sm = side_has_sufficient_matieral(b, b.side_to_move);
-    let opp_sm = side_has_sufficient_matieral(b, b.side_to_move.opponent());
+    let side_sm = side_has_sufficient_material(b, b.side_to_move);
+    let opp_sm = side_has_sufficient_material(b, b.side_to_move.opponent());
 
     if side_sm && opp_sm {
         s
     } else if side_sm {
-        std::cmp::max(s, 0)
+        s.max(0)
     } else {
-        std::cmp::min(s, 0)
+        s.min(0)
     }
 }

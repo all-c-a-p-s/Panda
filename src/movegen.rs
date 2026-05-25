@@ -101,7 +101,7 @@ impl MoveList {
     }
 
     #[rustfmt::skip]
-    pub fn pawn_push_moves(&mut self, board: &Board, mut first_unused: usize) -> usize {
+    pub fn pawn_push_moves(&mut self, board: &Board, first_unused: &mut usize) {
         let (mut pawns, seventh_rank) = match board.side_to_move {
             Colour::White => (board.bitboards[Piece::WP], 6),
             Colour::Black => (board.bitboards[Piece::BP], 1),
@@ -116,10 +116,9 @@ impl MoveList {
                          pc: PieceType,
                          from: Square,
                          to: Square,
-                         mut idx: usize| {
-            mvs[idx] = encode_move(from, to, Some(pc), PROMOTION_FLAG);
-            idx += 1;
-            idx
+                         idx: &mut usize| {
+            mvs[*idx] = encode_move(from, to, Some(pc), PROMOTION_FLAG);
+            *idx += 1;
         };
 
         while let Some(from) = lsfb(pawns) {
@@ -133,36 +132,34 @@ impl MoveList {
                 //promotion
                 //the piece type is passed into encode_move because only 2 bits are used to encode
                 //the promoted piece (and flag is used to detect if there is one)
-                first_unused = add_promo(&mut self.moves, PieceType::Queen, from, to, first_unused);
-                first_unused = add_promo(&mut self.moves, PieceType::Rook, from, to, first_unused);
-                first_unused =
+                add_promo(&mut self.moves, PieceType::Queen, from, to, first_unused);
+                add_promo(&mut self.moves, PieceType::Rook, from, to, first_unused);
+               
                     add_promo(&mut self.moves, PieceType::Bishop, from, to, first_unused);
-                first_unused =
+                
                     add_promo(&mut self.moves, PieceType::Knight, from, to, first_unused);
             } else {
-                self.moves[first_unused] = encode_move(from, to, None, NO_FLAG);
-                first_unused += 1;
+                self.moves[*first_unused] = encode_move(from, to, None, NO_FLAG);
+                *first_unused += 1;
             }
 
             let dp = unsafe { offset(from, 16) };
             if rank(from) == 7 - seventh_rank
                 && get_bit(dp, board.occupancies[OccupancyIndex::BothOccupancies]) == 0
             {
-                self.moves[first_unused] = encode_move(from, dp, None, NO_FLAG);
-                first_unused += 1;
+                self.moves[*first_unused] = encode_move(from, dp, None, NO_FLAG);
+                *first_unused += 1;
             }
             pawns = pop_bit(from, pawns);
         }
 
-        first_unused
     }
 
-    pub fn castling_moves(&mut self, board: &Board, mut first_unused: usize) -> usize {
+    pub fn castling_moves(&mut self, board: &Board, first_unused: &mut usize)  {
         let add_castling =
-            |mvs: &mut [Move; MAX_MOVES], from: Square, to: Square, mut idx: usize| {
-                mvs[idx] = encode_move(from, to, None, CASTLING_FLAG);
-                idx += 1;
-                idx
+            |mvs: &mut [Move; MAX_MOVES], from: Square, to: Square, idx: &mut usize| {
+                mvs[*idx] = encode_move(from, to, None, CASTLING_FLAG);
+                *idx += 1;
             };
         match board.side_to_move {
             Colour::White => {
@@ -175,7 +172,7 @@ impl MoveList {
                         && !is_attacked(Square::F1, Colour::Black, board)
                     //g1 checked later
                     {
-                        first_unused =
+                        
                             add_castling(&mut self.moves, Square::E1, Square::G1, first_unused);
                     }
                 }
@@ -187,7 +184,7 @@ impl MoveList {
                     && !is_attacked(Square::E1, Colour::Black, board)
                     && !is_attacked(Square::D1, Colour::Black, board)
                 {
-                    first_unused =
+                    
                         add_castling(&mut self.moves, Square::E1, Square::C1, first_unused);
                 }
             }
@@ -199,7 +196,7 @@ impl MoveList {
                     && !is_attacked(Square::E8, Colour::White, board)
                     && !is_attacked(Square::F8, Colour::White, board)
                 {
-                    first_unused =
+                    
                         add_castling(&mut self.moves, Square::E8, Square::G8, first_unused);
                 }
 
@@ -211,16 +208,14 @@ impl MoveList {
                         && !is_attacked(Square::E8, Colour::White, board)
                         && !is_attacked(Square::D8, Colour::White, board)
                     {
-                        first_unused =
                             add_castling(&mut self.moves, Square::E8, Square::C8, first_unused);
                     }
                 }
             }
         }
-        first_unused
     }
 
-    pub fn gen_pawn_captures(&mut self, board: &Board, mut first_unused: usize) -> usize {
+    pub fn gen_pawn_captures(&mut self, board: &Board, first_unused: &mut usize) {
         let (mut pawns, seventh_rank, attacks) = match board.side_to_move {
             Colour::White => (board.bitboards[Piece::WP], 6, WP_ATTACKS),
             Colour::Black => (board.bitboards[Piece::BP], 1, BP_ATTACKS),
@@ -234,10 +229,9 @@ impl MoveList {
                          pc: PieceType,
                          from: Square,
                          to: Square,
-                         mut idx: usize| {
-            mvs[idx] = encode_move(from, to, Some(pc), PROMOTION_FLAG);
-            idx += 1;
-            idx
+                         idx: &mut usize| {
+            mvs[*idx] = encode_move(from, to, Some(pc), PROMOTION_FLAG);
+            *idx += 1;
         };
 
         while let Some(from) = lsfb(pawns) {
@@ -248,36 +242,31 @@ impl MoveList {
             let mut attacks = attacks[from] & targets;
             while let Some(to) = lsfb(attacks) {
                 if rank(from) == seventh_rank {
-                    first_unused =
                         add_promo(&mut self.moves, PieceType::Queen, from, to, first_unused);
-                    first_unused =
                         add_promo(&mut self.moves, PieceType::Rook, from, to, first_unused);
-                    first_unused =
                         add_promo(&mut self.moves, PieceType::Bishop, from, to, first_unused);
-                    first_unused =
                         add_promo(&mut self.moves, PieceType::Knight, from, to, first_unused);
                 } else if board.en_passant.is_some()
                     && to == unsafe { board.en_passant.unwrap_unchecked() }
                 {
-                    self.moves[first_unused] = encode_move(from, to, None, EN_PASSANT_FLAG);
-                    first_unused += 1;
+                    self.moves[*first_unused] = encode_move(from, to, None, EN_PASSANT_FLAG);
+                    *first_unused += 1;
                 } else {
-                    self.moves[first_unused] = encode_move(from, to, None, NO_FLAG);
-                    first_unused += 1;
+                    self.moves[*first_unused] = encode_move(from, to, None, NO_FLAG);
+                    *first_unused += 1;
                 }
                 attacks = pop_bit(to, attacks);
             }
             pawns = pop_bit(from, pawns);
         }
 
-        first_unused
     }
 
     pub fn gen_knight_moves<const CAPS_ONLY: bool>(
         &mut self,
         board: &Board,
-        mut first_unused: usize,
-    ) -> usize {
+        first_unused: &mut usize,
+    )  {
         let (piece, occs, opps) = match board.side_to_move {
             Colour::White => (
                 Piece::WN,
@@ -297,21 +286,20 @@ impl MoveList {
             let mut attacks = N_ATTACKS[lsb] & if CAPS_ONLY { opps } else { !occs };
 
             while let Some(lsb_attack) = lsfb(attacks) {
-                self.moves[first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
-                first_unused += 1;
+                self.moves[*first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
+                *first_unused += 1;
                 attacks = pop_bit(lsb_attack, attacks);
             }
             bitboard = pop_bit(lsb, bitboard);
         }
 
-        first_unused
     }
 
     pub fn gen_bishop_moves<const CAPS_ONLY: bool>(
         &mut self,
         board: &Board,
-        mut first_unused: usize,
-    ) -> usize {
+        first_unused: &mut usize,
+    )  {
         let (piece, occs, opps) = match board.side_to_move {
             Colour::White => (
                 Piece::WB,
@@ -334,21 +322,20 @@ impl MoveList {
                     & if CAPS_ONLY { opps } else { !occs };
 
             while let Some(lsb_attack) = lsfb(attacks) {
-                self.moves[first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
-                first_unused += 1;
+                self.moves[*first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
+                *first_unused += 1;
                 attacks = pop_bit(lsb_attack, attacks);
             }
             bitboard = pop_bit(lsb, bitboard);
         }
 
-        first_unused
     }
 
     pub fn gen_rook_moves<const CAPS_ONLY: bool>(
         &mut self,
         board: &Board,
-        mut first_unused: usize,
-    ) -> usize {
+        first_unused: &mut usize,
+    )  {
         let (piece, occs, opps) = match board.side_to_move {
             Colour::White => (
                 Piece::WR,
@@ -371,21 +358,20 @@ impl MoveList {
                     & if CAPS_ONLY { opps } else { !occs };
 
             while let Some(lsb_attack) = lsfb(attacks) {
-                self.moves[first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
-                first_unused += 1;
+                self.moves[*first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
+                *first_unused += 1;
                 attacks = pop_bit(lsb_attack, attacks);
             }
             bitboard = pop_bit(lsb, bitboard);
         }
 
-        first_unused
     }
 
     pub fn gen_queen_moves<const CAPS_ONLY: bool>(
         &mut self,
         board: &Board,
-        mut first_unused: usize,
-    ) -> usize {
+        first_unused: &mut usize,
+    )  {
         let (piece, occs, opps) = match board.side_to_move {
             Colour::White => (
                 Piece::WQ,
@@ -408,21 +394,20 @@ impl MoveList {
                     & if CAPS_ONLY { opps } else { !occs };
 
             while let Some(lsb_attack) = lsfb(attacks) {
-                self.moves[first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
-                first_unused += 1;
+                self.moves[*first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
+                *first_unused += 1;
                 attacks = pop_bit(lsb_attack, attacks);
             }
             bitboard = pop_bit(lsb, bitboard);
         }
 
-        first_unused
     }
 
     pub fn gen_king_moves<const CAPS_ONLY: bool>(
         &mut self,
         board: &Board,
-        mut first_unused: usize,
-    ) -> usize {
+        first_unused: &mut usize,
+    )  {
         let (piece, occs, opps) = match board.side_to_move {
             Colour::White => (
                 Piece::WK,
@@ -442,14 +427,13 @@ impl MoveList {
             let mut attacks = K_ATTACKS[lsb] & if CAPS_ONLY { opps } else { !occs };
 
             while let Some(lsb_attack) = lsfb(attacks) {
-                self.moves[first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
-                first_unused += 1;
+                self.moves[*first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
+                *first_unused += 1;
                 attacks = pop_bit(lsb_attack, attacks);
             }
             bitboard = pop_bit(lsb, bitboard);
         }
 
-        first_unused
     }
 
     #[must_use]
@@ -458,15 +442,15 @@ impl MoveList {
 
         let mut first_unused = 0;
         if !CAPS_ONLY {
-            first_unused = moves.pawn_push_moves(board, first_unused);
-            first_unused = moves.castling_moves(board, first_unused);
+            moves.pawn_push_moves(board, &mut first_unused);
+            moves.castling_moves(board, &mut first_unused);
         }
-        first_unused = moves.gen_pawn_captures(board, first_unused);
-        first_unused = moves.gen_knight_moves::<CAPS_ONLY>(board, first_unused);
-        first_unused = moves.gen_bishop_moves::<CAPS_ONLY>(board, first_unused);
-        first_unused = moves.gen_rook_moves::<CAPS_ONLY>(board, first_unused);
-        first_unused = moves.gen_queen_moves::<CAPS_ONLY>(board, first_unused);
-        _ = moves.gen_king_moves::<CAPS_ONLY>(board, first_unused);
+        moves.gen_pawn_captures(board, &mut first_unused);
+        moves.gen_knight_moves::<CAPS_ONLY>(board, &mut first_unused);
+        moves.gen_bishop_moves::<CAPS_ONLY>(board, &mut first_unused);
+        moves.gen_rook_moves::<CAPS_ONLY>(board, &mut first_unused);
+        moves.gen_queen_moves::<CAPS_ONLY>(board, &mut first_unused);
+        moves.gen_king_moves::<CAPS_ONLY>(board, &mut first_unused);
 
         moves
     }
