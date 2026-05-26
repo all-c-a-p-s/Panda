@@ -192,7 +192,7 @@ impl Thread<'_> {
 
             // We accept values from the TT if:
             //      (1) the depth of the entry >= our depth
-            // OR   (2) we don't expect much from this node, and the eval is well below beta
+            // OR   (2) we don't expect much from this node, and the eval is well above beta
             if !singular
                 && !root
                 && (!pv_node
@@ -445,8 +445,40 @@ impl Thread<'_> {
 
             let eval = if legal == 1 {
                 // note that this is one because the variable is updated above
-                -self.negamax(position, new_depth, -beta, -alpha, false)
                 // normal search on pv move (no moves searched yet)
+
+                // basically like an internal aspiration window:
+                // assume the value of our lower-depth search has some merit, so we may be able to search on
+                // a tighter window
+                if tt_hit && tt_bound == EntryFlag::Exact && !root && !singular {
+                    let tt_dp = tt_depth.min(depth - 1);
+                    let mut delta = read_param!(ASPIRATION_WINDOW) * (depth - tt_dp).max(1) as i32;
+
+                    let mut fails = 0;
+                    loop {
+                        let w_alpha = (tt_score - delta).max(alpha);
+                        let w_beta = (tt_score + delta).min(beta);
+
+                        let w_eval = -self.negamax(position, new_depth, -w_beta, -w_alpha, false);
+
+                        if (w_eval > tt_score - delta && w_eval < tt_score + delta)
+                            || w_eval == -beta
+                            || w_eval == -alpha
+                        {
+                            break w_eval;
+                        }
+
+                        fails += 1;
+
+                        if fails >= 3 {
+                            break -self.negamax(position, new_depth, -beta, -alpha, false);
+                        }
+
+                        delta *= 2;
+                    }
+                } else {
+                    -self.negamax(position, new_depth, -beta, -alpha, false)
+                }
             } else {
                 // non-pv move -> search with reduced window
                 // this assumes that our move ordering is good enough

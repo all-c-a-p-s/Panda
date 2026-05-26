@@ -1,4 +1,5 @@
 use crate::MAX_GAME_PLY;
+use crate::eval::evaluate;
 use crate::helper::{coordinate, count, lsfb, pop_bit, set_bit, square};
 use crate::magic::{BISHOP_EDGE_RAYS, ROOK_EDGE_RAYS};
 use crate::movegen::RAY_BETWEEN;
@@ -278,6 +279,7 @@ impl Board {
 
         println!("FEN: {}", self.fen());
         println!("Hash key: {:x}", self.hash_key);
+        println!("Eval: {}", evaluate(self));
     }
 
     #[must_use]
