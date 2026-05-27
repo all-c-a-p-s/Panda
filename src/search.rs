@@ -462,33 +462,39 @@ impl Thread<'_> {
                     && tt_score <= beta
                 {
                     let depth_diff = (depth - tt_depth).max(1) as i32;
-                    let mut delta = tt_correction.clamp(10, 25) * depth_diff;
+                    let mut delta = (tt_correction / 2).clamp(10, 25) * depth_diff;
 
                     let mut fails = 0;
-                    loop {
-                        let w_alpha = (tt_score - delta).max(alpha);
-                        let w_beta = (tt_score + delta).min(beta);
 
-                        if w_alpha == alpha && w_beta == beta {
-                            break -self.negamax(position, new_depth, -beta, -alpha, false);
+                    let mut w_alpha = (tt_score - delta).max(alpha);
+                    let mut w_beta = (tt_score + delta).min(beta);
+                    loop {
+                        // TODO - try OR here
+                        if w_alpha == alpha && w_beta == beta || (w_beta - w_alpha == 1) {
+                            break -self.negamax(position, new_depth, -w_beta, -w_alpha, false);
                         }
 
                         let w_eval = -self.negamax(position, new_depth, -w_beta, -w_alpha, false);
 
-                        if (w_eval > w_alpha && w_eval < w_beta)
-                            || w_eval <= alpha
-                            || w_eval >= beta
-                        {
+                        if w_eval > w_alpha && w_eval < w_beta {
                             break w_eval;
                         }
 
                         fails += 1;
+                        delta *= 2;
 
-                        if fails >= 3 {
-                            break -self.negamax(position, new_depth, -beta, -alpha, false);
+                        // if we fail outside the window then we get a good bound for the min/max
+                        // score we can achieve
+                        if w_eval <= w_alpha {
+                            w_beta = (w_alpha.max(alpha) + w_beta) / 2;
+                            w_alpha = (w_alpha - delta).max(alpha);
+                        } else {
+                            w_beta = (w_beta + delta).min(beta);
                         }
 
-                        delta *= 2;
+                        if fails >= 2 {
+                            break -self.negamax(position, new_depth, -beta, -alpha, false);
+                        }
                     }
                 } else {
                     -self.negamax(position, new_depth, -beta, -alpha, false)
