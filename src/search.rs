@@ -191,7 +191,7 @@ impl Thread<'_> {
             tt_bound = entry.flag;
 
             // We accept values from the TT if:
-            //      (1) the depth of the entry >= our depth
+            //      (1) the depth of the entry >= our depth, with the correct bound
             // OR   (2) we don't expect much from this node, and the eval is well above beta
             if !singular
                 && !root
@@ -227,13 +227,16 @@ impl Thread<'_> {
 
         let mut static_eval = evaluate(position);
         if !singular {
-            static_eval = self.eval_with_corrhist(position, static_eval);
+            let corrected = self.eval_with_corrhist(position, static_eval);
+            static_eval = corrected;
         }
 
+        let mut tt_correction = 0;
         if tt_hit
             && !((static_eval > tt_score && tt_bound == EntryFlag::LowerBound)
                 || (static_eval < tt_score && tt_bound == EntryFlag::UpperBound))
         {
+            tt_correction = (tt_score - static_eval).abs();
             static_eval = tt_score;
         }
 
@@ -450,20 +453,31 @@ impl Thread<'_> {
                 // basically like an internal aspiration window:
                 // assume the value of our lower-depth search has some merit, so we may be able to search on
                 // a tighter window
-                if tt_hit && tt_bound == EntryFlag::Exact && !root && !singular {
-                    let tt_dp = tt_depth.min(depth - 1);
-                    let mut delta = read_param!(ASPIRATION_WINDOW) * (depth - tt_dp).max(1) as i32;
+                if pv_node
+                    && tt_hit
+                    && tt_bound == EntryFlag::Exact
+                    && !root
+                    && !singular
+                    && tt_score >= alpha
+                    && tt_score <= beta
+                {
+                    let depth_diff = (depth - tt_depth).max(1) as i32;
+                    let mut delta = tt_correction.clamp(10, 25) * depth_diff;
 
                     let mut fails = 0;
                     loop {
                         let w_alpha = (tt_score - delta).max(alpha);
                         let w_beta = (tt_score + delta).min(beta);
 
+                        if w_alpha == alpha && w_beta == beta {
+                            break -self.negamax(position, new_depth, -beta, -alpha, false);
+                        }
+
                         let w_eval = -self.negamax(position, new_depth, -w_beta, -w_alpha, false);
 
-                        if (w_eval > tt_score - delta && w_eval < tt_score + delta)
-                            || w_eval == -beta
-                            || w_eval == -alpha
+                        if (w_eval > w_alpha && w_eval < w_beta)
+                            || w_eval <= alpha
+                            || w_eval >= beta
                         {
                             break w_eval;
                         }
