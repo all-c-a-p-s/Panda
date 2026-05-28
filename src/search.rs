@@ -55,8 +55,6 @@ tuneable_params! {
     LMR_TACTICAL_DIVISOR, i32, 320, 100, 500;
     LMR_QUIET_BASE, i32, 164, 0, 500;
     LMR_QUIET_DIVISOR, i32, 280, 100, 500;
-    INTERNAL_AW_MINIMUM, i32, 20, 0, 256;
-    INTERNAL_AW_MAXIMUM, i32, 50, 0, 256;
 }
 
 const DO_SINGULARITY_EXTENSION: bool = true;
@@ -465,12 +463,7 @@ impl Thread<'_> {
                 {
                     let depth_diff = (depth - tt_depth).max(1) as i32;
 
-                    let (d_mn, d_mx) = (
-                        (tt_score * read_param!(INTERNAL_AW_MINIMUM) / 256).max(10),
-                        (tt_score * read_param!(INTERNAL_AW_MAXIMUM) / 256).max(25),
-                    );
-
-                    let mut delta = (tt_correction / 2).clamp(d_mn, d_mx) * depth_diff;
+                    let mut delta = (tt_correction / 2).clamp(10, 25) * depth_diff;
 
                     let mut fails = 0;
 
