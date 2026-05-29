@@ -461,8 +461,7 @@ impl Thread<'_> {
                     && tt_score >= alpha
                     && tt_score <= beta
                 {
-                    let depth_diff = (depth - tt_depth).max(1) as i32;
-
+                    let depth_diff = (depth as i32 - tt_depth as i32).abs().max(1);
                     let mut delta = (tt_correction / 2).clamp(10, 25) * depth_diff;
 
                     let mut fails = 0;
@@ -485,10 +484,17 @@ impl Thread<'_> {
 
                         // if we fail outside the window then we get a good bound for the min/max
                         // score we can achieve
+
                         if w_eval <= w_alpha {
+                            if w_eval <= alpha {
+                                break w_eval;
+                            }
                             w_beta = (w_alpha.max(alpha) + w_beta) / 2;
                             w_alpha = (w_alpha - delta).max(alpha);
                         } else {
+                            if w_eval >= beta {
+                                break w_eval;
+                            }
                             w_beta = (w_beta + delta).min(beta);
                         }
 

@@ -10,8 +10,8 @@ use crate::thread::{Searcher, Thread};
 use crate::transposition::TranspositionTable;
 use crate::types::{Piece, PieceType, Square};
 use crate::{
-    coordinate, encode_move, perft, piece_type, square, Board, Colour, Move, MoveData,
-    CASTLING_FLAG, EN_PASSANT_FLAG, INFINITY, NO_FLAG, PROMOTION_FLAG,
+    Board, CASTLING_FLAG, Colour, EN_PASSANT_FLAG, INFINITY, Move, MoveData, NO_FLAG,
+    PROMOTION_FLAG, coordinate, encode_move, perft, piece_type, square,
 };
 
 pub enum CommandType {
