@@ -720,6 +720,7 @@ impl Thread<'_> {
                 best_move = m;
             }
             if alpha >= beta {
+                hash_flag = EntryFlag::LowerBound;
                 break;
             }
         }
