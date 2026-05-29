@@ -651,7 +651,7 @@ impl Thread<'_> {
         let in_check = position.checkers != 0;
 
         if static_eval >= beta {
-            return beta; //TODO - why not fail soft here?
+            return static_eval;
         }
         let mut best_score = static_eval;
 
