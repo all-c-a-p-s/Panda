@@ -13,12 +13,17 @@ Panda is a chess engine written in Rust (still a work in progress). I like worki
 
 
 ## What Makes Panda Interesting?
+Panda definitely isn't anything revolutionary but its code contains some good ideas and some original ideas. Hopefully, it even includes some ideas which fall into both of those categories.
 
-In terms of strength, Panda is pretty unremarkable - currently rated 3134 on CCRL 40/15. Panda certainly doesn't have any techniques which are revolutionary, but I like adding my own ideas and methods on top of the common algorithms. One thing which is unique to Panda is its data generation method, in which it plays games against itself and then uses a custom algorithm to backtrack through the search tree, re-evaluating positions based on the information which was subsequently gained by playing out the rest of the game.
+In particular, two major original ideas which Panda uses:
+- internal aspiration windows (aspiration windows inside the recursive alpha-beta search)
+- custom datagen method which uses hindsight to re-evaluate positions from the game.
+
+As far as I know, these techniques are completely unique to this engine.
 
 By far the most exciting game I've seen it play is [this one](https://www.chess.com/analysis/library/22UV4Zu2Bg) against a really cool MCTS engine called [Javelin](https://github.com/TomaszJaworski777/Javelin).
 
-## Features
+## Features (very brief version)
 - UCI compliant (no GUI)
 - magic bitboard move generation
 - Alpha-Beta search with various enhancements
