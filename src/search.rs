@@ -4,7 +4,7 @@ use crate::board::Board;
 use crate::eval::evaluate;
 use crate::helper::{piece_type, read_param, tuneable_params};
 use crate::r#move::{Commit, Move, MoveList, NULL_MOVE};
-use crate::ordering::SEE_VALUES;
+use crate::ordering::{MovePicker, SEE_VALUES};
 use crate::thread::{SearchStackEntry, Thread};
 use crate::transposition::{EntryFlag, TT, TTEntry};
 use crate::types::PieceType;
@@ -332,14 +332,32 @@ impl Thread<'_> {
 
         let (mut quiets, mut caps) = (vec![], vec![]);
 
-        let mut move_list = MoveList::gen_moves::<false>(position);
-        let mut scores = move_list.get_scores(self, position, &best_move);
+        // avoid searching hash or killer twice!!!
+
+        let mut movelist = MoveList::empty();
+        let mut movepicker = MovePicker::new();
+
+        let (mut good_caps, mut bad_caps) = (MoveList::empty(), MoveList::empty());
 
         let (mut legal, mut considered) = (0, 0);
         let mut skip_quiets = false;
         let mut best_score = -INFINITY;
 
-        while let Some((m, _ms)) = move_list.get_next(&mut scores) {
+        let mut done_killer = false;
+
+        while let Some(m) = movepicker.get_next(
+            best_move,
+            None,
+            position,
+            &mut movelist,
+            &mut good_caps,
+            &mut bad_caps,
+            &self,
+        ) {
+            if m == best_move && considered > 0 {
+                continue;
+            }
+
             if let Some(n) = self.info.excluded[self.ply] {
                 if n == m {
                     considered += 1;
@@ -354,6 +372,13 @@ impl Thread<'_> {
             let not_mated = best_score > -MATE;
 
             let is_killer = self.info.killer_moves[self.ply] == Some(m);
+
+            if is_killer && done_killer {
+                continue;
+            }
+
+            done_killer |= is_killer;
+
             let is_check = position.checkers != 0;
 
             // Early Pruning: try to prune moves before we search them properly
@@ -630,7 +655,6 @@ impl Thread<'_> {
         }
 
         let mut hash_flag = EntryFlag::UpperBound;
-
         let mut best_move = NULL_MOVE;
 
         if let Some(entry) = self.tt.lookup(position.hash_key) {
@@ -657,17 +681,32 @@ impl Thread<'_> {
 
         alpha = alpha.max(best_score);
 
-        let mut captures = if in_check {
-            MoveList::gen_moves::<false>(position)
+        let mut movelist = MoveList::empty();
+        let (mut good_caps, mut bad_caps) = (MoveList::empty(), MoveList::empty());
+
+        let mut movepicker = if in_check {
+            MovePicker::new()
         } else {
-            MoveList::gen_moves::<true>(position)
+            MovePicker::for_qsearch()
         };
 
-        let mut scores = captures.get_scores(self, position, &best_move);
+        let q_hash = if in_check || best_move.is_tactical(position) {
+            best_move
+        } else {
+            NULL_MOVE
+        };
 
         let mut not_mated = false;
 
-        while let Some((m, _ms)) = captures.get_next(&mut scores) {
+        while let Some(m) = movepicker.get_next(
+            q_hash,
+            self.info.killer_moves[self.ply],
+            position,
+            &mut movelist,
+            &mut good_caps,
+            &mut bad_caps,
+            &self,
+        ) {
             if m.is_capture(position) {
                 // if not capture then must be a check evasion
                 let best_case =

@@ -6,10 +6,11 @@ use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::movegen::MovegenMode;
 use crate::thread::{Searcher, Thread};
 use crate::transposition::TranspositionTable;
 use crate::types::OccupancyIndex;
-use crate::{iterative_deepening, Board, Colour, Move, MoveList, INFINITY, NULL_MOVE, STARTPOS};
+use crate::{Board, Colour, INFINITY, Move, MoveList, NULL_MOVE, STARTPOS, iterative_deepening};
 
 const OPENING_CP_MARGIN: i32 = 20;
 const OPENING_PLIES: usize = 16;
@@ -84,7 +85,8 @@ impl Node {
     }
 
     pub fn choose_opening_move(&mut self, tt: &TranspositionTable) {
-        let movelist = MoveList::gen_moves::<false>(&self.position);
+        let mut movelist = MoveList::empty();
+        movelist.gen_moves(&self.position, MovegenMode::All);
 
         let (mut s, mut chosen_move) = (0, NULL_MOVE);
 

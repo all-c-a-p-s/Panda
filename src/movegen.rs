@@ -1,5 +1,5 @@
 use crate::board::{BitBoard, Board, Colour};
-use crate::helper::{MAX_MOVES, file, get_bit, lsfb, pop_bit, rank, set_bit};
+use crate::helper::{MAX_MOVES, RANK_1, RANK_8, file, get_bit, lsfb, pop_bit, rank, set_bit};
 use crate::magic::{
     BP_ATTACKS, K_ATTACKS, N_ATTACKS, WP_ATTACKS, get_bishop_attacks, get_queen_attacks,
     get_rook_attacks,
@@ -13,6 +13,17 @@ use crate::types::{CastlingType, OccupancyIndex, Piece, PieceType, Square};
 pub struct MoveListEntry {
     pub m: Move,
     pub score: i32,
+}
+
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum MovegenMode {
+    NoisyQueenPromotions,
+    QuietQueenPromotions,
+    CapsOnly,
+    QuietsOnly,
+    NoisyUnderpromotions,
+    QuietUnderpromotions,
+    All,
 }
 
 impl MoveListEntry {
@@ -97,11 +108,12 @@ impl MoveList {
     pub const fn empty() -> Self {
         MoveList {
             moves: [NULL_MOVE; MAX_MOVES],
+            used: 0,
         }
     }
 
     #[rustfmt::skip]
-    pub fn pawn_push_moves(&mut self, board: &Board, first_unused: &mut usize) {
+    pub fn pawn_push_moves(&mut self, board: &Board, mode: MovegenMode) {
         let (mut pawns, seventh_rank) = match board.side_to_move {
             Colour::White => (board.bitboards[Piece::WP], 6),
             Colour::Black => (board.bitboards[Piece::BP], 1),
@@ -132,30 +144,36 @@ impl MoveList {
                 //promotion
                 //the piece type is passed into encode_move because only 2 bits are used to encode
                 //the promoted piece (and flag is used to detect if there is one)
-                add_promo(&mut self.moves, PieceType::Queen, from, to, first_unused);
-                add_promo(&mut self.moves, PieceType::Rook, from, to, first_unused);
-               
-                    add_promo(&mut self.moves, PieceType::Bishop, from, to, first_unused);
-                
-                    add_promo(&mut self.moves, PieceType::Knight, from, to, first_unused);
-            } else {
-                self.moves[*first_unused] = encode_move(from, to, None, NO_FLAG);
-                *first_unused += 1;
+                if mode == MovegenMode::QuietQueenPromotions || mode == MovegenMode::All {
+                    add_promo(&mut self.moves, PieceType::Queen, from, to, &mut self.used);
+                } 
+
+                if mode == MovegenMode::QuietUnderpromotions || mode == MovegenMode::All {
+                    add_promo(&mut self.moves, PieceType::Rook, from, to, &mut self.used);
+                    add_promo(&mut self.moves, PieceType::Bishop, from, to, &mut self.used);
+                    add_promo(&mut self.moves, PieceType::Knight, from, to, &mut self.used);
+                }
+            } else if mode == MovegenMode::QuietQueenPromotions || mode == MovegenMode::QuietUnderpromotions {
+                pawns = pop_bit(from, pawns);
+                continue;
+            } else { 
+                self.moves[self.used] = encode_move(from, to, None, NO_FLAG);
+                self.used += 1;
             }
 
             let dp = unsafe { offset(from, 16) };
             if rank(from) == 7 - seventh_rank
                 && get_bit(dp, board.occupancies[OccupancyIndex::BothOccupancies]) == 0
             {
-                self.moves[*first_unused] = encode_move(from, dp, None, NO_FLAG);
-                *first_unused += 1;
+                self.moves[self.used] = encode_move(from, dp, None, NO_FLAG);
+                self.used += 1;
             }
             pawns = pop_bit(from, pawns);
         }
 
     }
 
-    pub fn castling_moves(&mut self, board: &Board, first_unused: &mut usize)  {
+    pub fn castling_moves(&mut self, board: &Board)  {
         let add_castling =
             |mvs: &mut [Move; MAX_MOVES], from: Square, to: Square, idx: &mut usize| {
                 mvs[*idx] = encode_move(from, to, None, CASTLING_FLAG);
@@ -173,7 +191,7 @@ impl MoveList {
                     //g1 checked later
                     {
                         
-                            add_castling(&mut self.moves, Square::E1, Square::G1, first_unused);
+                            add_castling(&mut self.moves, Square::E1, Square::G1, &mut self.used);
                     }
                 }
 
@@ -185,7 +203,7 @@ impl MoveList {
                     && !is_attacked(Square::D1, Colour::Black, board)
                 {
                     
-                        add_castling(&mut self.moves, Square::E1, Square::C1, first_unused);
+                        add_castling(&mut self.moves, Square::E1, Square::C1, &mut self.used);
                 }
             }
             Colour::Black => {
@@ -197,7 +215,7 @@ impl MoveList {
                     && !is_attacked(Square::F8, Colour::White, board)
                 {
                     
-                        add_castling(&mut self.moves, Square::E8, Square::G8, first_unused);
+                        add_castling(&mut self.moves, Square::E8, Square::G8, &mut self.used);
                 }
 
                 if (board.castling & CASTLING_MASKS[CastlingType::BlackQueenside]) > 0 {
@@ -208,17 +226,17 @@ impl MoveList {
                         && !is_attacked(Square::E8, Colour::White, board)
                         && !is_attacked(Square::D8, Colour::White, board)
                     {
-                            add_castling(&mut self.moves, Square::E8, Square::C8, first_unused);
+                            add_castling(&mut self.moves, Square::E8, Square::C8, &mut self.used);
                     }
                 }
             }
         }
     }
 
-    pub fn gen_pawn_captures(&mut self, board: &Board, first_unused: &mut usize) {
-        let (mut pawns, seventh_rank, attacks) = match board.side_to_move {
-            Colour::White => (board.bitboards[Piece::WP], 6, WP_ATTACKS),
-            Colour::Black => (board.bitboards[Piece::BP], 1, BP_ATTACKS),
+    pub fn gen_pawn_captures(&mut self, board: &Board, mode: MovegenMode) {
+        let (mut pawns, seventh_rank, eighth_rank, attacks) = match board.side_to_move {
+            Colour::White => (board.bitboards[Piece::WP], 6, RANK_8, WP_ATTACKS),
+            Colour::Black => (board.bitboards[Piece::BP], 1, RANK_1, BP_ATTACKS),
         };
 
         let opps = match board.side_to_move {
@@ -235,25 +253,38 @@ impl MoveList {
         };
 
         while let Some(from) = lsfb(pawns) {
-            let targets = match board.en_passant {
+            let mut targets = match board.en_passant {
                 None => board.occupancies[opps],
                 Some(k) => set_bit(k, board.occupancies[opps]),
             };
+
+            if mode == MovegenMode::NoisyQueenPromotions || mode == MovegenMode::NoisyUnderpromotions {
+                targets &= eighth_rank;
+            }
+            
             let mut attacks = attacks[from] & targets;
             while let Some(to) = lsfb(attacks) {
                 if rank(from) == seventh_rank {
-                        add_promo(&mut self.moves, PieceType::Queen, from, to, first_unused);
-                        add_promo(&mut self.moves, PieceType::Rook, from, to, first_unused);
-                        add_promo(&mut self.moves, PieceType::Bishop, from, to, first_unused);
-                        add_promo(&mut self.moves, PieceType::Knight, from, to, first_unused);
+                    if mode == MovegenMode::NoisyQueenPromotions || mode == MovegenMode::All {
+                        add_promo(&mut self.moves, PieceType::Queen, from, to, &mut self.used);
+                    } 
+
+                    if mode == MovegenMode::NoisyUnderpromotions || mode == MovegenMode::All {
+                        add_promo(&mut self.moves, PieceType::Rook, from, to, &mut self.used);
+                        add_promo(&mut self.moves, PieceType::Bishop, from, to, &mut self.used);
+                        add_promo(&mut self.moves, PieceType::Knight, from, to, &mut self.used);
+                    }
+                } else if mode == MovegenMode::NoisyQueenPromotions || mode == MovegenMode::NoisyUnderpromotions { 
+                    attacks = pop_bit(to, attacks);
+                    continue; 
                 } else if board.en_passant.is_some()
                     && to == unsafe { board.en_passant.unwrap_unchecked() }
                 {
-                    self.moves[*first_unused] = encode_move(from, to, None, EN_PASSANT_FLAG);
-                    *first_unused += 1;
+                    self.moves[self.used] = encode_move(from, to, None, EN_PASSANT_FLAG);
+                    self.used += 1;
                 } else {
-                    self.moves[*first_unused] = encode_move(from, to, None, NO_FLAG);
-                    *first_unused += 1;
+                    self.moves[self.used] = encode_move(from, to, None, NO_FLAG);
+                    self.used += 1;
                 }
                 attacks = pop_bit(to, attacks);
             }
@@ -262,10 +293,10 @@ impl MoveList {
 
     }
 
-    pub fn gen_knight_moves<const CAPS_ONLY: bool>(
+    pub fn gen_knight_moves(
         &mut self,
         board: &Board,
-        first_unused: &mut usize,
+        mode: MovegenMode,
     )  {
         let (piece, occs, opps) = match board.side_to_move {
             Colour::White => (
@@ -282,12 +313,19 @@ impl MoveList {
 
         let mut bitboard = board.bitboards[piece];
 
+        let valid = match mode {
+            MovegenMode::All => !occs,
+            MovegenMode::CapsOnly => opps,
+            MovegenMode::QuietsOnly => !occs & !opps,
+            _ => return,
+        };
+
         while let Some(lsb) = lsfb(bitboard) {
-            let mut attacks = N_ATTACKS[lsb] & if CAPS_ONLY { opps } else { !occs };
+            let mut attacks = N_ATTACKS[lsb] & valid;
 
             while let Some(lsb_attack) = lsfb(attacks) {
-                self.moves[*first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
-                *first_unused += 1;
+                self.moves[self.used] = encode_move(lsb, lsb_attack, None, NO_FLAG);
+                self.used += 1;
                 attacks = pop_bit(lsb_attack, attacks);
             }
             bitboard = pop_bit(lsb, bitboard);
@@ -295,10 +333,10 @@ impl MoveList {
 
     }
 
-    pub fn gen_bishop_moves<const CAPS_ONLY: bool>(
+    pub fn gen_bishop_moves(
         &mut self,
         board: &Board,
-        first_unused: &mut usize,
+        mode: MovegenMode
     )  {
         let (piece, occs, opps) = match board.side_to_move {
             Colour::White => (
@@ -315,15 +353,22 @@ impl MoveList {
 
         let mut bitboard = board.bitboards[piece];
 
+        let valid = match mode {
+            MovegenMode::All => !occs,
+            MovegenMode::CapsOnly => opps,
+            MovegenMode::QuietsOnly => !occs & !opps,
+            _ => return,
+        };
+
         while let Some(lsb) = lsfb(bitboard) {
             let idx = lsb as usize;
             let mut attacks =
                 get_bishop_attacks(idx, board.occupancies[OccupancyIndex::BothOccupancies])
-                    & if CAPS_ONLY { opps } else { !occs };
+                    & valid;
 
             while let Some(lsb_attack) = lsfb(attacks) {
-                self.moves[*first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
-                *first_unused += 1;
+                self.moves[self.used] = encode_move(lsb, lsb_attack, None, NO_FLAG);
+                self.used += 1;
                 attacks = pop_bit(lsb_attack, attacks);
             }
             bitboard = pop_bit(lsb, bitboard);
@@ -331,10 +376,10 @@ impl MoveList {
 
     }
 
-    pub fn gen_rook_moves<const CAPS_ONLY: bool>(
+    pub fn gen_rook_moves(
         &mut self,
         board: &Board,
-        first_unused: &mut usize,
+        mode: MovegenMode
     )  {
         let (piece, occs, opps) = match board.side_to_move {
             Colour::White => (
@@ -351,15 +396,22 @@ impl MoveList {
 
         let mut bitboard = board.bitboards[piece];
 
+        let valid = match mode {
+            MovegenMode::All => !occs,
+            MovegenMode::CapsOnly => opps,
+            MovegenMode::QuietsOnly => !occs & !opps,
+            _ => return,
+        };
+
         while let Some(lsb) = lsfb(bitboard) {
             let idx = lsb as usize;
             let mut attacks =
                 get_rook_attacks(idx, board.occupancies[OccupancyIndex::BothOccupancies])
-                    & if CAPS_ONLY { opps } else { !occs };
+                    & valid;
 
             while let Some(lsb_attack) = lsfb(attacks) {
-                self.moves[*first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
-                *first_unused += 1;
+                self.moves[self.used] = encode_move(lsb, lsb_attack, None, NO_FLAG);
+                self.used += 1;
                 attacks = pop_bit(lsb_attack, attacks);
             }
             bitboard = pop_bit(lsb, bitboard);
@@ -367,10 +419,10 @@ impl MoveList {
 
     }
 
-    pub fn gen_queen_moves<const CAPS_ONLY: bool>(
+    pub fn gen_queen_moves(
         &mut self,
         board: &Board,
-        first_unused: &mut usize,
+        mode: MovegenMode
     )  {
         let (piece, occs, opps) = match board.side_to_move {
             Colour::White => (
@@ -387,15 +439,22 @@ impl MoveList {
 
         let mut bitboard = board.bitboards[piece];
 
+        let valid = match mode {
+            MovegenMode::All => !occs,
+            MovegenMode::CapsOnly => opps,
+            MovegenMode::QuietsOnly => !occs & !opps,
+            _ => return,
+        };
+
         while let Some(lsb) = lsfb(bitboard) {
             let idx = lsb as usize;
             let mut attacks =
                 get_queen_attacks(idx, board.occupancies[OccupancyIndex::BothOccupancies])
-                    & if CAPS_ONLY { opps } else { !occs };
+                    & valid;
 
             while let Some(lsb_attack) = lsfb(attacks) {
-                self.moves[*first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
-                *first_unused += 1;
+                self.moves[self.used] = encode_move(lsb, lsb_attack, None, NO_FLAG);
+                self.used += 1;
                 attacks = pop_bit(lsb_attack, attacks);
             }
             bitboard = pop_bit(lsb, bitboard);
@@ -403,10 +462,10 @@ impl MoveList {
 
     }
 
-    pub fn gen_king_moves<const CAPS_ONLY: bool>(
+    pub fn gen_king_moves(
         &mut self,
         board: &Board,
-        first_unused: &mut usize,
+        mode: MovegenMode
     )  {
         let (piece, occs, opps) = match board.side_to_move {
             Colour::White => (
@@ -423,12 +482,19 @@ impl MoveList {
 
         let mut bitboard = board.bitboards[piece];
 
+        let valid = match mode {
+            MovegenMode::All => !occs,
+            MovegenMode::CapsOnly => opps,
+            MovegenMode::QuietsOnly => !occs & !opps,
+            _ => return,
+        };
+
         while let Some(lsb) = lsfb(bitboard) {
-            let mut attacks = K_ATTACKS[lsb] & if CAPS_ONLY { opps } else { !occs };
+            let mut attacks = K_ATTACKS[lsb] & valid;
 
             while let Some(lsb_attack) = lsfb(attacks) {
-                self.moves[*first_unused] = encode_move(lsb, lsb_attack, None, NO_FLAG);
-                *first_unused += 1;
+                self.moves[self.used] = encode_move(lsb, lsb_attack, None, NO_FLAG);
+                self.used += 1;
                 attacks = pop_bit(lsb_attack, attacks);
             }
             bitboard = pop_bit(lsb, bitboard);
@@ -436,38 +502,43 @@ impl MoveList {
 
     }
 
-    #[must_use]
-    pub fn gen_moves<const CAPS_ONLY: bool>(board: &Board) -> Self {
-        let mut moves = MoveList::empty();
-
-        let mut first_unused = 0;
-        if !CAPS_ONLY {
-            moves.pawn_push_moves(board, &mut first_unused);
-            moves.castling_moves(board, &mut first_unused);
+    pub fn gen_moves(&mut self, board: &Board, mode: MovegenMode) {
+        if !matches!(mode, MovegenMode::NoisyQueenPromotions | MovegenMode::NoisyUnderpromotions | MovegenMode::CapsOnly) {
+            self.pawn_push_moves(board, mode);
         }
-        moves.gen_pawn_captures(board, &mut first_unused);
-        moves.gen_knight_moves::<CAPS_ONLY>(board, &mut first_unused);
-        moves.gen_bishop_moves::<CAPS_ONLY>(board, &mut first_unused);
-        moves.gen_rook_moves::<CAPS_ONLY>(board, &mut first_unused);
-        moves.gen_queen_moves::<CAPS_ONLY>(board, &mut first_unused);
-        moves.gen_king_moves::<CAPS_ONLY>(board, &mut first_unused);
+ 
+        if !matches!(mode, MovegenMode::QuietQueenPromotions | MovegenMode::QuietUnderpromotions | MovegenMode::QuietsOnly) {
+            self.gen_pawn_captures(board, mode);
+        }
 
-        moves
+        if mode == MovegenMode::QuietsOnly || mode == MovegenMode::All {
+            self.castling_moves(board);
+        }
+
+        if matches!(mode, MovegenMode::QuietsOnly | MovegenMode::CapsOnly | MovegenMode::All) {
+            self.gen_knight_moves(board, mode);
+            self.gen_bishop_moves(board, mode);
+            self.gen_rook_moves(board, mode);
+            self.gen_queen_moves(board, mode);
+            self.gen_king_moves(board, mode);
+        }
     }
 
     pub fn gen_legal(b: &mut Board) -> Self {
-        let pseudo_legal = MoveList::gen_moves::<false>(b);
+        let mut pseudo_legal = MoveList::empty();
+        pseudo_legal.gen_moves(b, MovegenMode::All);
         let mut legal = MoveList {
             moves: [NULL_MOVE; MAX_MOVES],
+            used: 0,
         };
-        let mut last = 0;
+
         for i in 0..MAX_MOVES {
             if pseudo_legal.moves[i].is_null() {
                 break;
             }
             if b.is_legal(pseudo_legal.moves[i]) {
-                legal.moves[last] = pseudo_legal.moves[i];
-                last += 1;
+                legal.moves[legal.used] = pseudo_legal.moves[i];
+                legal.used += 1;
             }
         }
         legal
@@ -476,7 +547,7 @@ impl MoveList {
 
 #[rustfmt::skip]
 pub fn get_smallest_attack(b: &mut Board, square: Square) -> Move {
-    //NOTE: for speed this does not take pins into account
+    //NOTE - for speed this does not take pins into account
     //attacked BY colour
 
     //SAFETY for these: we know that an attacker exists

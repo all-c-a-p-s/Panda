@@ -6,12 +6,18 @@
 /// 1000 0000 0000 0000 castling flag      0x8000
 /// 1100 0000 0000 0000 promotion flag     0xc000
 use crate::board::{BitBoard, Board, Colour};
-use crate::helper::{MAX_MOVES, coordinate, count, lsfb, piece_type, pop_bit, rank, set_bit};
-use crate::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS};
+use crate::helper::{
+    MAX_MOVES, coordinate, count, get_bit, lsfb, piece_type, pop_bit, rank, set_bit,
+};
+use crate::magic::{
+    BISHOP_EDGE_RAYS, BP_ATTACKS, K_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS,
+};
+use crate::magic::{get_bishop_attacks, get_queen_attacks, get_rook_attacks};
+use crate::movegen::{CASTLING_MASKS, CASTLING_PATHS};
 use crate::movegen::{RAY_BETWEEN, check_en_passant, is_attacked};
 use crate::zobrist::CASTLING_KEYS;
 
-use crate::types::{OccupancyIndex, Piece, PieceType, Square};
+use crate::types::{CastlingType, OccupancyIndex, Piece, PieceType, Square};
 
 pub const SQUARE_FROM_MASK: u16 = 0b0000_0000_0011_1111;
 pub const SQUARE_TO_MASK: u16 = 0b0000_1111_1100_0000;
@@ -27,6 +33,7 @@ pub const NULL_MOVE: Move = Move { data: 0u16 };
 #[derive(Debug)]
 pub struct MoveList {
     pub moves: [Move; MAX_MOVES], //max number of legal moves in a chess position
+    pub used: usize,
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -213,7 +220,7 @@ impl Board {
     pub fn undo_move(&mut self, m: Move, c: &Commit) {
         //incremental update should be faster than copying the whole board
         self.side_to_move = match self.side_to_move {
-            //NOTE: updated at the beginning of the function
+            //NOTE - updated at the beginning of the function
             Colour::White => Colour::Black,
             Colour::Black => Colour::White,
         };
@@ -598,7 +605,7 @@ impl Board {
         commit
     }
 
-    //NOTE: this assumes that the move is pseudo-legal
+    //NOTE - this assumes that the move is pseudo-legal
     pub fn is_legal(&mut self, m: Move) -> bool {
         //SAFETY: there MUST be a king on the board
         let king_sq = unsafe {
@@ -649,6 +656,101 @@ impl Board {
         }
     }
 
+    pub fn is_pseudo_legal(&mut self, m: Move) -> bool {
+        let (sq_from, sq_to) = (m.square_from(), m.square_to());
+
+        if self.pieces_array[sq_from].is_none() {
+            return false;
+        }
+
+        let pc = m.piece_moved(&self);
+
+        let side = match pc {
+            Piece::WP | Piece::WN | Piece::WB | Piece::WR | Piece::WQ | Piece::WK => Colour::White,
+            Piece::BP | Piece::BN | Piece::BB | Piece::BR | Piece::BQ | Piece::BK => Colour::Black,
+        };
+
+        let blockers = match side {
+            Colour::White => self.occupancies[OccupancyIndex::WhiteOccupancies],
+            Colour::Black => self.occupancies[OccupancyIndex::BlackOccupancies],
+        };
+
+        //remember: pawn pushes, en passant, castling
+
+        let mut attacks: BitBoard = match pc {
+            Piece::WP => WP_ATTACKS[sq_from],
+            Piece::BP => BP_ATTACKS[sq_from],
+            Piece::WN | Piece::BN => N_ATTACKS[sq_from],
+            Piece::WB | Piece::BB => get_bishop_attacks(
+                sq_from as usize,
+                self.occupancies[OccupancyIndex::BothOccupancies],
+            ),
+            Piece::WR | Piece::BR => get_rook_attacks(
+                sq_from as usize,
+                self.occupancies[OccupancyIndex::BothOccupancies],
+            ),
+            Piece::WQ | Piece::BQ => get_queen_attacks(
+                sq_from as usize,
+                self.occupancies[OccupancyIndex::BothOccupancies],
+            ),
+            Piece::WK | Piece::BK => K_ATTACKS[sq_from],
+        } & !blockers;
+
+        if (pc == Piece::WP || pc == Piece::BP)
+            && get_bit(sq_to, attacks) == 1
+            && self.pieces_array[sq_to].is_none()
+            && !self.en_passant.is_some_and(|sq| sq == sq_to)
+        {
+            return false;
+        }
+
+        if pc == Piece::WP {
+            attacks |= set_bit(unsafe { sq_from.add_unchecked(8) }, 0);
+            if rank(sq_from) == 1 {
+                attacks |= set_bit(unsafe { sq_from.add_unchecked(16) }, 0);
+            }
+        } else if pc == Piece::BP {
+            attacks |= set_bit(unsafe { sq_from.sub_unchecked(8) }, 0);
+            if rank(sq_from) == 6 {
+                attacks |= set_bit(unsafe { sq_from.sub_unchecked(16) }, 0);
+            }
+        } else if pc == Piece::WK && sq_from == Square::E1 {
+            if self.castling & CASTLING_MASKS[CastlingType::WhiteKingside] > 0
+                && self.occupancies[OccupancyIndex::BothOccupancies]
+                    & CASTLING_PATHS[CastlingType::WhiteKingside]
+                    == 0
+            {
+                attacks |= set_bit(Square::G1, 0);
+            }
+
+            if self.castling & CASTLING_MASKS[CastlingType::WhiteQueenside] > 0
+                && self.occupancies[OccupancyIndex::BothOccupancies]
+                    & CASTLING_PATHS[CastlingType::WhiteQueenside]
+                    == 0
+            {
+                attacks |= set_bit(Square::C1, 0);
+            }
+        } else if pc == Piece::BK && sq_from == Square::E8 {
+            if self.castling & CASTLING_MASKS[CastlingType::BlackKingside] > 0
+                && self.occupancies[OccupancyIndex::BothOccupancies]
+                    & CASTLING_PATHS[CastlingType::BlackKingside]
+                    == 0
+            {
+                attacks |= set_bit(Square::G8, 0);
+            }
+
+            if self.castling & CASTLING_MASKS[CastlingType::BlackQueenside] > 0
+                && self.occupancies[OccupancyIndex::BothOccupancies]
+                    & CASTLING_PATHS[CastlingType::BlackQueenside]
+                    == 0
+            {
+                attacks |= set_bit(Square::C8, 0);
+            }
+        }
+
+        get_bit(sq_to, attacks) == 1
+    }
+
     fn legal_king_move(&mut self, m: Move) -> bool {
         //SAFETY: there MUST be a king on the board
         let king_sq = unsafe {
@@ -667,7 +769,7 @@ impl Board {
         ok
     }
 
-    //NOTE: assumes at most one checker (double check case handled elsewhere)
+    //NOTE - assumes at most one checker (double check case handled elsewhere)
     fn target_squares(&self, in_check: bool) -> BitBoard {
         let colour = self.side_to_move;
         let targets = if in_check {

@@ -1,4 +1,5 @@
 use crate::r#move::{Move, MoveList};
+use crate::movegen::MovegenMode;
 use crate::movegen::get_attackers;
 use crate::search::{INFINITY, params};
 use crate::thread::Thread;
@@ -175,18 +176,14 @@ impl Move {
             read_param!(HASH_MOVE_SCORE)
             //before pv move because this has been verified by >= search depth
         } else if self.is_capture(b) {
+            //we are already in the segment of good/bad captures
+            //and we only care about scores relative to the rest of the segment
+            //so no need to add good/bad capture bonus
             let victim_type = piece_type(self.piece_captured(b));
             let pc = self.piece_moved(b);
-            let good_capture = self.see(b, 0);
-
             let hist = s.info.caphist_table[pc][sq][victim_type];
 
             hist + MVV[victim_type]
-                + if good_capture {
-                    read_param!(WINNING_CAPTURE)
-                } else {
-                    read_param!(LOSING_CAPTURE)
-                }
         } else if self.is_promotion() {
             //maybe this should fo before checking if capture
             //because of promotions that are also captures
@@ -229,46 +226,273 @@ impl Move {
     }
 }
 
-impl MoveList {
-    const ALREADY_SEARCHED: i32 = -INFINITY / 2;
-    pub fn get_scores(&self, s: &Thread, b: &mut Board, best_move: &Move) -> [i32; MAX_MOVES] {
-        let mut scores = [Self::ALREADY_SEARCHED; MAX_MOVES];
-        for (i, &m) in self.moves.iter().take_while(|m| !m.is_null()).enumerate() {
-            scores[i] = m.score_move(b, s, best_move);
-        }
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum MovePickerStage {
+    HashMove,
+    NoisyQueenPromotions,
+    QuietQueenPromotions,
+    GoodCaps,
+    Killers,
+    Quiets,
+    BadCaps,
+    NoisyUnderpromotions,
+    QuietUnderpromotions,
+}
 
-        scores
+pub struct MovePicker {
+    stage: MovePickerStage,
+    generated: bool,
+    idx: usize,
+    scores: [i32; MAX_MOVES],
+    skip_quiets: bool,
+}
+
+impl MovePicker {
+    pub fn new() -> Self {
+        Self {
+            stage: MovePickerStage::HashMove,
+            generated: false,
+            idx: 0,
+            scores: [0; MAX_MOVES],
+            skip_quiets: false,
+        }
     }
 
-    /// "Sorts" the moves using insertion sort
-    /// In practice this is expected to be faster than O(n log n) sorting since in most cases we
-    /// will only have to find a few of the highest scoring moves
-    pub fn get_next(&mut self, scores: &mut [i32; MAX_MOVES]) -> Option<(Move, i32)> {
-        if scores[0] == Self::ALREADY_SEARCHED {
-            return None;
+    pub fn for_qsearch() -> Self {
+        Self {
+            stage: MovePickerStage::HashMove,
+            generated: false,
+            idx: 0,
+            scores: [0; MAX_MOVES],
+            skip_quiets: true,
         }
+    }
 
-        let (mut best, mut choice, mut idx) = (scores[0], self.moves[0], 0);
-        let mut count = 0;
-        for (i, &m) in self
-            .moves
-            .iter()
-            .enumerate()
-            .take_while(|&(i, _)| scores[i] > Self::ALREADY_SEARCHED)
-            .skip(1)
-        {
-            if scores[i] > best {
-                idx = i;
-                best = scores[i];
-                choice = m;
+    pub fn get_next(
+        &mut self,
+        hash_move: Move,
+        killer: Option<Move>,
+        b: &mut Board,
+        movelist: &mut MoveList,
+        good_caps: &mut MoveList,
+        bad_caps: &mut MoveList,
+        s: &Thread,
+    ) -> Option<Move> {
+        if self.stage == MovePickerStage::HashMove {
+            self.stage = MovePickerStage::NoisyQueenPromotions;
+
+            if !hash_move.is_null() && b.is_pseudo_legal(hash_move) {
+                //still check pseudo-legal in case of hash collision
+                return Some(hash_move);
             }
-            count = i;
         }
 
-        self.moves.swap(idx, count);
-        scores.swap(idx, count);
-        scores[count] = Self::ALREADY_SEARCHED;
+        if self.stage == MovePickerStage::NoisyQueenPromotions {
+            if !self.generated {
+                movelist.gen_moves(b, MovegenMode::NoisyQueenPromotions);
+                if self.idx < movelist.used {
+                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                }
+                self.generated = true;
+            }
 
-        Some((choice, best))
+            if self.idx < movelist.used {
+                let m = self.get_next_between(self.idx, movelist.used - 1, movelist);
+                self.idx += 1;
+                return Some(m);
+            } else {
+                self.stage = MovePickerStage::QuietQueenPromotions;
+                self.generated = false;
+            }
+        }
+
+        if self.stage == MovePickerStage::QuietQueenPromotions {
+            if !self.generated {
+                movelist.gen_moves(b, MovegenMode::QuietQueenPromotions);
+                if self.idx < movelist.used {
+                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                }
+                self.generated = true;
+            }
+
+            if self.idx < movelist.used {
+                let m = self.get_next_between(self.idx, movelist.used - 1, movelist);
+                self.idx += 1;
+                return Some(m);
+            } else {
+                self.stage = MovePickerStage::GoodCaps;
+                self.generated = false;
+            }
+        }
+
+        if self.stage == MovePickerStage::GoodCaps {
+            if !self.generated {
+                let mut caps = MoveList::empty();
+                caps.gen_moves(b, MovegenMode::CapsOnly);
+                (*good_caps, *bad_caps) = caps.separate_captures(b);
+                movelist.extend_from(good_caps);
+                if self.idx < movelist.used {
+                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                }
+                self.generated = true;
+            }
+
+            if self.idx < movelist.used {
+                let m = self.get_next_between(self.idx, movelist.used - 1, movelist);
+                self.idx += 1;
+                return Some(m);
+            } else {
+                self.stage = if self.skip_quiets {
+                    MovePickerStage::BadCaps
+                } else {
+                    MovePickerStage::Killers
+                };
+                self.generated = false;
+            }
+        }
+
+        if !self.skip_quiets {
+            if self.stage == MovePickerStage::Killers {
+                self.stage = MovePickerStage::Quiets;
+
+                if let Some(m) = killer
+                    && b.is_pseudo_legal(m)
+                {
+                    return Some(m);
+                }
+            }
+
+            if self.stage == MovePickerStage::Quiets {
+                if !self.generated {
+                    movelist.gen_moves(b, MovegenMode::QuietsOnly);
+                    if self.idx < movelist.used {
+                        self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                    }
+                    self.generated = true;
+                }
+
+                if self.idx < movelist.used {
+                    let m = self.get_next_between(self.idx, movelist.used - 1, movelist);
+                    self.idx += 1;
+                    return Some(m);
+                } else {
+                    self.stage = MovePickerStage::BadCaps;
+                    self.generated = false;
+                }
+            }
+        }
+
+        if self.stage == MovePickerStage::BadCaps {
+            if !self.generated {
+                movelist.extend_from(bad_caps);
+                if self.idx < movelist.used {
+                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                }
+                self.generated = true;
+            }
+
+            if self.idx < movelist.used {
+                let m = self.get_next_between(self.idx, movelist.used - 1, movelist);
+                self.idx += 1;
+                return Some(m);
+            } else {
+                self.stage = MovePickerStage::NoisyUnderpromotions;
+                self.generated = false;
+            }
+        }
+
+        if !self.skip_quiets {
+            if self.stage == MovePickerStage::NoisyUnderpromotions {
+                if !self.generated {
+                    movelist.gen_moves(b, MovegenMode::NoisyUnderpromotions);
+                    if self.idx < movelist.used {
+                        self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                    }
+                    self.generated = true;
+                }
+
+                if self.idx < movelist.used {
+                    let m = self.get_next_between(self.idx, movelist.used - 1, movelist);
+                    self.idx += 1;
+                    return Some(m);
+                } else {
+                    self.stage = MovePickerStage::QuietUnderpromotions;
+                    self.generated = false;
+                }
+            }
+
+            if self.stage == MovePickerStage::QuietUnderpromotions {
+                if !self.generated {
+                    movelist.gen_moves(b, MovegenMode::QuietUnderpromotions);
+                    if self.idx < movelist.used {
+                        self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                    }
+                    self.generated = true;
+                }
+
+                if self.idx < movelist.used {
+                    let m = self.get_next_between(self.idx, movelist.used - 1, movelist);
+                    self.idx += 1;
+                    return Some(m);
+                }
+            }
+        }
+
+        None
+    }
+
+    pub fn score_between(
+        &mut self,
+        movelist: &mut MoveList,
+        l: usize,
+        r: usize,
+        b: &mut Board,
+        hash_move: &Move,
+        s: &Thread,
+    ) {
+        for i in l..=r {
+            self.scores[i] = movelist.moves[i].score_move(b, s, hash_move);
+        }
+    }
+
+    fn get_next_between(&mut self, l: usize, r: usize, movelist: &mut MoveList) -> Move {
+        let mut best = -INFINITY;
+        let mut idx = 0;
+        for i in l..=r {
+            if self.scores[i] > best {
+                best = self.scores[i];
+                idx = i;
+            }
+        }
+
+        movelist.moves.swap(idx, l);
+        self.scores.swap(idx, l);
+
+        movelist.moves[l]
+    }
+}
+
+impl MoveList {
+    /// Returns good caps, bad caps
+    pub fn separate_captures(&mut self, b: &mut Board) -> (Self, Self) {
+        let (mut good_caps, mut bad_caps) = (MoveList::empty(), MoveList::empty());
+        for &c in self.moves.iter().take(self.used) {
+            if c.see(b, 0) {
+                good_caps.moves[good_caps.used] = c;
+                good_caps.used += 1;
+            } else {
+                bad_caps.moves[bad_caps.used] = c;
+                bad_caps.used += 1;
+            }
+        }
+
+        (good_caps, bad_caps)
+    }
+
+    pub fn extend_from(&mut self, other: &Self) {
+        for &m in other.moves.iter().take(other.used) {
+            self.moves[self.used] = m;
+            self.used += 1;
+        }
     }
 }
