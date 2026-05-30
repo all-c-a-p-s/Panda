@@ -26,8 +26,6 @@ macro_rules! cfor {
     }
 }
 
-pub(crate) use cfor;
-
 // bits attacked for each square
 #[rustfmt::skip]
 pub const BISHOP_RELEVANT_BITS: [usize; 64] = [

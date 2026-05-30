@@ -757,8 +757,8 @@ impl Board {
                 && self.occupancies[OccupancyIndex::BothOccupancies]
                     & CASTLING_PATHS[CastlingType::BlackKingside]
                     == 0
-                && !is_attacked(Square::E8, Colour::Black, self)
-                && !is_attacked(Square::F8, Colour::Black, self)
+                && !is_attacked(Square::E8, Colour::White, self)
+                && !is_attacked(Square::F8, Colour::White, self)
             {
                 attacks |= set_bit(Square::G8, 0);
             }
@@ -767,8 +767,8 @@ impl Board {
                 && self.occupancies[OccupancyIndex::BothOccupancies]
                     & CASTLING_PATHS[CastlingType::BlackQueenside]
                     == 0
-                && !is_attacked(Square::E8, Colour::Black, self)
-                && !is_attacked(Square::D8, Colour::Black, self)
+                && !is_attacked(Square::E8, Colour::White, self)
+                && !is_attacked(Square::D8, Colour::White, self)
             {
                 attacks |= set_bit(Square::C8, 0);
             }
