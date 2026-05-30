@@ -670,12 +670,14 @@ impl Board {
             Piece::BP | Piece::BN | Piece::BB | Piece::BR | Piece::BQ | Piece::BK => Colour::Black,
         };
 
+        if side != self.side_to_move {
+            return false;
+        }
+
         let blockers = match side {
             Colour::White => self.occupancies[OccupancyIndex::WhiteOccupancies],
             Colour::Black => self.occupancies[OccupancyIndex::BlackOccupancies],
         };
-
-        //remember: pawn pushes, en passant, castling
 
         let mut attacks: BitBoard = match pc {
             Piece::WP => WP_ATTACKS[sq_from],
@@ -705,20 +707,38 @@ impl Board {
         }
 
         if pc == Piece::WP {
-            attacks |= set_bit(unsafe { sq_from.add_unchecked(8) }, 0);
-            if rank(sq_from) == 1 {
-                attacks |= set_bit(unsafe { sq_from.add_unchecked(16) }, 0);
+            let one = unsafe { sq_from.add_unchecked(8) };
+
+            if self.pieces_array[one].is_none() {
+                attacks |= set_bit(one, 0);
+
+                if rank(sq_from) == 1 {
+                    let two = unsafe { sq_from.add_unchecked(16) };
+                    if self.pieces_array[two].is_none() {
+                        attacks |= set_bit(two, 0);
+                    }
+                }
             }
         } else if pc == Piece::BP {
-            attacks |= set_bit(unsafe { sq_from.sub_unchecked(8) }, 0);
-            if rank(sq_from) == 6 {
-                attacks |= set_bit(unsafe { sq_from.sub_unchecked(16) }, 0);
+            let one = unsafe { sq_from.sub_unchecked(8) };
+
+            if self.pieces_array[one].is_none() {
+                attacks |= set_bit(one, 0);
+
+                if rank(sq_from) == 6 {
+                    let two = unsafe { sq_from.sub_unchecked(16) };
+                    if self.pieces_array[two].is_none() {
+                        attacks |= set_bit(two, 0);
+                    }
+                }
             }
         } else if pc == Piece::WK && sq_from == Square::E1 {
             if self.castling & CASTLING_MASKS[CastlingType::WhiteKingside] > 0
                 && self.occupancies[OccupancyIndex::BothOccupancies]
                     & CASTLING_PATHS[CastlingType::WhiteKingside]
                     == 0
+                && !is_attacked(Square::E1, Colour::Black, self)
+                && !is_attacked(Square::F1, Colour::Black, self)
             {
                 attacks |= set_bit(Square::G1, 0);
             }
@@ -727,6 +747,8 @@ impl Board {
                 && self.occupancies[OccupancyIndex::BothOccupancies]
                     & CASTLING_PATHS[CastlingType::WhiteQueenside]
                     == 0
+                && !is_attacked(Square::E1, Colour::Black, self)
+                && !is_attacked(Square::D1, Colour::Black, self)
             {
                 attacks |= set_bit(Square::C1, 0);
             }
@@ -735,6 +757,8 @@ impl Board {
                 && self.occupancies[OccupancyIndex::BothOccupancies]
                     & CASTLING_PATHS[CastlingType::BlackKingside]
                     == 0
+                && !is_attacked(Square::E8, Colour::Black, self)
+                && !is_attacked(Square::F8, Colour::Black, self)
             {
                 attacks |= set_bit(Square::G8, 0);
             }
@@ -743,6 +767,8 @@ impl Board {
                 && self.occupancies[OccupancyIndex::BothOccupancies]
                     & CASTLING_PATHS[CastlingType::BlackQueenside]
                     == 0
+                && !is_attacked(Square::E8, Colour::Black, self)
+                && !is_attacked(Square::D8, Colour::Black, self)
             {
                 attacks |= set_bit(Square::C8, 0);
             }

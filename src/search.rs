@@ -340,14 +340,13 @@ impl Thread<'_> {
         let (mut good_caps, mut bad_caps) = (MoveList::empty(), MoveList::empty());
 
         let (mut legal, mut considered) = (0, 0);
-        let mut skip_quiets = false;
         let mut best_score = -INFINITY;
 
         let mut done_killer = false;
 
         while let Some(m) = movepicker.get_next(
             best_move,
-            None,
+            self.info.killer_moves[self.ply],
             position,
             &mut movelist,
             &mut good_caps,
@@ -385,10 +384,6 @@ impl Thread<'_> {
             // by showing that they're not worth investigating
             #[cfg(not(feature = "datagen"))]
             if !root && not_mated {
-                if quiet && skip_quiets && !is_killer {
-                    continue;
-                }
-
                 // Late Move Pruning (LMP):
                 // after a certain point start skipping all quiets after the current
                 // move. The threshold I'm currently using comes from Weiss
@@ -398,7 +393,7 @@ impl Thread<'_> {
                     depth * depth / 2
                 };
                 if depth <= read_param!(LMP_DEPTH) && legal > lmp_threshold && !in_check {
-                    skip_quiets = true;
+                    movepicker.skip_quiets(&movelist);
                 }
 
                 let r = self.info.lmr_table.reduction_table[usize::from(quiet)]
@@ -700,7 +695,11 @@ impl Thread<'_> {
 
         while let Some(m) = movepicker.get_next(
             q_hash,
-            self.info.killer_moves[self.ply],
+            if in_check && !not_mated {
+                self.info.killer_moves[self.ply]
+            } else {
+                None
+            },
             position,
             &mut movelist,
             &mut good_caps,
@@ -739,6 +738,10 @@ impl Thread<'_> {
             let Ok(commit) = position.try_move(m) else {
                 continue;
             };
+
+            if in_check {
+                movepicker.skip_quiets(&movelist);
+            }
 
             not_mated = true;
 

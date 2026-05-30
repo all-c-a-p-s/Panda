@@ -244,7 +244,7 @@ pub struct MovePicker {
     generated: bool,
     idx: usize,
     scores: [i32; MAX_MOVES],
-    skip_quiets: bool,
+    pub skip_quiets: bool,
 }
 
 impl MovePicker {
@@ -265,6 +265,16 @@ impl MovePicker {
             idx: 0,
             scores: [0; MAX_MOVES],
             skip_quiets: true,
+        }
+    }
+
+    pub fn skip_quiets(&mut self, movelist: &MoveList) {
+        self.skip_quiets = true;
+
+        if self.stage == MovePickerStage::Quiets {
+            self.stage = MovePickerStage::BadCaps;
+            self.idx = movelist.used;
+            self.generated = false;
         }
     }
 
@@ -342,43 +352,41 @@ impl MovePicker {
                 self.idx += 1;
                 return Some(m);
             } else {
-                self.stage = if self.skip_quiets {
-                    MovePickerStage::BadCaps
-                } else {
-                    MovePickerStage::Killers
-                };
+                self.stage = MovePickerStage::Killers;
                 self.generated = false;
             }
         }
 
-        if !self.skip_quiets {
-            if self.stage == MovePickerStage::Killers {
-                self.stage = MovePickerStage::Quiets;
+        if self.stage == MovePickerStage::Killers {
+            self.stage = if self.skip_quiets {
+                MovePickerStage::BadCaps
+            } else {
+                MovePickerStage::Quiets
+            };
 
-                if let Some(m) = killer
-                    && b.is_pseudo_legal(m)
-                {
-                    return Some(m);
+            if let Some(m) = killer
+                && b.is_pseudo_legal(m)
+            {
+                return Some(m);
+            }
+        }
+
+        if !self.skip_quiets && self.stage == MovePickerStage::Quiets {
+            if !self.generated {
+                movelist.gen_moves(b, MovegenMode::QuietsOnly);
+                if self.idx < movelist.used {
+                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
                 }
+                self.generated = true;
             }
 
-            if self.stage == MovePickerStage::Quiets {
-                if !self.generated {
-                    movelist.gen_moves(b, MovegenMode::QuietsOnly);
-                    if self.idx < movelist.used {
-                        self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
-                    }
-                    self.generated = true;
-                }
-
-                if self.idx < movelist.used {
-                    let m = self.get_next_between(self.idx, movelist.used - 1, movelist);
-                    self.idx += 1;
-                    return Some(m);
-                } else {
-                    self.stage = MovePickerStage::BadCaps;
-                    self.generated = false;
-                }
+            if self.idx < movelist.used {
+                let m = self.get_next_between(self.idx, movelist.used - 1, movelist);
+                self.idx += 1;
+                return Some(m);
+            } else {
+                self.stage = MovePickerStage::BadCaps;
+                self.generated = false;
             }
         }
 
@@ -457,7 +465,7 @@ impl MovePicker {
 
     fn get_next_between(&mut self, l: usize, r: usize, movelist: &mut MoveList) -> Move {
         let mut best = -INFINITY;
-        let mut idx = 0;
+        let mut idx = l;
         for i in l..=r {
             if self.scores[i] > best {
                 best = self.scores[i];
