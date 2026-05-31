@@ -17,6 +17,8 @@ pub mod types;
 pub mod uci;
 pub mod zobrist;
 
+pub(crate) mod search_macros;
+
 use std::error::Error;
 
 use crate::board::{BitBoard, Board, Colour};

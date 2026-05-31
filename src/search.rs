@@ -5,6 +5,7 @@ use crate::eval::evaluate;
 use crate::helper::{read_param, tuneable_params};
 use crate::r#move::{Commit, Move, MoveList, NULL_MOVE};
 use crate::ordering::{MovePicker, SEE_VALUES};
+use crate::search_macros::*;
 use crate::thread::{SearchStackEntry, Thread};
 use crate::transposition::{EntryFlag, TT, TTEntry};
 use crate::types::PieceType;
@@ -111,11 +112,7 @@ impl Thread<'_> {
 
         self.info.excluded[self.ply] = None;
 
-        if DO_SINGULARITY_DE
-            && !pv_node
-            && excluded_eval < threshold - read_param!(SINGULARITY_DE_MARGIN)
-            && self.double_extensions <= 6
-        {
+        if singularity_de!(self, pv_node, excluded_eval, threshold) {
             Some(2)
         } else if excluded_eval < threshold {
             Some(1)
@@ -194,24 +191,9 @@ impl Thread<'_> {
             // We accept values from the TT if:
             //      (1) the depth of the entry >= our depth, with the correct bound
             // OR   (2) we don't expect much from this node, and the eval is well above beta
-            if !singular
-                && !root
-                && (!pv_node
-                    && depth <= entry.depth
-                    && match entry.flag {
-                        EntryFlag::Exact => true,
-                        EntryFlag::LowerBound => entry.eval >= beta,
-                        EntryFlag::UpperBound => entry.eval <= alpha,
-                        EntryFlag::Missing => false,
-                    }
-                    || (cutnode
-                        && entry.eval
-                            - read_param!(TT_FUTILITY_MARGIN)
-                                * i32::from(depth - entry.depth).max(1)
-                            >= beta
-                        && entry.flag != EntryFlag::UpperBound
-                        && !in_check))
-            {
+            if tt_cutoff!(
+                singular, root, pv_node, depth, entry, beta, alpha, cutnode, in_check
+            ) {
                 return entry.eval;
             }
         }
@@ -233,10 +215,7 @@ impl Thread<'_> {
         }
 
         let mut tt_correction = 0;
-        if tt_hit
-            && !((static_eval > tt_score && tt_bound == EntryFlag::LowerBound)
-                || (static_eval < tt_score && tt_bound == EntryFlag::UpperBound))
-        {
+        if should_correct_with_tt!(tt_hit, static_eval, tt_score, tt_bound) {
             tt_correction = (tt_score - static_eval).abs();
             static_eval = tt_score;
         }
@@ -268,28 +247,24 @@ impl Thread<'_> {
 
         // Static pruning: here we attempt to show that the position does not require any further
         // search
-        if !in_check && !singular && self.do_pruning && !pv_node {
+        if can_static_prune!(self, in_check, singular, pv_node) {
             // Reverse Futility Pruning:
             // If eval >= beta + some margin, assume that we can achieve at least beta
-            if depth <= read_param!(RFP_DEPTH)
-                && static_eval - i32::from(read_param!(RFP_MARGIN) * (depth - u8::from(improving)))
-                    >= beta
-            {
+            if can_rfp!(depth, static_eval, improving, beta) {
                 return static_eval;
             }
 
             // Razoring:
             // If we're very far behind it's likely that the only way to raise alpha will be with
             // captures, so just run a qsearch
-            if depth <= read_param!(MAX_RAZOR_DEPTH)
-                && static_eval
-                    + read_param!(RAZORING_MARGIN)
-                        * i32::from(
-                            depth + u8::from(improving)
-                                - u8::from(opponent_captured || !opponent_worsening),
-                        )
-                    <= alpha
-            {
+            if can_razor!(
+                depth,
+                static_eval,
+                improving,
+                opponent_captured,
+                opponent_worsening,
+                alpha
+            ) {
                 let qeval = self.qsearch(position, alpha, beta);
                 if qeval < alpha {
                     return qeval;
@@ -299,12 +274,7 @@ impl Thread<'_> {
             // Null Move Pruning (NMP):
             // If we are still able to reach an eval >= beta if we give our opponent
             // another move, then their previous move was probably bad
-            if !position.is_kp_endgame()
-                && !position.last_move_null
-                && static_eval + read_param!(NMP_FACTOR) * i32::from(depth) - read_param!(NMP_BASE)
-                    >= beta
-                && !root
-            {
+            if can_nmp!(position, static_eval, depth, beta, root) {
                 let undo = position.make_null_move();
                 self.ply += 1;
                 let r = 2
@@ -328,7 +298,7 @@ impl Thread<'_> {
         // Internal Iterative Reduction (IIR):
         // if we don't have a TT hit then move ordering here will be terrible
         // so its better to reduce and set up TT move for next iteration
-        if (pv_node || cutnode) && depth >= read_param!(IIR_DEPTH_MINIMUM) && !tt_move {
+        if do_iir!(pv_node, cutnode, depth, tt_move) {
             depth -= 1;
         }
 
@@ -396,7 +366,7 @@ impl Thread<'_> {
                 } else {
                     depth * depth / 2
                 };
-                if depth <= read_param!(LMP_DEPTH) && legal > lmp_threshold && !in_check {
+                if do_lmp!(depth, legal, lmp_threshold, in_check) {
                     movepicker.skip_quiets(&movelist);
                 }
 
@@ -407,7 +377,7 @@ impl Thread<'_> {
 
                 // SEE Pruning:
                 // skip moves that fail SEE by a depth-dependent threshold
-                if lmr_depth <= read_param!(SEE_PRUNING_DEPTH) && considered > 1 && !pv_node {
+                if do_see_pruning!(lmr_depth, considered, pv_node) {
                     let margin = if tactical {
                         read_param!(SEE_NOISY_MARGIN)
                     } else {
@@ -438,13 +408,8 @@ impl Thread<'_> {
 
             // A singular move is a move which seems to be forced or at least much stronger than
             // others. We should therefore extend to investigate it further.
-            let maybe_singular = DO_SINGULARITY_EXTENSION
-                && !root
-                && depth >= 8
-                && !singular
-                && m == best_move
-                && tt_depth >= depth - 3
-                && tt_bound != EntryFlag::UpperBound;
+            let maybe_singular =
+                maybe_singular!(root, depth, singular, m, best_move, tt_depth, tt_bound);
 
             let extension = if maybe_singular {
                 self.singularity(
@@ -476,14 +441,9 @@ impl Thread<'_> {
                 // basically like an internal aspiration window:
                 // assume the value of our lower-depth search has some merit, so we may be able to search on
                 // a tighter window
-                if pv_node
-                    && tt_hit
-                    && tt_bound == EntryFlag::Exact
-                    && !root
-                    && !singular
-                    && tt_score >= alpha
-                    && tt_score <= beta
-                {
+                if do_iiw!(
+                    pv_node, tt_hit, tt_bound, root, singular, tt_score, alpha, beta
+                ) {
                     let depth_diff = (depth as i32 - tt_depth as i32).abs().max(1);
                     let mut delta = (tt_correction / 2).clamp(10, 25) * depth_diff;
 
@@ -535,37 +495,31 @@ impl Thread<'_> {
                 // often enough that it outweighs the cost of re-searching
                 // then if we are unable to prove so
 
-                let mut reduction_eval = if legal
-                    > (FULL_DEPTH_MOVES
-                        + u8::from(pv_node)
-                        + u8::from(!tt_move)
-                        + u8::from(root)
-                        + u8::from(tactical))
-                    && depth >= REDUCTION_LIMIT
-                    && not_mated
-                {
-                    let mut r = 1;
-                    if quiet {
-                        r = self.info.lmr_table.reduction_table[usize::from(quiet)]
-                            [depth.min(31) as usize][legal.min(31) as usize];
+                let mut reduction_eval =
+                    if should_reduce!(legal, pv_node, tt_move, root, tactical, depth, not_mated) {
+                        let mut r = 1;
+                        if quiet {
+                            r = self.info.lmr_table.reduction_table[usize::from(quiet)]
+                                [depth.min(31) as usize][legal.min(31) as usize];
 
-                        r -= i32::from(pv_node);
-                        r += i32::from(tt_move_capture);
-                        r += i32::from(!improving);
+                            r -= i32::from(pv_node);
+                            r += i32::from(tt_move_capture);
+                            r += i32::from(!improving);
 
-                        r -= i32::from(is_check);
+                            r -= i32::from(is_check);
 
-                        r -= self.info.history_table[m.piece_moved(position)][m.square_to()] / 8192;
-                    }
+                            r -= self.info.history_table[m.piece_moved(position)][m.square_to()]
+                                / 8192;
+                        }
 
-                    let mut reduced_depth = (i32::from(new_depth) - r).max(1) as u8;
-                    reduced_depth = reduced_depth.clamp(1, new_depth);
-                    // avoid dropping into qsearch or extending
+                        let mut reduced_depth = (i32::from(new_depth) - r).max(1) as u8;
+                        reduced_depth = reduced_depth.clamp(1, new_depth);
+                        // avoid dropping into qsearch or extending
 
-                    -self.negamax(position, reduced_depth, -alpha - 1, -alpha, true)
-                } else {
-                    alpha + 1
-                };
+                        -self.negamax(position, reduced_depth, -alpha - 1, -alpha, true)
+                    } else {
+                        alpha + 1
+                    };
                 if reduction_eval > alpha {
                     // failed to prove that move is bad -> re-search with same depth but reduced
                     // window
@@ -624,11 +578,14 @@ impl Thread<'_> {
 
             self.tt.write(position.hash_key, hash_entry);
 
-            if !(in_check
-                || best_move.is_capture(position)
-                || (hash_flag == EntryFlag::LowerBound && best_score <= static_eval)
-                || (hash_flag == EntryFlag::UpperBound && best_score >= static_eval))
-            {
+            if corrhist_update_allowed!(
+                in_check,
+                best_move,
+                position,
+                hash_flag,
+                best_score,
+                static_eval
+            ) {
                 self.update_corrhist(position, depth, best_score - static_eval);
             }
         }
