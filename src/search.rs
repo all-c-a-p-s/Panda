@@ -47,7 +47,7 @@ tuneable_params! {
     HASH_MOVE_SCORE, i32, 1_000_000, 1_000_000, 1_000_000;
     QUEEN_PROMOTION, i32, 750_000, -999_999, 999_999;
     WINNING_CAPTURE, i32, 500_000, -999_999, 999_999;
-    FIRST_KILLER_MOVE, i32, 94_419, -999_999, 999_999;
+    FIRST_KILLER_MOVE, i32, 100_000, -999_999, 999_999;
     LOSING_CAPTURE, i32, -300_000, -999_999, 999_999;
     UNDER_PROMOTION, i32, -500_000, -999_999, 999_999;
 
@@ -332,17 +332,17 @@ impl Thread<'_> {
             &mut movelist,
             &mut good_caps,
             &mut bad_caps,
-            &self,
+            self,
         ) {
             if m == best_move && considered > 0 {
                 continue;
             }
 
-            if let Some(n) = self.info.excluded[self.ply] {
-                if n == m {
-                    considered += 1;
-                    continue;
-                }
+            if let Some(n) = self.info.excluded[self.ply]
+                && n == m
+            {
+                considered += 1;
+                continue;
             }
 
             considered += 1;
@@ -675,7 +675,7 @@ impl Thread<'_> {
             &mut movelist,
             &mut good_caps,
             &mut bad_caps,
-            &self,
+            self,
         ) {
             if !position.is_legal(m) {
                 continue;

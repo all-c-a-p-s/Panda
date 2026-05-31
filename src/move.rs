@@ -663,7 +663,7 @@ impl Board {
             return false;
         }
 
-        let pc = m.piece_moved(&self);
+        let pc = m.piece_moved(self);
 
         let side = match pc {
             Piece::WP | Piece::WN | Piece::WB | Piece::WR | Piece::WQ | Piece::WK => Colour::White,
@@ -701,7 +701,7 @@ impl Board {
         if (pc == Piece::WP || pc == Piece::BP)
             && get_bit(sq_to, attacks) == 1
             && self.pieces_array[sq_to].is_none()
-            && !self.en_passant.is_some_and(|sq| sq == sq_to)
+            && self.en_passant.is_none_or(|sq| sq != sq_to)
         {
             return false;
         }

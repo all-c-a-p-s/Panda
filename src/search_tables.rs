@@ -206,7 +206,7 @@ impl Thread<'_> {
 
         *entry =
             (*entry * (CORRHIST_SCALE - new_weight) + scaled_diff * new_weight) / CORRHIST_SCALE;
-        *entry = entry.clone().clamp(-CORRHIST_MAX, CORRHIST_MAX);
+        *entry = (*entry).clamp(-CORRHIST_MAX, CORRHIST_MAX);
     }
 
     pub fn eval_with_corrhist(&self, b: &Board, raw_eval: i32) -> i32 {

@@ -295,6 +295,7 @@ fn parse_perft(words: &[&str], position: &mut Board) {
             let nodes = perft::<true, false, false>(x, position, Some(x));
             let micros = start.elapsed().as_micros() as usize;
 
+            #[allow(clippy::manual_checked_ops)]
             let nps = if micros == 0 {
                 nodes * 1_000_000
             } else {
@@ -374,6 +375,7 @@ pub fn print_thinking(depth: u8, eval: i32, s: &Thread, start: Instant) {
         start.elapsed().as_millis(),
         {
             let micros = start.elapsed().as_micros() as usize;
+            #[allow(clippy::manual_checked_ops)]
             if micros == 0 {
                 s.nodes * 1_000_000
             } else {

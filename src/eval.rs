@@ -48,7 +48,6 @@ fn side_has_sufficient_material(b: &Board, side: Colour) -> bool {
 pub fn evaluate(b: &Board) -> i32 {
     let s = b.nnue.evaluate(b.side_to_move);
 
-    //TODO: endgame tablebase for better draw detection
     let side_sm = side_has_sufficient_material(b, b.side_to_move);
     let opp_sm = side_has_sufficient_material(b, b.side_to_move.opponent());
 

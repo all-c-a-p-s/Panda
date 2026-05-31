@@ -45,10 +45,10 @@ pub fn perft<const BULK: bool, const TEST_PSEUDOLEGAL: bool, const MODES: bool>(
 
         b.undo_move(m, &commit);
 
-        if let Some(d) = reporting_depth {
-            if depth == d {
-                println!("{}: {}", m.uci(), added);
-            }
+        if let Some(d) = reporting_depth
+            && depth == d
+        {
+            println!("{}: {}", m.uci(), added);
         }
     }
 

@@ -1,3 +1,5 @@
+#![allow(clippy::no_effect)]
+
 use crate::board::{BitBoard, Colour};
 use crate::helper::{
     A_FILE, B_FILE, G_FILE, H_FILE, coordinate, count, get_bit, lsfb, pop_bit, set_bit,

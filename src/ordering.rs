@@ -248,6 +248,7 @@ pub struct MovePicker {
 }
 
 impl MovePicker {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             stage: MovePickerStage::HashMove,
@@ -278,6 +279,7 @@ impl MovePicker {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn get_next(
         &mut self,
         hash_move: Move,
