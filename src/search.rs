@@ -320,6 +320,7 @@ impl Thread<'_> {
                 self.ply -= 1;
                 if null_move_eval >= beta {
                     return beta;
+                    // TODO - partial fail soft?
                 }
             }
         }
@@ -332,8 +333,6 @@ impl Thread<'_> {
         }
 
         let (mut quiets, mut caps) = (vec![], vec![]);
-
-        // avoid searching hash or killer twice!!!
 
         let mut movelist = MoveList::empty();
         let mut movepicker = MovePicker::new();
@@ -606,12 +605,12 @@ impl Thread<'_> {
                 self.update_pv(m);
                 hash_flag = EntryFlag::Exact;
                 best_move = m;
-            }
 
-            if eval >= beta {
-                self.update_search_tables(position, &quiets, &caps, m, tactical, depth);
-                hash_flag = EntryFlag::LowerBound;
-                break;
+                if eval >= beta {
+                    self.update_search_tables(position, &quiets, &caps, m, tactical, depth);
+                    hash_flag = EntryFlag::LowerBound;
+                    break;
+                }
             }
         }
 
@@ -676,7 +675,7 @@ impl Thread<'_> {
         let mut best_score = if in_check { -INFINITY + 1 } else { static_eval };
 
         if best_score >= beta {
-            return static_eval;
+            return best_score;
         }
 
         alpha = alpha.max(best_score);
@@ -719,23 +718,26 @@ impl Thread<'_> {
                 best_score = best_score.max(static_eval);
                 if best_score >= beta {
                     return beta;
+                    // TODO - fail soft
                 }
                 movepicker.skip_quiets(&movelist);
                 could_be_mated = false;
             }
 
-            //next check if we fail SEE by threshold
-            if !m.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
-                continue;
-            }
+            let check_futility = best_score + read_param!(QSEARCH_FP_MARGIN) <= alpha;
 
             //if we're far behind, only consider moves which win significant material
-            if best_score + read_param!(QSEARCH_FP_MARGIN) <= alpha
-                && !m.see(
+            if check_futility {
+                if !m.see(
                     position,
                     SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1,
-                )
-            {
+                ) {
+                    continue;
+                }
+            } else if !m.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
+                // alternatively just skip any move which fails SEE by this margin
+                // note anything that passes the futility check will pass this so there's no need
+                // to do SEE check twice on such moves
                 continue;
             }
 
@@ -753,14 +755,15 @@ impl Thread<'_> {
             }
 
             best_score = best_score.max(eval);
-            if best_score > alpha {
+            if eval > alpha {
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
                 best_move = m;
-            }
-            if alpha >= beta {
-                hash_flag = EntryFlag::LowerBound;
-                break;
+
+                if eval >= beta {
+                    hash_flag = EntryFlag::LowerBound;
+                    break;
+                }
             }
         }
 
