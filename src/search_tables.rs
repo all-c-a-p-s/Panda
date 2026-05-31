@@ -58,7 +58,7 @@ impl Thread<'_> {
         if self.ply <= 1 {
             return;
         }
-        let bonus = (30 * i32::from(depth) - 20).clamp(-CORRELATION_MAX, CORRELATION_MAX);
+        let bonus = (30 * depth as i32 - 20).clamp(-CORRELATION_MAX, CORRELATION_MAX);
 
         let update = |entry: &mut i32, m: Move| {
             let sign = if m == cutoff_move { 1 } else { -1 };
@@ -70,7 +70,7 @@ impl Thread<'_> {
             return;
         };
 
-        let side = usize::from(b.side_to_move == Colour::White);
+        let side = (b.side_to_move == Colour::White) as usize;
 
         if tactical {
             for &m in caps {
@@ -108,7 +108,7 @@ impl Thread<'_> {
         if self.ply == 0 {
             return;
         }
-        let bonus = (100 * i32::from(depth) - 50).clamp(-CORRELATION_MAX, CORRELATION_MAX);
+        let bonus = (100 * depth as i32 - 50).clamp(-CORRELATION_MAX, CORRELATION_MAX);
 
         let update = |entry: &mut i32, m: Move| {
             let sign = if m == cutoff_move { 1 } else { -1 };
@@ -120,7 +120,7 @@ impl Thread<'_> {
             return;
         };
 
-        let side = usize::from(b.side_to_move == Colour::White);
+        let side = (b.side_to_move == Colour::White) as usize;
 
         if tactical {
             for &m in caps {
@@ -156,7 +156,7 @@ impl Thread<'_> {
         tactical: bool,
         depth: u8,
     ) {
-        let bonus = (300 * i32::from(depth) - 250).clamp(-HISTORY_MAX, HISTORY_MAX);
+        let bonus = (300 * depth as i32 - 250).clamp(-HISTORY_MAX, HISTORY_MAX);
         //penalise all moves that have been checked and have not caused beta cutoff
 
         let update = |entry: &mut i32, m: Move| {
@@ -197,7 +197,7 @@ impl Thread<'_> {
 
     pub fn update_corrhist(&mut self, b: &Board, depth: u8, diff: i32) {
         let idx = b.pawn_hash as usize % CORRHIST_SIZE;
-        let side = usize::from(b.side_to_move == Colour::White);
+        let side = (b.side_to_move == Colour::White) as usize;
 
         let entry = &mut self.info.corrhist[side][idx];
 
@@ -211,7 +211,7 @@ impl Thread<'_> {
 
     pub fn eval_with_corrhist(&self, b: &Board, raw_eval: i32) -> i32 {
         let idx = b.pawn_hash as usize % CORRHIST_SIZE;
-        let side = usize::from(b.side_to_move == Colour::White);
+        let side = (b.side_to_move == Colour::White) as usize;
 
         let entry = self.info.corrhist[side][idx];
         (raw_eval + entry / CORRHIST_GRAIN).clamp(-MATE + 1, MATE - 1)

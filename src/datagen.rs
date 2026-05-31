@@ -344,7 +344,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
         .skip(OPENING_PLIES)
     {
         let quiet = n.position.checkers == 0 && !n.choice.unwrap().is_capture(&n.position);
-        let within_bounds = n.value.abs() < i32::from(i16::MAX);
+        let within_bounds = n.value.abs() < i16::MAX as i32;
         let enough_pieces =
             n.position.occupancies[OccupancyIndex::BothOccupancies].count_ones() > 3;
 
@@ -371,7 +371,7 @@ pub fn play_parallel_games(num_games: usize, num_threads: usize) -> Vec<(String,
     let mut handles = vec![];
 
     for i in 0..num_threads {
-        let thread_games = games_per_thread + usize::from(i < remainder);
+        let thread_games = games_per_thread + (i < remainder) as usize;
 
         let handle = thread::spawn(move || {
             let mut results = Vec::new();

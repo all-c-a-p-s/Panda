@@ -26,6 +26,7 @@ const FULL_DEPTH_MOVES: u8 = 1;
 // name, type, val, min, max
 
 tuneable_params! {
+    //params for search conditions
     SINGULARITY_DE_MARGIN, i32, 25, 10, 150;
     ASPIRATION_WINDOW, i32, 20, 10, 70;
     RAZORING_MARGIN, i32, 273, 100, 500;
@@ -41,14 +42,16 @@ tuneable_params! {
     QSEARCH_FP_MARGIN, i32, 166, 1, 350;
     LMP_DEPTH, u8, 4, 1, 12;
     IIR_DEPTH_MINIMUM, u8, 9, 1, 12;
+
+    //move ordering scores
     HASH_MOVE_SCORE, i32, 1_000_000, 1_000_000, 1_000_000;
     QUEEN_PROMOTION, i32, 750_000, -999_999, 999_999;
     WINNING_CAPTURE, i32, 500_000, -999_999, 999_999;
     FIRST_KILLER_MOVE, i32, 94_419, -999_999, 999_999;
     LOSING_CAPTURE, i32, -300_000, -999_999, 999_999;
     UNDER_PROMOTION, i32, -500_000, -999_999, 999_999;
-    COUNTERMOVE_BONUS, i32, 55_151, -999_999, 999_999;
-    FOLLOWUP_BONUS, i32, 20_000, -999_999, 999_999;
+
+    //factors affecting reductions etc
     NMP_FACTOR, i32, 20, 1, 100;
     NMP_BASE, i32, 200, 50, 500;
     HISTORY_NODE_DIVISOR, usize, 1024, 256, 8192;
@@ -57,6 +60,11 @@ tuneable_params! {
     LMR_TACTICAL_DIVISOR, i32, 320, 100, 500;
     LMR_QUIET_BASE, i32, 164, 0, 500;
     LMR_QUIET_DIVISOR, i32, 280, 100, 500;
+
+    //LERP weights
+    RFP_BETA_WEIGHT, i32, 0, 0, 1024;
+    NMP_BETA_WEIGHT, i32, 512, 0, 1024;
+    STAND_PAT_BETA_WEIGHT, i32, 0, 0, 1024;
 }
 
 const DO_SINGULARITY_EXTENSION: bool = true;
@@ -65,7 +73,7 @@ const DO_SINGULARITY_DE: bool = true;
 pub const MAX_GAME_PLY: usize = 1024;
 
 fn lerp(u: i32, v: i32, w1: i32) -> i32 {
-    (u * w1 + v * (1024 - w1)) / 1024
+    ((u as i64 * w1 as i64 + v as i64 * (1024 - w1) as i64) / 1024) as i32
 }
 
 impl Thread<'_> {
@@ -108,7 +116,7 @@ impl Thread<'_> {
         position.undo_move(best_move, commit);
         self.ply -= 1;
         //undo move already made on board
-        let threshold = (tt_score - (i32::from(depth) * 2 + 20)).max(-INFINITY);
+        let threshold = (tt_score - (depth as i32 * 2 + 20)).max(-INFINITY);
 
         self.info.excluded[self.ply] = Some(best_move);
 
@@ -255,8 +263,7 @@ impl Thread<'_> {
             // Reverse Futility Pruning:
             // If eval >= beta + some margin, assume that we can achieve at least beta
             if can_rfp!(depth, static_eval, improving, beta) {
-                return static_eval;
-                // TODO - some lerp here?
+                return lerp(beta, static_eval, read_param!(RFP_BETA_WEIGHT));
             }
 
             // Razoring:
@@ -283,18 +290,18 @@ impl Thread<'_> {
                 let undo = position.make_null_move();
                 self.ply += 1;
                 let r = 2
-                    + i32::from(depth) / 4
+                    + depth as i32 / 4
                     + ((static_eval - beta) / 256).min(3)
-                    + i32::from(improving)
-                    + i32::from(opponent_worsening);
-                let reduced_depth = (i32::from(depth) - r).max(1) as u8;
+                    + improving as i32
+                    + opponent_worsening as i32;
+                let reduced_depth = (depth as i32 - r).max(1) as u8;
                 let null_move_eval =
                     -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
                 //minimal window used because all that matters is whether the search result is better than beta
                 position.undo_null_move(&undo);
                 self.ply -= 1;
                 if null_move_eval >= beta {
-                    return lerp(beta, null_move_eval, 512);
+                    return lerp(beta, null_move_eval, read_param!(NMP_BETA_WEIGHT));
                 }
             }
         }
@@ -374,10 +381,10 @@ impl Thread<'_> {
                     movepicker.skip_quiets(&movelist);
                 }
 
-                let r = self.info.lmr_table.reduction_table[usize::from(quiet)]
-                    [depth.min(31) as usize][considered.min(31) as usize]
-                    + i32::from(!improving);
-                let lmr_depth = i32::from(depth) - 1 - r.max(0);
+                let r = self.info.lmr_table.reduction_table[quiet as usize][depth.min(31) as usize]
+                    [considered.min(31) as usize]
+                    + !improving as i32;
+                let lmr_depth = depth as i32 - 1 - r.max(0);
 
                 // SEE Pruning:
                 // skip moves that fail SEE by a depth-dependent threshold
@@ -387,7 +394,7 @@ impl Thread<'_> {
                     } else {
                         read_param!(SEE_QUIET_MARGIN)
                     };
-                    let threshold = margin * i32::from(depth);
+                    let threshold = margin * depth as i32;
                     if !m.see(position, threshold) {
                         continue;
                     }
@@ -420,13 +427,12 @@ impl Thread<'_> {
                     position, best_move, &commit, tt_score, depth, pv_node, alpha, beta, cutnode,
                 )
             } else {
-                Some(i32::from(in_check && !root))
+                Some((in_check && !root) as i32)
             };
 
             if extension.is_none() {
                 // MultiCut case from singularity() function
-                return tt_score - (i32::from(depth) * 2);
-                // TODO - experiment with this
+                return tt_score - (depth as i32 * 2);
             } else if maybe_singular {
                 position.play_unchecked(best_move);
                 self.ply += 1;
@@ -436,8 +442,7 @@ impl Thread<'_> {
                 }
             }
 
-            let new_depth =
-                i32::clamp(i32::from(depth) - 1 + extension.unwrap(), 0, MAX_PLY as i32) as u8;
+            let new_depth = (depth as i32 - 1 + extension.unwrap()).clamp(0, MAX_PLY as i32) as u8;
 
             let eval = if legal == 1 {
                 // note that this is one because the variable is updated above
@@ -504,20 +509,20 @@ impl Thread<'_> {
                     if should_reduce!(legal, pv_node, tt_move, root, tactical, depth, not_mated) {
                         let mut r = 1;
                         if quiet {
-                            r = self.info.lmr_table.reduction_table[usize::from(quiet)]
+                            r = self.info.lmr_table.reduction_table[quiet as usize]
                                 [depth.min(31) as usize][legal.min(31) as usize];
 
-                            r -= i32::from(pv_node);
-                            r += i32::from(tt_move_capture);
-                            r += i32::from(!improving);
+                            r -= pv_node as i32;
+                            r += tt_move_capture as i32;
+                            r += !improving as i32;
 
-                            r -= i32::from(is_check);
+                            r -= is_check as i32;
 
                             r -= self.info.history_table[m.piece_moved(position)][m.square_to()]
                                 / 8192;
                         }
 
-                        let mut reduced_depth = (i32::from(new_depth) - r).max(1) as u8;
+                        let mut reduced_depth = (new_depth as i32 - r).max(1) as u8;
                         reduced_depth = reduced_depth.clamp(1, new_depth);
                         // avoid dropping into qsearch or extending
 
@@ -574,7 +579,7 @@ impl Thread<'_> {
         }
 
         if legal == 0 {
-            return (-INFINITY + self.ply as i32) * i32::from(in_check);
+            return (-INFINITY + self.ply as i32) * in_check as i32;
         }
 
         if !self.is_stopped() && !singular {
@@ -637,8 +642,7 @@ impl Thread<'_> {
         let mut best_score = if in_check { -INFINITY + 1 } else { static_eval };
 
         if best_score >= beta {
-            return best_score;
-            //TODO - some lerp here?
+            return lerp(beta, best_score, read_param!(STAND_PAT_BETA_WEIGHT));
         }
 
         alpha = alpha.max(best_score);
@@ -680,8 +684,7 @@ impl Thread<'_> {
             if could_be_mated {
                 best_score = best_score.max(static_eval);
                 if best_score >= beta {
-                    return best_score;
-                    //TODO - some lerp here?
+                    return lerp(beta, best_score, read_param!(STAND_PAT_BETA_WEIGHT));
                 }
                 movepicker.skip_quiets(&movelist);
                 could_be_mated = false;
@@ -836,7 +839,7 @@ fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData
         if eval <= id.alpha {
             //failed low -> widen window down, do not update pv
             id.alpha = (id.alpha - id.delta).max(-INFINITY);
-            id.beta = i32::midpoint(id.alpha, id.beta);
+            id.beta = (id.alpha + id.beta) / 2;
             id.delta += id.delta / 2;
         } else if eval >= id.beta {
             //failed high -> widen window up, also update pv

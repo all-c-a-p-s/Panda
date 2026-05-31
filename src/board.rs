@@ -145,7 +145,7 @@ impl Board {
         new_board.fifty_move = flags[3].to_string().parse::<u8>().unwrap();
         let complete_moves = flags[4].to_string().parse::<usize>().unwrap();
         new_board.ply =
-            (complete_moves - 1) * 2 + usize::from(new_board.side_to_move == Colour::Black);
+            (complete_moves - 1) * 2 + (new_board.side_to_move == Colour::Black) as usize;
 
         let mut file = 0;
         let mut rank = 7;

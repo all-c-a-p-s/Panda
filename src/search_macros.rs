@@ -25,7 +25,7 @@ macro_rules! tt_cutoff {
                 || ($cutnode
                     && $entry.eval
                         - read_param!(TT_FUTILITY_MARGIN)
-                            * i32::from($depth - $entry.depth).max(1)
+                            * ($depth as i32 - $entry.depth as i32).max(1)
                         >= $beta
                     && $entry.flag != EntryFlag::UpperBound
                     && !$in_check))
@@ -43,7 +43,7 @@ macro_rules! can_static_prune {
 macro_rules! can_rfp {
     ($depth:expr, $static_eval:expr, $improving:expr, $beta:expr) => {
         $depth <= read_param!(RFP_DEPTH)
-            && $static_eval - i32::from(read_param!(RFP_MARGIN) * ($depth - u8::from($improving)))
+            && $static_eval - (read_param!(RFP_MARGIN) * ($depth - $improving as u8)) as i32
                 >= $beta
     };
 }
@@ -55,10 +55,8 @@ macro_rules! can_razor {
         $depth <= read_param!(MAX_RAZOR_DEPTH)
             && $static_eval
                 + read_param!(RAZORING_MARGIN)
-                    * i32::from(
-                        $depth + u8::from($improving)
-                            - u8::from($opponent_captured || !$opponent_worsening),
-                    )
+                    * ($depth as i32 + $improving as i32
+                        - ($opponent_captured || !$opponent_worsening) as i32)
                 <= $alpha
     };
 }
@@ -68,7 +66,7 @@ macro_rules! can_nmp {
     ($position:expr, $static_eval:expr, $depth:expr, $beta:expr, $root:expr) => {
         !$position.is_kp_endgame()
             && !$position.last_move_null
-            && $static_eval + read_param!(NMP_FACTOR) * i32::from($depth) - read_param!(NMP_BASE)
+            && $static_eval + read_param!(NMP_FACTOR) * $depth as i32 - read_param!(NMP_BASE)
                 >= $beta
             && !$root
     };
@@ -114,11 +112,7 @@ macro_rules! should_reduce {
     ($legal:expr, $pv_node:expr, $tt_move:expr, $root:expr, $tactical:expr,
      $depth:expr, $not_mated:expr) => {
         $legal
-            > (FULL_DEPTH_MOVES
-                + u8::from($pv_node)
-                + u8::from(!$tt_move)
-                + u8::from($root)
-                + u8::from($tactical))
+            > (FULL_DEPTH_MOVES + $pv_node as u8 + !$tt_move as u8 + $root as u8 + $tactical as u8)
             && $depth >= REDUCTION_LIMIT
             && $not_mated
     };

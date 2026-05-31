@@ -1,9 +1,9 @@
 use std::mem;
 
 use crate::eval::MIRROR;
-use crate::{lsfb, pop_bit, Board, Colour};
+use crate::{Board, Colour, lsfb, pop_bit};
 
-use crate::types::{OccupancyIndex, Piece, Square, PIECES};
+use crate::types::{OccupancyIndex, PIECES, Piece, Square};
 
 // ON or OFF for each piece / colour / square
 const NUM_FEATURES: usize = 6 * 2 * 64;
@@ -198,18 +198,18 @@ impl Accumulator {
 
         let mut out = 0;
         for (&value, &weight) in us.zip(&MODEL.output_weights[..HL_SIZE]) {
-            out += squared_crelu(value) * i32::from(weight);
+            out += squared_crelu(value) * weight as i32;
         }
         for (&value, &weight) in them.zip(&MODEL.output_weights[HL_SIZE..]) {
-            out += squared_crelu(value) * i32::from(weight);
+            out += squared_crelu(value) * weight as i32;
         }
 
-        (out / QA + i32::from(MODEL.output_bias)) * SCALE / QAB
+        (out / QA + MODEL.output_bias as i32) * SCALE / QAB
     }
 }
 
 fn squared_crelu(value: i16) -> i32 {
-    let v = i32::from(value.clamp(CR_MIN, CR_MAX));
+    let v = value.clamp(CR_MIN, CR_MAX) as i32;
 
     v * v
 }

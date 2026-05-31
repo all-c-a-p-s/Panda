@@ -201,7 +201,7 @@ impl Move {
             let mut cont_bonus = if s.ply > 0
                 && let Some(prev) = s.info.ss[s.ply - 1].square_moved_to
             {
-                let side = usize::from(b.side_to_move == Colour::White);
+                let side = (b.side_to_move == Colour::White) as usize;
                 s.info.counter_correlation[side][prev][sq]
             } else {
                 0
@@ -210,7 +210,7 @@ impl Move {
             cont_bonus += if s.ply > 1
                 && let Some(prev) = s.info.ss[s.ply - 2].square_moved_to
             {
-                let side = usize::from(b.side_to_move == Colour::White);
+                let side = (b.side_to_move == Colour::White) as usize;
                 s.info.followup_correlation[side][prev][sq]
             } else {
                 0
