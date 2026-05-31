@@ -45,6 +45,18 @@ impl Default for UciOptions {
     }
 }
 
+#[cfg(feature = "tuning")]
+macro_rules! try_set_param {
+    ($name:expr, $value:expr, $($param:ident),* $(,)?) => {
+        match $name {
+            $(stringify!($param) => {
+                set_param!($param, $value.parse().expect("should be integer"));
+            },)*
+            _ => {}
+        }
+    };
+}
+
 impl Move {
     #[must_use]
     pub fn uci(self) -> String {
@@ -66,8 +78,7 @@ impl Move {
 }
 
 #[must_use]
-pub fn recognise_command(command: &str) -> CommandType {
-    let words = command.split_whitespace().collect::<Vec<&str>>();
+pub fn recognise_command(words: &[&str]) -> CommandType {
     match words[0] {
         "uci" => CommandType::Uci,
         "ucinewgame" => CommandType::UciNewGame,
@@ -127,8 +138,8 @@ pub fn parse_move(input: &str, board: &Board) -> Move {
     encode_move(sq_from, sq_to, None, NO_FLAG)
 }
 
-pub fn parse_uci(command: &str) {
-    if command == "uci" {
+pub fn parse_uci(words: &[&str]) {
+    if words == ["uci"] {
         println!("id name Panda 1.2");
         println!("option name Threads type spin default 1 min 1 max 256");
         println!("option name Hash type spin default 16 min 1 max 1048576");
@@ -141,8 +152,8 @@ pub fn parse_uci(command: &str) {
     }
 }
 
-pub fn parse_isready(command: &str) {
-    if command == "isready" {
+pub fn parse_isready(words: &[&str]) {
+    if words == ["isready"] {
         println!("readyok");
     }
 }
@@ -151,108 +162,77 @@ pub fn reset(b: &mut Board) {
     *b = Board::from(STARTPOS);
 }
 
-pub fn parse_position(command: &str, b: &mut Board) {
-    reset(b);
-    let words = command.split_whitespace().collect::<Vec<&str>>();
-    assert!((words.len() >= 2), "invalid position command");
-
-    let mut apply_move = |w: &str| {
-        let m = parse_move(w, b);
-        let Ok(_) = b.try_move(m) else {
-            panic!("invalid move {}", m.uci());
-        };
+fn apply_uci_move(b: &mut Board, w: &str) {
+    let m = parse_move(w, b);
+    let Ok(_) = b.try_move(m) else {
+        panic!("invalid move {}", m.uci());
     };
-
-    match words[1] {
-        "startpos" => {
-            if words.len() != 2 {
-                for w in words.iter().skip(3) {
-                    //parse moves
-                    apply_move(w);
-                }
-            }
-        }
-        "fen" => {
-            let fen_string = words.iter().copied().skip(2).collect::<Vec<_>>().join(" ");
-            *b = Board::from(&fen_string);
-        }
-        "moves" => {
-            for w in words.iter().skip(2) {
-                apply_move(w);
-            }
-        }
-        _ => {}
-    }
 }
 
-pub fn parse_special_go(
-    command: &str,
-    b: &mut Board,
-    tt: &TranspositionTable,
-    opts: &UciOptions,
-) -> MoveData {
-    //special combination of go and position command by lichess bot api
-    reset(b);
-    let words = command.split_whitespace().collect::<Vec<&str>>();
+fn parse_position_words(words: &[&str], b: &mut Board, end: usize) {
     assert!((words.len() >= 2), "invalid position command");
-
-    let mut apply_move = |w: &str| {
-        let m = parse_move(w, b);
-        let Ok(_) = b.try_move(m) else {
-            panic!("invalid move {}", m.uci());
-        };
-    };
-
-    let end_of_moves = words
-        .iter()
-        .position(|x| x.starts_with('w'))
-        .expect("invalid go command");
 
     match words[1] {
         "startpos" => {
-            if words.len() != 2 {
-                for w in words.iter().take(end_of_moves).skip(3) {
-                    apply_move(w);
+            if end != 2 {
+                for &w in words.iter().take(end).skip(3) {
+                    apply_uci_move(b, w);
                 }
             }
         }
         "fen" => {
             let fen_string = words
                 .iter()
-                .take(end_of_moves)
-                .skip(2)
+                .take(end)
                 .copied()
+                .skip(2)
                 .collect::<Vec<_>>()
                 .join(" ");
-
             *b = Board::from(&fen_string);
         }
         "moves" => {
-            for &w in words.iter().take(end_of_moves).skip(2) {
-                apply_move(w);
+            for &w in words.iter().take(end).skip(2) {
+                apply_uci_move(b, w);
             }
         }
-        _ => panic!("invalid position command"),
+        _ => {}
     }
+}
 
-    let time_words = &words[end_of_moves..];
+pub fn parse_position(words: &[&str], b: &mut Board) {
+    reset(b);
+    parse_position_words(words, b, words.len());
+}
 
-    let mut fake_go_command = String::from("go ");
-    for w in time_words {
-        fake_go_command += w;
-        fake_go_command += " ";
-    }
+pub fn parse_special_go(
+    words: &[&str],
+    b: &mut Board,
+    tt: &TranspositionTable,
+    opts: &UciOptions,
+) -> MoveData {
+    //special combination of go and position command by lichess bot api
+    reset(b);
+    assert!((words.len() >= 2), "invalid position command");
 
-    parse_go(fake_go_command.as_str(), b, tt, opts)
+    let end_of_moves = words
+        .iter()
+        .position(|x| x.starts_with('w'))
+        .expect("invalid go command");
+
+    parse_position_words(words, b, end_of_moves);
+
+    let mut go_words = vec!["go"];
+    go_words.extend_from_slice(&words[end_of_moves..]);
+
+    parse_go(&go_words, b, tt, opts)
 }
 
 pub fn parse_go(
-    command: &str,
+    words: &[&str],
     position: &mut Board,
     tt: &TranspositionTable,
     opts: &UciOptions,
 ) -> MoveData {
-    let words = command.split_whitespace().collect::<Vec<&str>>();
     //go wtime x btime x winc x binc x movestogo x
 
     let max_nodes = INFINITY as usize;
@@ -263,7 +243,7 @@ pub fn parse_go(
 
     if words[1] == "moves" {
         //special command lichess-bot protocol uses
-        return parse_special_go(command, position, tt, opts);
+        return parse_special_go(words, position, tt, opts);
     } else if words[1] == "movetime" {
         movetime = words[2].parse().expect("failed to convert movetime to int");
         let s = Searcher::new(tt);
@@ -285,7 +265,7 @@ pub fn parse_go(
             b_inc = y.parse().expect("failed to covnert binc to int");
             moves_to_go = z.parse().expect("failed to convert movestogo to int");
         }
-        _ => return parse_special_go(command, position, tt, opts),
+        _ => return parse_special_go(words, position, tt, opts),
     }
 
     let (engine_time, engine_inc) = match position.side_to_move {
@@ -305,9 +285,7 @@ pub fn parse_go(
     )
 }
 
-fn parse_perft(command: &str, position: &mut Board) {
-    let words = command.split_whitespace().collect::<Vec<&str>>();
-
+fn parse_perft(words: &[&str], position: &mut Board) {
     match words[..] {
         ["go", "perft", x] => {
             let Ok(x) = x.parse() else {
@@ -331,8 +309,7 @@ fn parse_perft(command: &str, position: &mut Board) {
     }
 }
 
-fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable) {
-    let words = command.split_whitespace().collect::<Vec<_>>();
+fn set_options(words: &[&str], opts: &mut UciOptions, tt: &mut TranspositionTable) {
     match words[..] {
         ["setoption", "name", "Hash", "value", x] => {
             opts.hash_size = x.parse().expect("hash size should be a +ve integer");
@@ -343,81 +320,38 @@ fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable
         }
 
         #[cfg(feature = "tuning")]
-        _ => match words[2..] {
-            ["SINGULARITY_DE_MARGIN", "value", x] => {
-                set_param!(SINGULARITY_DE_MARGIN, x.parse().expect("should be integer"))
+        _ => {
+            if let [name, "value", x] = words[2..] {
+                try_set_param!(
+                    name,
+                    x,
+                    SINGULARITY_DE_MARGIN,
+                    ASPIRATION_WINDOW,
+                    SEE_PRUNING_DEPTH,
+                    SEE_QUIET_MARGIN,
+                    SEE_NOISY_MARGIN,
+                    SEE_QSEARCH_MARGIN,
+                    LMP_DEPTH,
+                    IIR_DEPTH_MINIMUM,
+                    HASH_MOVE_SCORE,
+                    QUEEN_PROMOTION,
+                    WINNING_CAPTURE,
+                    FIRST_KILLER_MOVE,
+                    LOSING_CAPTURE,
+                    UNDER_PROMOTION,
+                    QSEARCH_FP_MARGIN,
+                    NMP_BASE,
+                    NMP_FACTOR,
+                    LMR_TACTICAL_BASE,
+                    LMR_TACTICAL_DIVISOR,
+                    LMR_QUIET_BASE,
+                    LMR_QUIET_DIVISOR,
+                    RFP_BETA_WEIGHT,
+                    NMP_BETA_WEIGHT,
+                    STAND_PAT_BETA_WEIGHT,
+                );
             }
-            ["ASPIRATION_WINDOW", "value", x] => {
-                set_param!(ASPIRATION_WINDOW, x.parse().expect("should be integer"))
-            }
-            ["SEE_PRUNING_DEPTH", "value", x] => {
-                set_param!(SEE_PRUNING_DEPTH, x.parse().expect("should be integer"))
-            }
-            ["SEE_QUIET_MARGIN", "value", x] => {
-                set_param!(SEE_QUIET_MARGIN, x.parse().expect("should be integer"))
-            }
-            ["SEE_NOISY_MARGIN", "value", x] => {
-                set_param!(SEE_NOISY_MARGIN, x.parse().expect("should be integer"))
-            }
-            ["SEE_QSEARCH_MARGIN", "value", x] => {
-                set_param!(SEE_QSEARCH_MARGIN, x.parse().expect("should be integer"))
-            }
-            ["LMP_DEPTH", "value", x] => {
-                set_param!(LMP_DEPTH, x.parse().expect("should be integer"))
-            }
-            ["IIR_DEPTH_MINIMUM", "value", x] => {
-                set_param!(IIR_DEPTH_MINIMUM, x.parse().expect("should be integer"))
-            }
-            ["HASH_MOVE_SCORE", "value", x] => {
-                set_param!(HASH_MOVE_SCORE, x.parse().expect("should be integer"))
-            }
-            ["QUEEN_PROMOTION", "value", x] => {
-                set_param!(QUEEN_PROMOTION, x.parse().expect("should be integer"))
-            }
-            ["WINNING_CAPTURE", "value", x] => {
-                set_param!(WINNING_CAPTURE, x.parse().expect("should be integer"))
-            }
-            ["FIRST_KILLER_MOVE", "value", x] => {
-                set_param!(FIRST_KILLER_MOVE, x.parse().expect("should be integer"))
-            }
-            ["LOSING_CAPTURE", "value", x] => {
-                set_param!(LOSING_CAPTURE, x.parse().expect("should be integer"))
-            }
-            ["UNDER_PROMOTION", "value", x] => {
-                set_param!(UNDER_PROMOTION, x.parse().expect("should be integer"))
-            }
-            ["QSEARCH_FP_MARGIN", "value", x] => {
-                set_param!(QSEARCH_FP_MARGIN, x.parse().expect("should be integer"))
-            }
-            ["NMP_BASE", "value", x] => {
-                set_param!(NMP_BASE, x.parse().expect("should be integer"))
-            }
-            ["NMP_FACTOR", "value", x] => {
-                set_param!(NMP_FACTOR, x.parse().expect("should be integer"))
-            }
-            ["LMR_TACTICAL_BASE", "value", x] => {
-                set_param!(LMR_TACTICAL_BASE, x.parse().expect("should be integer"))
-            }
-            ["LMR_TACTICAL_DIVISOR", "value", x] => {
-                set_param!(LMR_TACTICAL_DIVISOR, x.parse().expect("should be integer"))
-            }
-            ["LMR_QUIET_BASE", "value", x] => {
-                set_param!(LMR_QUIET_BASE, x.parse().expect("should be integer"))
-            }
-            ["LMR_QUIET_DIVISOR", "value", x] => {
-                set_param!(LMR_QUIET_DIVISOR, x.parse().expect("should be integer"))
-            }
-            ["RFP_BETA_WEIGHT", "value", x] => {
-                set_param!(RFP_BETA_WEIGHT, x.parse().expect("should be integer"))
-            }
-            ["NMP_BETA_WEIGHT", "value", x] => {
-                set_param!(NMP_BETA_WEIGHT, x.parse().expect("should be integer"))
-            }
-            ["STAND_PAT_BETA_WEIGHT", "value", x] => {
-                set_param!(STAND_PAT_BETA_WEIGHT, x.parse().expect("should be integer"))
-            }
-            _ => {}
-        },
+        }
 
         #[cfg(not(feature = "tuning"))]
         _ => {}
@@ -464,22 +398,27 @@ pub fn uci_loop() {
             break;
         }
 
-        let command_type = recognise_command(buffer);
+        let words = buffer.split_whitespace().collect::<Vec<_>>();
+        if words.is_empty() {
+            continue;
+        }
+
+        let command_type = recognise_command(&words);
         match command_type {
             CommandType::D => board.print_board(),
-            CommandType::Uci => parse_uci(buffer),
-            CommandType::IsReady => parse_isready(buffer),
-            CommandType::Position => parse_position(buffer, &mut board),
+            CommandType::Uci => parse_uci(&words),
+            CommandType::IsReady => parse_isready(&words),
+            CommandType::Position => parse_position(&words, &mut board),
             CommandType::Go => {
-                let move_data = parse_go(buffer, &mut board, &tt, &opts);
+                let move_data = parse_go(&words, &mut board, &tt, &opts);
                 if move_data.m.is_null() {
                     break;
                 }
                 print!("bestmove ");
                 println!("{}", move_data.m.uci());
             }
-            CommandType::Perft => parse_perft(buffer, &mut board),
-            CommandType::SetOption => set_options(buffer, &mut opts, &mut tt),
+            CommandType::Perft => parse_perft(&words, &mut board),
+            CommandType::SetOption => set_options(&words, &mut opts, &mut tt),
             CommandType::UciNewGame => board = Board::from(STARTPOS),
             _ => {}
         }
