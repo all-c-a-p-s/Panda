@@ -2,7 +2,7 @@
 
 use crate::board::Board;
 use crate::eval::evaluate;
-use crate::helper::{piece_type, read_param, tuneable_params};
+use crate::helper::{read_param, tuneable_params};
 use crate::r#move::{Commit, Move, MoveList, NULL_MOVE};
 use crate::ordering::{MovePicker, SEE_VALUES};
 use crate::thread::{SearchStackEntry, Thread};
@@ -722,18 +722,6 @@ impl Thread<'_> {
                 }
                 movepicker.skip_quiets(&movelist);
                 could_be_mated = false;
-            }
-
-            if m.is_capture(position) {
-                // if not capture then must be a check evasion
-                let best_case =
-                    static_eval + SEE_VALUES[piece_type(position.get_piece_at(m.square_to()))];
-                let worst_case = best_case - SEE_VALUES[piece_type(m.piece_moved(position))];
-
-                //first check if we beat beta even in the worst case
-                if worst_case > beta {
-                    return beta;
-                }
             }
 
             //next check if we fail SEE by threshold
