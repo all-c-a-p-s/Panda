@@ -36,8 +36,8 @@ impl Move {
         };
 
         let mut balance = match b.pieces_array[sq_to] {
-            None => 0,
             Some(k) => SEE_VALUES[piece_type(k)],
+            None => 0,
         } + threshold;
 
         if self.is_promotion() {

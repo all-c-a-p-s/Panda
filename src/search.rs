@@ -379,6 +379,10 @@ impl Thread<'_> {
 
             done_killer |= is_killer;
 
+            if !position.is_legal(m) {
+                continue;
+            }
+
             let is_check = position.checkers != 0;
 
             // Early Pruning: try to prune moves before we search them properly
@@ -417,9 +421,8 @@ impl Thread<'_> {
                 }
             }
 
-            let Ok(commit) = position.try_move(m) else {
-                continue;
-            };
+            //checked to be legal above
+            let commit = position.play_unchecked(m);
 
             if self.ply < MAX_PLY {
                 self.info.ss[self.ply].square_moved_to = Some(m.square_to());
@@ -693,11 +696,11 @@ impl Thread<'_> {
             NULL_MOVE
         };
 
-        let mut not_mated = false;
+        let mut could_be_mated = in_check;
 
         while let Some(m) = movepicker.get_next(
             q_hash,
-            if in_check && !not_mated {
+            if in_check && could_be_mated {
                 self.info.killer_moves[self.ply]
             } else {
                 None
@@ -712,11 +715,13 @@ impl Thread<'_> {
                 continue;
             }
 
-            not_mated = true;
-            best_score = best_score.max(static_eval);
-
-            if in_check {
+            if could_be_mated {
+                best_score = best_score.max(static_eval);
+                if best_score >= beta {
+                    return beta;
+                }
                 movepicker.skip_quiets(&movelist);
+                could_be_mated = false;
             }
 
             if m.is_capture(position) {
@@ -746,6 +751,7 @@ impl Thread<'_> {
                 continue;
             }
 
+            //checked to be legal above
             let commit = position.play_unchecked(m);
 
             self.ply += 1;
