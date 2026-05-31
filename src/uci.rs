@@ -129,7 +129,7 @@ pub fn parse_move(input: &str, board: &Board) -> Move {
 
 pub fn parse_uci(command: &str) {
     if command == "uci" {
-        println!("id name Panda 1.1");
+        println!("id name Panda 1.2");
         println!("option name Threads type spin default 1 min 1 max 256");
         println!("option name Hash type spin default 16 min 1 max 1048576");
 
@@ -506,23 +506,7 @@ pub fn uci_loop() {
                     break;
                 }
                 print!("bestmove ");
-                println!("{}", {
-                    coordinate(move_data.m.square_from())
-                        + coordinate(move_data.m.square_to()).as_str()
-                        + {
-                            if move_data.m.is_promotion() {
-                                match move_data.m.promoted_piece() {
-                                    PieceType::Knight => "n",
-                                    PieceType::Bishop => "b",
-                                    PieceType::Rook => "r",
-                                    PieceType::Queen => "q",
-                                    _ => unreachable!(),
-                                }
-                            } else {
-                                ""
-                            }
-                        }
-                });
+                println!("{}", move_data.m.uci());
             }
             CommandType::Perft => parse_perft(buffer.as_str(), &mut board),
             CommandType::SetOption => set_options(buffer.as_str(), &mut opts, &mut tt),

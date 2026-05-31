@@ -10,6 +10,7 @@ use crate::transposition::{EntryFlag, TT, TTEntry};
 use crate::types::PieceType;
 use crate::uci::print_thinking;
 
+use core::option::Option::Some;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
 
@@ -664,15 +665,16 @@ impl Thread<'_> {
             }
         }
 
+        let in_check = position.checkers != 0;
+
         let mut static_eval = evaluate(position);
         static_eval = self.eval_with_corrhist(position, static_eval);
 
-        let in_check = position.checkers != 0;
+        let mut best_score = if in_check { -INFINITY + 1 } else { static_eval };
 
-        if static_eval >= beta {
+        if best_score >= beta {
             return static_eval;
         }
-        let mut best_score = static_eval;
 
         alpha = alpha.max(best_score);
 
@@ -706,6 +708,17 @@ impl Thread<'_> {
             &mut bad_caps,
             &self,
         ) {
+            if !position.is_legal(m) {
+                continue;
+            }
+
+            not_mated = true;
+            best_score = best_score.max(static_eval);
+
+            if in_check {
+                movepicker.skip_quiets(&movelist);
+            }
+
             if m.is_capture(position) {
                 // if not capture then must be a check evasion
                 let best_case =
@@ -716,8 +729,6 @@ impl Thread<'_> {
                 if worst_case > beta {
                     return beta;
                 }
-            } else if not_mated {
-                continue;
             }
 
             //next check if we fail SEE by threshold
@@ -735,15 +746,7 @@ impl Thread<'_> {
                 continue;
             }
 
-            let Ok(commit) = position.try_move(m) else {
-                continue;
-            };
-
-            if in_check {
-                movepicker.skip_quiets(&movelist);
-            }
-
-            not_mated = true;
+            let commit = position.play_unchecked(m);
 
             self.ply += 1;
 
@@ -756,7 +759,7 @@ impl Thread<'_> {
             }
 
             best_score = best_score.max(eval);
-            if eval > alpha {
+            if best_score > alpha {
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
                 best_move = m;
