@@ -155,34 +155,30 @@ pub fn parse_position(command: &str, b: &mut Board) {
     reset(b);
     let words = command.split_whitespace().collect::<Vec<&str>>();
     assert!((words.len() >= 2), "invalid position command");
+
+    let mut apply_move = |w: &str| {
+        let m = parse_move(w, b);
+        let Ok(_) = b.try_move(m) else {
+            panic!("invalid move {}", m.uci());
+        };
+    };
+
     match words[1] {
         "startpos" => {
             if words.len() != 2 {
                 for w in words.iter().skip(3) {
                     //parse moves
-                    let m = parse_move(w, b);
-                    let Ok(_) = b.try_move(m) else {
-                        panic!("Illegal move: {}", m.uci());
-                    };
+                    apply_move(w);
                 }
             }
         }
         "fen" => {
-            let mut fen_string = String::new();
-            for i in 2..words.len() {
-                fen_string += words[i];
-                if i != words.len() - 1 {
-                    fen_string += " ";
-                }
-            }
+            let fen_string = words.iter().copied().skip(2).collect::<Vec<_>>().join(" ");
             *b = Board::from(&fen_string);
         }
         "moves" => {
             for w in words.iter().skip(2) {
-                let m = parse_move(w, b);
-                let Ok(_) = b.try_move(m) else {
-                    panic!("invalid move {}", m.uci());
-                };
+                apply_move(w);
             }
         }
         _ => {}
@@ -200,48 +196,40 @@ pub fn parse_special_go(
     let words = command.split_whitespace().collect::<Vec<&str>>();
     assert!((words.len() >= 2), "invalid position command");
 
-    let mut end_of_moves = 0;
+    let mut apply_move = |w: &str| {
+        let m = parse_move(w, b);
+        let Ok(_) = b.try_move(m) else {
+            panic!("invalid move {}", m.uci());
+        };
+    };
+
+    let end_of_moves = words
+        .iter()
+        .position(|x| x.starts_with('w'))
+        .expect("invalid go command");
 
     match words[1] {
         "startpos" => {
             if words.len() != 2 {
-                for (i, &w) in words.iter().enumerate().skip(3) {
-                    if w.chars().collect::<Vec<char>>()[0] == 'w' {
-                        end_of_moves = i;
-                        break;
-                    }
-                    //parse moves
-                    let m = parse_move(w, b);
-                    let Ok(_) = b.try_move(m) else {
-                        panic!("invalid move {}", m.uci());
-                    };
+                for w in words.iter().take(end_of_moves).skip(3) {
+                    apply_move(w);
                 }
             }
         }
         "fen" => {
-            let mut fen_string = String::new();
-            for (i, &w) in words.iter().enumerate().skip(2) {
-                if w.chars().collect::<Vec<char>>()[0] == 'w' {
-                    end_of_moves = i;
-                    break;
-                }
-                fen_string += w;
-                if i != words.len() - 1 {
-                    fen_string += " ";
-                }
-            }
+            let fen_string = words
+                .iter()
+                .take(end_of_moves)
+                .skip(2)
+                .copied()
+                .collect::<Vec<_>>()
+                .join(" ");
+
             *b = Board::from(&fen_string);
         }
         "moves" => {
-            for (i, &w) in words.iter().enumerate().skip(2) {
-                if w.chars().collect::<Vec<char>>()[0] == 'w' {
-                    end_of_moves = i;
-                    break;
-                }
-                let m = parse_move(w, b);
-                let Ok(_) = b.try_move(m) else {
-                    panic!("invalid move {}", m.uci());
-                };
+            for &w in words.iter().take(end_of_moves).skip(2) {
+                apply_move(w);
             }
         }
         _ => panic!("invalid position command"),
@@ -285,46 +273,24 @@ pub fn parse_go(
     let w_time = words[2].parse().expect("failed to convert wtime to int");
     let b_time = words[4].parse().expect("failed to convert btime to int");
 
-    match words.len() {
-        5 => {
-            //go wtime x btime x
+    match words[5..] {
+        [] => {}
+        ["movestogo", x] => moves_to_go = x.parse().expect("failed to convert movestogo to int"),
+        ["winc", x, "binc", y] => {
+            w_inc = x.parse().expect("failed to convert winc to int");
+            b_inc = y.parse().expect("failed to covnert binc to int");
         }
-        7 => {
-            //go wtime x btime x movestogo x
-            moves_to_go = words[6]
-                .parse()
-                .expect("failed to convert movestogo to int");
-        }
-        9 => {
-            //go wtime x btime x winc x binc x
-            w_inc = words[6].parse().expect("failed to convert winc to int");
-            b_inc = words[8].parse().expect("failed to covnert binc to int");
-        }
-        11 => {
-            //go wtime x btime x winc x binc x movestogo x
-            w_inc = words[6].parse().expect("failed to convert winc to int");
-            b_inc = words[8].parse().expect("failed to covnert binc to int");
-            moves_to_go = words[10]
-                .parse()
-                .expect("failed to convert movestogo to int");
+        ["winc", x, "binc", y, "movestogo", z] => {
+            w_inc = x.parse().expect("failed to convert winc to int");
+            b_inc = y.parse().expect("failed to covnert binc to int");
+            moves_to_go = z.parse().expect("failed to convert movestogo to int");
         }
         _ => return parse_special_go(command, position, tt, opts),
     }
 
-    if words.len() > 9 {
-        moves_to_go = words[10]
-            .parse()
-            .expect("failed to convert movestogo to int");
-    }
-
-    let engine_time = match position.side_to_move {
-        Colour::White => w_time,
-        Colour::Black => b_time,
-    };
-
-    let engine_inc = match position.side_to_move {
-        Colour::White => w_inc,
-        Colour::Black => b_inc,
+    let (engine_time, engine_inc) = match position.side_to_move {
+        Colour::White => (w_time, w_inc),
+        Colour::Black => (b_time, b_inc),
     };
 
     let s = Searcher::new(tt);
@@ -341,25 +307,25 @@ pub fn parse_go(
 
 fn parse_perft(command: &str, position: &mut Board) {
     let words = command.split_whitespace().collect::<Vec<&str>>();
-    if words.len() != 3 {
-        eprintln!("invalid perft command: expected command of form go perft <depth>");
-        return;
-    }
 
-    if let Ok(x) = words[2].parse::<usize>() {
-        let start = Instant::now();
-        let nodes = perft::<true, false, false>(x, position, Some(x));
-        let time = start.elapsed().as_millis() as usize;
+    match words[..] {
+        ["go", "perft", x] => {
+            let Ok(x) = x.parse() else {
+                panic!("expected integer depth in perft command (go perft <depth>)");
+            };
+            let start = Instant::now();
+            let nodes = perft::<true, false, false>(x, position, Some(x));
+            let time = start.elapsed().as_millis() as usize;
 
-        let nps = if time == 0 {
-            nodes * 1000
-        } else {
-            (nodes / time) * 1000
-        };
+            let nps = if time == 0 {
+                nodes * 1000
+            } else {
+                (nodes / time) * 1000
+            };
 
-        println!("\ninfo depth {x} nodes {nodes} time {time} nps {nps}");
-    } else {
-        eprintln!("expected integer depth in perft command (go perft <depth>)");
+            println!("\ninfo depth {x} nodes {nodes} time {time} nps {nps}");
+        }
+        _ => panic!("expected perft command in the following format: go perft <depth>"),
     }
 }
 
@@ -451,26 +417,25 @@ fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable
 }
 
 pub fn print_thinking(depth: u8, eval: i32, s: &Thread, start: Instant) {
+    let pv = s.pv[0]
+        .iter()
+        .take(s.pv_length[0])
+        .map(|m| m.uci())
+        .collect::<Vec<_>>()
+        .join(" ");
     println!(
-        "info depth {} score cp {} nodes {} pv{} time {} nps {}",
+        "info depth {} score cp {} nodes {} pv {} time {} nps {}",
         depth,
         eval,
         s.nodes,
-        {
-            let mut pv = String::new();
-            for i in 0..s.pv_length[0] {
-                pv += " ";
-                pv += s.pv[0][i].uci().as_str();
-            }
-            pv
-        },
+        pv,
         start.elapsed().as_millis(),
         {
-            let micros = start.elapsed().as_micros() as f64;
-            if micros == 0.0 {
+            let micros = start.elapsed().as_micros() as usize;
+            if micros == 0 {
                 0
             } else {
-                ((s.nodes as f64 / micros) * 1_000_000.0) as u64
+                s.nodes * 1_000_000 / micros
             }
         }
     );
@@ -484,32 +449,29 @@ pub fn uci_loop() {
 
     loop {
         let mut buffer = String::new();
-        let ok = std::io::stdin().read_line(&mut buffer);
-        match ok {
-            Ok(_) => (),
-            Err(_) => panic!("failed to parse line"),
-        }
-        buffer = String::from(buffer.trim_end());
-        if buffer == *"quit" {
+        std::io::stdin().read_line(&mut buffer).unwrap();
+
+        let buffer = buffer.trim_end();
+        if buffer == "quit" {
             break;
         }
 
-        let command_type = recognise_command(buffer.as_str());
+        let command_type = recognise_command(buffer);
         match command_type {
             CommandType::D => board.print_board(),
-            CommandType::Uci => parse_uci(buffer.as_str()),
-            CommandType::IsReady => parse_isready(buffer.as_str()),
-            CommandType::Position => parse_position(buffer.as_str(), &mut board),
+            CommandType::Uci => parse_uci(buffer),
+            CommandType::IsReady => parse_isready(buffer),
+            CommandType::Position => parse_position(buffer, &mut board),
             CommandType::Go => {
-                let move_data = parse_go(buffer.as_str(), &mut board, &tt, &opts);
+                let move_data = parse_go(buffer, &mut board, &tt, &opts);
                 if move_data.m.is_null() {
                     break;
                 }
                 print!("bestmove ");
                 println!("{}", move_data.m.uci());
             }
-            CommandType::Perft => parse_perft(buffer.as_str(), &mut board),
-            CommandType::SetOption => set_options(buffer.as_str(), &mut opts, &mut tt),
+            CommandType::Perft => parse_perft(buffer, &mut board),
+            CommandType::SetOption => set_options(buffer, &mut opts, &mut tt),
             CommandType::UciNewGame => board = Board::from(STARTPOS),
             _ => {}
         }
