@@ -214,8 +214,7 @@ impl<'a> Searcher<'a> {
         }
     }
     //this is for threads variable which is unused in datagen mode
-    #[allow(unused)]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(unused, clippy::too_many_arguments)]
     pub fn start_search(
         &self,
         position: &mut Board,

@@ -185,8 +185,6 @@ impl Move {
 
             hist + MVV[victim_type]
         } else if self.is_promotion() {
-            //maybe this should fo before checking if capture
-            //because of promotions that are also captures
             match self.promoted_piece() {
                 //promotions sorted by likelihood to be good
                 PieceType::Queen => read_param!(QUEEN_PROMOTION),
