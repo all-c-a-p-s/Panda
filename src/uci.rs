@@ -315,15 +315,17 @@ fn parse_perft(command: &str, position: &mut Board) {
             };
             let start = Instant::now();
             let nodes = perft::<true, false, false>(x, position, Some(x));
-            let time = start.elapsed().as_millis() as usize;
+            let micros = start.elapsed().as_micros() as usize;
 
-            let nps = if time == 0 {
-                nodes * 1000
+            let nps = if micros == 0 {
+                nodes * 1_000_000
             } else {
-                (nodes / time) * 1000
+                nodes * 1_000_000 / micros
             };
 
-            println!("\ninfo depth {x} nodes {nodes} time {time} nps {nps}");
+            let time = micros / 1000;
+
+            println!("\ninfo depth {x} nodes {nodes} time {time}  nps {nps}");
         }
         _ => panic!("expected perft command in the following format: go perft <depth>"),
     }
@@ -384,9 +386,6 @@ fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable
             ["UNDER_PROMOTION", "value", x] => {
                 set_param!(UNDER_PROMOTION, x.parse().expect("should be integer"))
             }
-            ["COUNTERMOVE_BONUS", "value", x] => {
-                set_param!(COUNTERMOVE_BONUS, x.parse().expect("should be integer"))
-            }
             ["QSEARCH_FP_MARGIN", "value", x] => {
                 set_param!(QSEARCH_FP_MARGIN, x.parse().expect("should be integer"))
             }
@@ -407,6 +406,15 @@ fn set_options(command: &str, opts: &mut UciOptions, tt: &mut TranspositionTable
             }
             ["LMR_QUIET_DIVISOR", "value", x] => {
                 set_param!(LMR_QUIET_DIVISOR, x.parse().expect("should be integer"))
+            }
+            ["RFP_BETA_WEIGHT", "value", x] => {
+                set_param!(RFP_BETA_WEIGHT, x.parse().expect("should be integer"))
+            }
+            ["NMP_BETA_WEIGHT", "value", x] => {
+                set_param!(NMP_BETA_WEIGHT, x.parse().expect("should be integer"))
+            }
+            ["STAND_PAT_BETA_WEIGHT", "value", x] => {
+                set_param!(STAND_PAT_BETA_WEIGHT, x.parse().expect("should be integer"))
             }
             _ => {}
         },
@@ -433,7 +441,7 @@ pub fn print_thinking(depth: u8, eval: i32, s: &Thread, start: Instant) {
         {
             let micros = start.elapsed().as_micros() as usize;
             if micros == 0 {
-                0
+                s.nodes * 1_000_000
             } else {
                 s.nodes * 1_000_000 / micros
             }
