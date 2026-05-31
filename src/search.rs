@@ -64,6 +64,10 @@ const DO_SINGULARITY_DE: bool = true;
 
 pub const MAX_GAME_PLY: usize = 1024;
 
+fn lerp(u: i32, v: i32, w1: i32) -> i32 {
+    (u * w1 + v * (1024 - w1)) / 1024
+}
+
 impl Thread<'_> {
     fn should_check_exit(&self) -> bool {
         const CHECK_INTERVAL: usize = 4095;
@@ -252,6 +256,7 @@ impl Thread<'_> {
             // If eval >= beta + some margin, assume that we can achieve at least beta
             if can_rfp!(depth, static_eval, improving, beta) {
                 return static_eval;
+                // TODO - some lerp here?
             }
 
             // Razoring:
@@ -289,8 +294,7 @@ impl Thread<'_> {
                 position.undo_null_move(&undo);
                 self.ply -= 1;
                 if null_move_eval >= beta {
-                    return beta;
-                    // TODO - partial fail soft?
+                    return lerp(beta, null_move_eval, 512);
                 }
             }
         }
@@ -422,6 +426,7 @@ impl Thread<'_> {
             if extension.is_none() {
                 // MultiCut case from singularity() function
                 return tt_score - (i32::from(depth) * 2);
+                // TODO - experiment with this
             } else if maybe_singular {
                 position.play_unchecked(best_move);
                 self.ply += 1;
@@ -633,6 +638,7 @@ impl Thread<'_> {
 
         if best_score >= beta {
             return best_score;
+            //TODO - some lerp here?
         }
 
         alpha = alpha.max(best_score);
@@ -674,8 +680,8 @@ impl Thread<'_> {
             if could_be_mated {
                 best_score = best_score.max(static_eval);
                 if best_score >= beta {
-                    return beta;
-                    // TODO - fail soft
+                    return best_score;
+                    //TODO - some lerp here?
                 }
                 movepicker.skip_quiets(&movelist);
                 could_be_mated = false;
