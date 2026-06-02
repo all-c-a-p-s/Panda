@@ -8,7 +8,6 @@ use crate::types::{OccupancyIndex, PIECES, Piece, Square};
 // ON or OFF for each piece / colour / square
 const NUM_FEATURES: usize = 6 * 2 * 64;
 const HL_SIZE: usize = 256;
-const NUM_BUCKETS: usize = 1;
 
 const CR_MIN: i16 = 0;
 const CR_MAX: i16 = 255;
@@ -23,7 +22,7 @@ const SCALE: i32 = 400;
 
 #[repr(C)]
 struct Network {
-    feature_weights: [i16; NUM_FEATURES * HL_SIZE * NUM_BUCKETS],
+    feature_weights: [i16; NUM_FEATURES * HL_SIZE],
     feature_biases: [i16; HL_SIZE],
     output_weights: [i16; HL_SIZE * 2],
     output_bias: i16,

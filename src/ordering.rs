@@ -9,11 +9,10 @@ use crate::{
     set_bit,
 };
 
-//taken from Carp
 const MVV: [i32; 6] = [0, 2400, 2400, 4800, 9600, 0];
 
 //same as MG evaluation weights (haven't updated these in a while)
-pub const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, INFINITY];
+pub const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, 0];
 
 impl Move {
     /// Static Exchange Evalutaion (SEE):
@@ -133,7 +132,7 @@ impl Move {
             if balance >= 0 {
                 //if last move was king move and opponent still has attackers, the move
                 //must have been illegal
-                if next_victim == Piece::WK
+                if piece_type(next_victim) == PieceType::King
                     && (attackers
                         & b.occupancies[match colour {
                             Colour::White => OccupancyIndex::WhiteOccupancies,
