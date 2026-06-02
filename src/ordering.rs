@@ -12,8 +12,8 @@ use crate::{
 //taken from Carp
 const MVV: [i32; 6] = [0, 2400, 2400, 4800, 9600, 0];
 
-//same as MG evaluation weights (haven't updated these in a while)
-pub const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, INFINITY];
+// compressed to the range [0, 32] so the see_val() function has to do less work
+pub const SEE_VALUES: [i32; 6] = [3, 11, 11, 17, 32, 0];
 
 impl Move {
     /// Static Exchange Evalutaion (SEE):
@@ -154,6 +154,26 @@ impl Move {
         b.side_to_move != colour
     }
 
+    /// Find lowest threshold for which a move will pass SEE
+    fn see_val<const GOOD: bool>(self, b: &Board) -> i32 {
+        let (mut lo, mut hi) = if GOOD {
+            (-SEE_VALUES[PieceType::Queen], -1)
+        } else {
+            (1, SEE_VALUES[PieceType::Queen])
+        };
+
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            if self.see(b, mid) {
+                hi = mid;
+            } else {
+                lo = mid + 1;
+            }
+        }
+
+        -lo
+    }
+
     /// Scores a move based on this order
     /// - TT Move
     /// - Queen Promotion
@@ -165,7 +185,13 @@ impl Move {
     ///
     /// To me it seems intuitive that en passant should be considered a "good capture", but doing
     /// this loses elo. At the moment, en passant just gets the MVV bonus for capturing a pawn.
-    pub fn score_move(self, b: &mut Board, s: &Thread, hash_move: &Move) -> i32 {
+    pub fn score_move<const GOOD: bool>(
+        self,
+        b: &mut Board,
+        s: &Thread,
+        hash_move: &Move,
+        depth: u8,
+    ) -> i32 {
         let sq = self.square_to();
 
         if self.is_null() {
@@ -179,11 +205,24 @@ impl Move {
             //we are already in the segment of good/bad captures
             //and we only care about scores relative to the rest of the segment
             //so no need to add good/bad capture bonus
-            let victim_type = piece_type(self.piece_captured(b));
-            let pc = self.piece_moved(b);
-            let hist = s.info.caphist_table[pc][sq][victim_type];
 
-            hist + MVV[victim_type]
+            //at high depths we can try putting more effort into our move ordering
+            //such as by binary searching an exact SEE value rather than just seeing if it
+            //gains/loses material
+            if depth >= 16 {
+                let v = self.see_val::<GOOD>(b) * 10_000;
+                let victim_type = piece_type(self.piece_captured(b));
+                let pc = self.piece_moved(b);
+                let hist = s.info.caphist_table[pc][sq][victim_type];
+
+                v + hist
+            } else {
+                let victim_type = piece_type(self.piece_captured(b));
+                let pc = self.piece_moved(b);
+                let hist = s.info.caphist_table[pc][sq][victim_type];
+
+                hist + MVV[victim_type]
+            }
         } else if self.is_promotion() {
             match self.promoted_piece() {
                 //promotions sorted by likelihood to be good
@@ -287,6 +326,7 @@ impl MovePicker {
         good_caps: &mut MoveList,
         bad_caps: &mut MoveList,
         s: &Thread,
+        depth: u8,
     ) -> Option<Move> {
         if self.stage == MovePickerStage::HashMove {
             self.stage = MovePickerStage::NoisyQueenPromotions;
@@ -301,7 +341,15 @@ impl MovePicker {
             if !self.generated {
                 movelist.gen_moves(b, MovegenMode::NoisyQueenPromotions);
                 if self.idx < movelist.used {
-                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                    self.score_between::<false>(
+                        movelist,
+                        self.idx,
+                        movelist.used - 1,
+                        b,
+                        &hash_move,
+                        s,
+                        depth,
+                    );
                 }
                 self.generated = true;
             }
@@ -320,7 +368,15 @@ impl MovePicker {
             if !self.generated {
                 movelist.gen_moves(b, MovegenMode::QuietQueenPromotions);
                 if self.idx < movelist.used {
-                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                    self.score_between::<false>(
+                        movelist,
+                        self.idx,
+                        movelist.used - 1,
+                        b,
+                        &hash_move,
+                        s,
+                        depth,
+                    );
                 }
                 self.generated = true;
             }
@@ -342,7 +398,15 @@ impl MovePicker {
                 (*good_caps, *bad_caps) = caps.separate_captures(b);
                 movelist.extend_from(good_caps);
                 if self.idx < movelist.used {
-                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                    self.score_between::<true>(
+                        movelist,
+                        self.idx,
+                        movelist.used - 1,
+                        b,
+                        &hash_move,
+                        s,
+                        depth,
+                    );
                 }
                 self.generated = true;
             }
@@ -375,7 +439,15 @@ impl MovePicker {
             if !self.generated {
                 movelist.gen_moves(b, MovegenMode::QuietsOnly);
                 if self.idx < movelist.used {
-                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                    self.score_between::<false>(
+                        movelist,
+                        self.idx,
+                        movelist.used - 1,
+                        b,
+                        &hash_move,
+                        s,
+                        depth,
+                    );
                 }
                 self.generated = true;
             }
@@ -394,7 +466,15 @@ impl MovePicker {
             if !self.generated {
                 movelist.extend_from(bad_caps);
                 if self.idx < movelist.used {
-                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                    self.score_between::<false>(
+                        movelist,
+                        self.idx,
+                        movelist.used - 1,
+                        b,
+                        &hash_move,
+                        s,
+                        depth,
+                    );
                 }
                 self.generated = true;
             }
@@ -414,7 +494,15 @@ impl MovePicker {
                 if !self.generated {
                     movelist.gen_moves(b, MovegenMode::NoisyUnderpromotions);
                     if self.idx < movelist.used {
-                        self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                        self.score_between::<false>(
+                            movelist,
+                            self.idx,
+                            movelist.used - 1,
+                            b,
+                            &hash_move,
+                            s,
+                            depth,
+                        );
                     }
                     self.generated = true;
                 }
@@ -433,7 +521,15 @@ impl MovePicker {
                 if !self.generated {
                     movelist.gen_moves(b, MovegenMode::QuietUnderpromotions);
                     if self.idx < movelist.used {
-                        self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                        self.score_between::<false>(
+                            movelist,
+                            self.idx,
+                            movelist.used - 1,
+                            b,
+                            &hash_move,
+                            s,
+                            depth,
+                        );
                     }
                     self.generated = true;
                 }
@@ -449,7 +545,7 @@ impl MovePicker {
         None
     }
 
-    pub fn score_between(
+    pub fn score_between<const GOOD: bool>(
         &mut self,
         movelist: &mut MoveList,
         l: usize,
@@ -457,9 +553,10 @@ impl MovePicker {
         b: &mut Board,
         hash_move: &Move,
         s: &Thread,
+        depth: u8,
     ) {
         for i in l..=r {
-            self.scores[i] = movelist.moves[i].score_move(b, s, hash_move);
+            self.scores[i] = movelist.moves[i].score_move::<GOOD>(b, s, hash_move, depth);
         }
     }
 

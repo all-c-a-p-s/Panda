@@ -333,6 +333,7 @@ impl Thread<'_> {
             &mut good_caps,
             &mut bad_caps,
             self,
+            depth,
         ) {
             if m == best_move && considered > 0 {
                 continue;
@@ -676,6 +677,7 @@ impl Thread<'_> {
             &mut good_caps,
             &mut bad_caps,
             self,
+            0,
         ) {
             if !position.is_legal(m) {
                 continue;
