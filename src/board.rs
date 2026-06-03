@@ -429,27 +429,32 @@ impl Board {
 
     #[must_use]
     pub fn is_insufficient_material(&self) -> bool {
-        if count(
-            self.bitboards[Piece::WP]
-                | self.bitboards[Piece::WR]
-                | self.bitboards[Piece::WQ]
-                | self.bitboards[Piece::BP]
-                | self.bitboards[Piece::BR]
-                | self.bitboards[Piece::BQ],
-        ) != 0
+        if self.bitboards[Piece::WP] > 0
+            || self.bitboards[Piece::BP] > 0
+            || self.bitboards[Piece::WR] > 0
+            || self.bitboards[Piece::BR] > 0
+            || self.bitboards[Piece::WQ] > 0
+            || self.bitboards[Piece::BQ] > 0
         {
             return false;
         }
-        if count(self.bitboards[Piece::WB]) >= 2
-            || count(self.bitboards[Piece::BB]) >= 2
-            || count(self.bitboards[Piece::WB]) >= 1 && count(self.bitboards[Piece::WN]) >= 1
-            || count(self.bitboards[Piece::BB]) >= 1 && count(self.bitboards[Piece::BN]) >= 1
+
+        if self.bitboards[Piece::WB].count_ones() >= 2
+            || self.bitboards[Piece::BB].count_ones() >= 2
         {
             return false;
         }
-        count(self.bitboards[Piece::WN]) <= 2 && count(self.bitboards[Piece::BN]) <= 2
-        //can technically arise a position where KvKNN is mate so this
-        //could cause some bug in theory lol
+
+        if (self.bitboards[Piece::WN] > 0 && self.bitboards[Piece::WB] > 0)
+            || (self.bitboards[Piece::WN] > 0 && self.bitboards[Piece::WB] > 0)
+        {
+            return false;
+        }
+
+        self.bitboards[Piece::WN]
+            .count_ones()
+            .max(self.bitboards[Piece::BN].count_ones())
+            <= 2
     }
 
     //make null move for NMP
@@ -530,12 +535,22 @@ impl Board {
 
     #[must_use]
     pub fn is_drawn(&self) -> bool {
-        if self.fifty_move == 100 {
+        if self.ply < 4 {
+            //technically you can only two-fold repeat on ply 4 but we don't wanna consider
+            //these moves anyway
+            return false;
+        }
+
+        if self.fifty_move >= 100 {
             return true;
         }
 
-        for key in self.history.iter().take(self.ply - 1) {
-            if *key == self.hash_key {
+        for &key in self.history[..self.ply - 1]
+            .iter()
+            .rev()
+            .take(self.fifty_move as usize)
+        {
+            if key == self.hash_key {
                 return true;
                 //return true on one repetition because otherwise the third
                 //repetition will not be reached because the search will stop

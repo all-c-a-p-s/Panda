@@ -1,5 +1,5 @@
 use crate::board::{Board, Colour};
-use crate::helper::{count, rank};
+use crate::helper::rank;
 
 use crate::types::{Piece, Square};
 
@@ -26,22 +26,32 @@ pub const MIRROR: [usize; 64] = {
 
 // technically misses some edge cases like 2 bishops of the same colour from promotions
 fn side_has_sufficient_material(b: &Board, side: Colour) -> bool {
-    match side {
-        Colour::White => {
-            count(b.bitboards[Piece::WP]) > 0
-                || count(b.bitboards[Piece::WR]) > 0
-                || count(b.bitboards[Piece::WQ]) > 0
-                || count(b.bitboards[Piece::WB]) > 1
-                || count(b.bitboards[Piece::WN]) > 2
-        }
-        Colour::Black => {
-            count(b.bitboards[Piece::BP]) > 0
-                || count(b.bitboards[Piece::BR]) > 0
-                || count(b.bitboards[Piece::BQ]) > 0
-                || count(b.bitboards[Piece::BB]) > 1
-                || count(b.bitboards[Piece::BN]) > 2
-        }
+    let (pawns, knights, bishops, rooks, queens) = match side {
+        Colour::White => (
+            b.bitboards[Piece::WP],
+            b.bitboards[Piece::WN],
+            b.bitboards[Piece::WB],
+            b.bitboards[Piece::WR],
+            b.bitboards[Piece::WQ],
+        ),
+        Colour::Black => (
+            b.bitboards[Piece::BP],
+            b.bitboards[Piece::BN],
+            b.bitboards[Piece::BB],
+            b.bitboards[Piece::BR],
+            b.bitboards[Piece::BQ],
+        ),
+    };
+
+    if pawns | rooks | queens > 0 {
+        return true;
     }
+
+    if bishops.count_ones() >= 2 || (knights | bishops).count_ones() >= 3 {
+        return true;
+    }
+
+    bishops > 0 && knights > 0
 }
 
 #[must_use]

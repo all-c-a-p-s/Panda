@@ -66,13 +66,7 @@ pub const fn pop_bit(square: Square, bitboard: BitBoard) -> BitBoard {
 #[inline(always)]
 #[must_use]
 pub const fn count(bitboard: BitBoard) -> usize {
-    let mut prev = bitboard;
-    let mut count = 0;
-    while prev > 0 {
-        prev &= prev - 1; //toggle least significant bit
-        count += 1;
-    }
-    count
+    bitboard.count_ones() as usize
 }
 
 #[inline(always)]
