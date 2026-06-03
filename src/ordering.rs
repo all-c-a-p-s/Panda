@@ -153,6 +153,133 @@ impl Move {
         b.side_to_move != colour
     }
 
+    /// Still doesn't account for pins but computes the material balance after a move if both sides
+    /// play to maximise material.
+    /// TODO - test over a large number of tactical positions/moves how this compares to a large
+    /// binary searching over compressed SEE values.
+    #[must_use]
+    pub fn exact_see(self, b: &Board) -> i32 {
+        let sq_from = self.square_from();
+        let sq_to = self.square_to();
+
+        let mut next_victim = if self.is_promotion() {
+            match b.side_to_move {
+                //only consider queen promotions
+                Colour::White => Piece::WQ,
+                Colour::Black => Piece::BQ,
+            }
+        } else {
+            self.piece_moved(b)
+        };
+
+        // balance always relative to us
+        let mut balance = match b.pieces_array[sq_to] {
+            Some(k) => SEE_VALUES[piece_type(k)],
+            None => 0,
+        };
+
+        if self.is_promotion() {
+            balance += SEE_VALUES[PieceType::Queen] - SEE_VALUES[PieceType::Pawn];
+        }
+
+        let bishop_attackers = b.bitboards[Piece::WB]
+            | b.bitboards[Piece::BB]
+            | b.bitboards[Piece::WQ]
+            | b.bitboards[Piece::BQ];
+        let rook_attackers = b.bitboards[Piece::WR]
+            | b.bitboards[Piece::BR]
+            | b.bitboards[Piece::WQ]
+            | b.bitboards[Piece::BQ];
+
+        let mut occupancies = b.occupancies[OccupancyIndex::BothOccupancies]
+            ^ (set_bit(sq_from, 0) | set_bit(sq_to, 0));
+
+        let mut attackers = get_attackers(sq_to, Colour::White, b, occupancies)
+            | get_attackers(sq_to, Colour::Black, b, occupancies);
+
+        let mut colour = match b.side_to_move {
+            Colour::White => Colour::Black,
+            Colour::Black => Colour::White,
+        };
+
+        let mut dp = [-INFINITY; 32];
+
+        dp[0] = balance;
+
+        let mut i = 1;
+
+        loop {
+            let side_attackers = attackers
+                & b.occupancies[match colour {
+                    Colour::White => OccupancyIndex::WhiteOccupancies,
+                    Colour::Black => OccupancyIndex::BlackOccupancies,
+                }];
+
+            //doesn't matter that actual board struct isn't getting updated because attackers
+            //that get traded off will get popped from the attackers bitboard
+
+            if side_attackers == 0 {
+                i -= 1;
+                break;
+            }
+
+            if piece_type(next_victim) == PieceType::King {
+                dp[i] = INFINITY;
+                break;
+            }
+
+            dp[i] = -dp[i - 1] + SEE_VALUES[piece_type(next_victim)];
+
+            let pieces = match colour {
+                Colour::White => WHITE_PIECES,
+                Colour::Black => BLACK_PIECES,
+            };
+
+            for piece in pieces {
+                if side_attackers & b.bitboards[piece] > 0 {
+                    next_victim = piece;
+                    break;
+                }
+            }
+
+            //SAFETY: if this was zero we would have broken above
+            occupancies ^= set_bit(
+                unsafe { lsfb(side_attackers & b.bitboards[next_victim]).unwrap_unchecked() },
+                0,
+            );
+
+            if piece_type(next_victim) == PieceType::Pawn
+                || piece_type(next_victim) == PieceType::Bishop
+                || piece_type(next_victim) == PieceType::Queen
+            {
+                //only diagonal moves can reveal new diagonal attackers
+                attackers |= get_bishop_attacks(sq_to as usize, occupancies) & bishop_attackers;
+            }
+
+            if piece_type(next_victim) == PieceType::Rook
+                || piece_type(next_victim) == PieceType::Queen
+            {
+                //same for rook attacks
+                attackers |= get_rook_attacks(sq_to as usize, occupancies) & rook_attackers;
+            }
+
+            attackers &= occupancies;
+            colour = match colour {
+                Colour::White => Colour::Black,
+                Colour::Black => Colour::White,
+            };
+
+            i += 1;
+        }
+
+        while i > 0 {
+            i -= 1;
+            dp[i] = dp[i].min(-dp[i + 1]);
+        }
+
+        dp[0]
+    }
+
     /// Scores a move based on this order
     /// - TT Move
     /// - Queen Promotion
@@ -164,7 +291,15 @@ impl Move {
     ///
     /// To me it seems intuitive that en passant should be considered a "good capture", but doing
     /// this loses elo. At the moment, en passant just gets the MVV bonus for capturing a pawn.
-    pub fn score_move(self, b: &mut Board, s: &Thread, hash_move: &Move) -> i32 {
+    pub fn score_move(
+        self,
+        b: &mut Board,
+        s: &Thread,
+        hash_move: &Move,
+        depth: u8,
+        pv_node: bool,
+        cutnode: bool,
+    ) -> i32 {
         let sq = self.square_to();
 
         if self.is_null() {
@@ -173,16 +308,27 @@ impl Move {
             //otherwise null move can get given hash move score
         } else if self == *hash_move {
             read_param!(HASH_MOVE_SCORE)
-            //before pv move because this has been verified by >= search depth
         } else if self.is_capture(b) {
             //we are already in the segment of good/bad captures
             //and we only care about scores relative to the rest of the segment
             //so no need to add good/bad capture bonus
-            let victim_type = piece_type(self.piece_captured(b));
-            let pc = self.piece_moved(b);
-            let hist = s.info.caphist_table[pc][sq][victim_type];
 
-            hist + MVV[victim_type]
+            //at high depths we can put more effort into our move ordering because there's a
+            //greater reward for optimal order
+            if depth >= 16 && (pv_node || cutnode) {
+                let v = self.exact_see(b);
+                let victim_type = piece_type(self.piece_captured(b));
+                let pc = self.piece_moved(b);
+                let hist = s.info.caphist_table[pc][sq][victim_type];
+
+                v * 10 + hist
+            } else {
+                let victim_type = piece_type(self.piece_captured(b));
+                let pc = self.piece_moved(b);
+                let hist = s.info.caphist_table[pc][sq][victim_type];
+
+                hist + MVV[victim_type]
+            }
         } else if self.is_promotion() {
             match self.promoted_piece() {
                 //promotions sorted by likelihood to be good
@@ -286,6 +432,9 @@ impl MovePicker {
         good_caps: &mut MoveList,
         bad_caps: &mut MoveList,
         s: &Thread,
+        depth: u8,
+        pv_node: bool,
+        cutnode: bool,
     ) -> Option<Move> {
         if self.stage == MovePickerStage::HashMove {
             self.stage = MovePickerStage::NoisyQueenPromotions;
@@ -300,7 +449,17 @@ impl MovePicker {
             if !self.generated {
                 movelist.gen_moves(b, MovegenMode::NoisyQueenPromotions);
                 if self.idx < movelist.used {
-                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                    self.score_between(
+                        movelist,
+                        self.idx,
+                        movelist.used - 1,
+                        b,
+                        &hash_move,
+                        s,
+                        depth,
+                        pv_node,
+                        cutnode,
+                    );
                 }
                 self.generated = true;
             }
@@ -319,7 +478,17 @@ impl MovePicker {
             if !self.generated {
                 movelist.gen_moves(b, MovegenMode::QuietQueenPromotions);
                 if self.idx < movelist.used {
-                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                    self.score_between(
+                        movelist,
+                        self.idx,
+                        movelist.used - 1,
+                        b,
+                        &hash_move,
+                        s,
+                        depth,
+                        pv_node,
+                        cutnode,
+                    );
                 }
                 self.generated = true;
             }
@@ -341,7 +510,17 @@ impl MovePicker {
                 (*good_caps, *bad_caps) = caps.separate_captures(b);
                 movelist.extend_from(good_caps);
                 if self.idx < movelist.used {
-                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                    self.score_between(
+                        movelist,
+                        self.idx,
+                        movelist.used - 1,
+                        b,
+                        &hash_move,
+                        s,
+                        depth,
+                        pv_node,
+                        cutnode,
+                    );
                 }
                 self.generated = true;
             }
@@ -374,7 +553,17 @@ impl MovePicker {
             if !self.generated {
                 movelist.gen_moves(b, MovegenMode::QuietsOnly);
                 if self.idx < movelist.used {
-                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                    self.score_between(
+                        movelist,
+                        self.idx,
+                        movelist.used - 1,
+                        b,
+                        &hash_move,
+                        s,
+                        depth,
+                        pv_node,
+                        cutnode,
+                    );
                 }
                 self.generated = true;
             }
@@ -393,7 +582,17 @@ impl MovePicker {
             if !self.generated {
                 movelist.extend_from(bad_caps);
                 if self.idx < movelist.used {
-                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                    self.score_between(
+                        movelist,
+                        self.idx,
+                        movelist.used - 1,
+                        b,
+                        &hash_move,
+                        s,
+                        depth,
+                        pv_node,
+                        cutnode,
+                    );
                 }
                 self.generated = true;
             }
@@ -413,7 +612,17 @@ impl MovePicker {
                 if !self.generated {
                     movelist.gen_moves(b, MovegenMode::NoisyUnderpromotions);
                     if self.idx < movelist.used {
-                        self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                        self.score_between(
+                            movelist,
+                            self.idx,
+                            movelist.used - 1,
+                            b,
+                            &hash_move,
+                            s,
+                            depth,
+                            pv_node,
+                            cutnode,
+                        );
                     }
                     self.generated = true;
                 }
@@ -432,7 +641,17 @@ impl MovePicker {
                 if !self.generated {
                     movelist.gen_moves(b, MovegenMode::QuietUnderpromotions);
                     if self.idx < movelist.used {
-                        self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s);
+                        self.score_between(
+                            movelist,
+                            self.idx,
+                            movelist.used - 1,
+                            b,
+                            &hash_move,
+                            s,
+                            depth,
+                            pv_node,
+                            cutnode,
+                        );
                     }
                     self.generated = true;
                 }
@@ -456,9 +675,12 @@ impl MovePicker {
         b: &mut Board,
         hash_move: &Move,
         s: &Thread,
+        depth: u8,
+        pv_node: bool,
+        cutnode: bool,
     ) {
         for i in l..=r {
-            self.scores[i] = movelist.moves[i].score_move(b, s, hash_move);
+            self.scores[i] = movelist.moves[i].score_move(b, s, hash_move, depth, pv_node, cutnode);
         }
     }
 

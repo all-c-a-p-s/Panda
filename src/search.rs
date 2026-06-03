@@ -333,6 +333,9 @@ impl Thread<'_> {
             &mut good_caps,
             &mut bad_caps,
             self,
+            depth,
+            pv_node,
+            cutnode,
         ) {
             if m == best_move && considered > 0 {
                 continue;
@@ -676,6 +679,9 @@ impl Thread<'_> {
             &mut good_caps,
             &mut bad_caps,
             self,
+            0,
+            false,
+            false,
         ) {
             if !position.is_legal(m) {
                 continue;

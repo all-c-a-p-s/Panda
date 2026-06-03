@@ -79,26 +79,26 @@ pub fn get_attackers(square: Square, colour: Colour, b: &Board, occupancies: Bit
     //attacked BY colour
 
     let square = square as usize;
-    //have to convert because get_rook_attacks() and get_bishop_attacks() need a usize
+    //have to convert because get_rook_attacks() and get_bishop_attacks() need a usize 
 
     match colour {
         Colour::White => {
-            BP_ATTACKS[square] & b.bitboards[Piece::WP]
-                | N_ATTACKS[square] & b.bitboards[Piece::WN]
-                | K_ATTACKS[square] & b.bitboards[Piece::WK]
-                | get_bishop_attacks(square, occupancies)
-                    & (b.bitboards[Piece::WB] | b.bitboards[Piece::WQ])
-                | get_rook_attacks(square, occupancies)
-                    & (b.bitboards[Piece::WR] | b.bitboards[Piece::WQ])
+            (BP_ATTACKS[square] & b.bitboards[Piece::WP])
+                | (N_ATTACKS[square] & b.bitboards[Piece::WN])
+                | (K_ATTACKS[square] & b.bitboards[Piece::WK])
+                | (get_bishop_attacks(square, occupancies)
+                    & (b.bitboards[Piece::WB] | b.bitboards[Piece::WQ]))
+                | (get_rook_attacks(square, occupancies)
+                    & (b.bitboards[Piece::WR] | b.bitboards[Piece::WQ]))
         }
         Colour::Black => {
-            WP_ATTACKS[square] & b.bitboards[Piece::BP]
-                | N_ATTACKS[square] & b.bitboards[Piece::BN]
-                | K_ATTACKS[square] & b.bitboards[Piece::BK]
-                | get_bishop_attacks(square, occupancies)
-                    & (b.bitboards[Piece::BB] | b.bitboards[Piece::BQ])
-                | get_rook_attacks(square, occupancies)
-                    & (b.bitboards[Piece::BR] | b.bitboards[Piece::BQ])
+            (WP_ATTACKS[square] & b.bitboards[Piece::BP])
+                | (N_ATTACKS[square] & b.bitboards[Piece::BN])
+                | (K_ATTACKS[square] & b.bitboards[Piece::BK])
+                | (get_bishop_attacks(square, occupancies)
+                    & (b.bitboards[Piece::BB] | b.bitboards[Piece::BQ]))
+                | (get_rook_attacks(square, occupancies)
+                    & (b.bitboards[Piece::BR] | b.bitboards[Piece::BQ]))
         }
     }
 }
