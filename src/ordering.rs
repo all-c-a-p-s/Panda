@@ -155,8 +155,6 @@ impl Move {
 
     /// Still doesn't account for pins but computes the material balance after a move if both sides
     /// play to maximise material.
-    /// TODO - test over a large number of tactical positions/moves how this compares to a large
-    /// binary searching over compressed SEE values.
     #[must_use]
     pub fn exact_see(self, b: &Board) -> i32 {
         let sq_from = self.square_from();
