@@ -5,6 +5,7 @@ use types::Square;
 use crate::read_param;
 use crate::search::params;
 use crate::transposition::{TTRef, TranspositionTable};
+use crate::types::Piece;
 use crate::{Board, INFINITY, MAX_PLY, Move, MoveData, NULL_MOVE, iterative_deepening, types};
 
 const MIN_MOVE_TIME: usize = 1; //make sure move time is never 0
@@ -42,6 +43,7 @@ pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize)
 #[derive(Copy, Clone)]
 pub struct SearchStackEntry {
     pub square_moved_to: Option<Square>,
+    pub piece_moved: Option<Piece>,
     pub made_capture: bool,
     pub eval: i32,
 }
@@ -59,6 +61,7 @@ pub struct SearchInfo {
     pub corrhist: [[i32; CORRHIST_SIZE]; 2],
 
     pub killer_moves: [Option<Move>; MAX_PLY],
+    pub counter_moves: [[Option<Move>; 64]; 12],
     pub excluded: [Option<Move>; MAX_PLY],
 }
 
@@ -94,6 +97,7 @@ impl Default for SearchStackEntry {
     fn default() -> Self {
         Self {
             eval: -INFINITY,
+            piece_moved: None,
             square_moved_to: None,
             made_capture: false,
         }
@@ -139,6 +143,7 @@ impl Default for SearchInfo {
             corrhist: [[0; CORRHIST_SIZE]; 2],
 
             killer_moves: [None; 64],
+            counter_moves: [[None; 64]; 12],
             excluded: [None; 64],
         }
     }

@@ -120,6 +120,14 @@ impl Thread<'_> {
             return;
         };
 
+        if !tactical {
+            let Some(pc) = self.info.ss[self.ply - 1].piece_moved else {
+                return;
+            };
+
+            self.info.counter_moves[pc][prev] = Some(cutoff_move);
+        }
+
         let side = (b.side_to_move == Colour::White) as usize;
 
         if tactical {

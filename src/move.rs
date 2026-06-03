@@ -656,7 +656,14 @@ impl Board {
         }
     }
 
+    /// Used to verify whether moves which we might have stored in some search tables (such as
+    /// killer or counter moves) actually exist on the board (though they might be illegal due to
+    /// leaving the king in check).
     pub fn is_pseudo_legal(&mut self, m: Move) -> bool {
+        if m.is_null() {
+            return false;
+        }
+
         let (sq_from, sq_to) = (m.square_from(), m.square_to());
 
         if self.pieces_array[sq_from].is_none() {
@@ -664,6 +671,16 @@ impl Board {
         }
 
         let pc = m.piece_moved(self);
+
+        if m.is_castling() && piece_type(pc) != PieceType::King {
+            return false;
+        }
+
+        if (m.is_promotion() || m.is_en_passant() || m.is_double_push(&self))
+            && piece_type(pc) != PieceType::Pawn
+        {
+            return false;
+        }
 
         let side = match pc {
             Piece::WP | Piece::WN | Piece::WB | Piece::WR | Piece::WQ | Piece::WK => Colour::White,

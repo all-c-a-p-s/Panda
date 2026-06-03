@@ -155,6 +155,8 @@ impl Move {
 
     /// Still doesn't account for pins but computes the material balance after a move if both sides
     /// play to maximise material.
+    /// TODO - test over a large number of tactical positions/moves how this compares to a large
+    /// binary searching over compressed SEE values.
     #[must_use]
     pub fn exact_see(self, b: &Board) -> i32 {
         let sq_from = self.square_from();
@@ -425,6 +427,7 @@ impl MovePicker {
         &mut self,
         hash_move: Move,
         killer: Option<Move>,
+        counter: Option<Move>,
         b: &mut Board,
         movelist: &mut MoveList,
         good_caps: &mut MoveList,
@@ -543,6 +546,14 @@ impl MovePicker {
             if let Some(m) = killer
                 && b.is_pseudo_legal(m)
             {
+                return Some(m);
+            }
+
+            if let Some(m) = counter
+                && b.is_pseudo_legal(m)
+            {
+                //this way we only try counter if we don't have a killer
+                //could also try always trying counter
                 return Some(m);
             }
         }

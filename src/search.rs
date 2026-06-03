@@ -236,6 +236,7 @@ impl Thread<'_> {
             self.info.ss[self.ply] = SearchStackEntry {
                 eval: static_eval,
                 square_moved_to: None,
+                piece_moved: None,
                 made_capture: false,
             };
         }
@@ -325,9 +326,19 @@ impl Thread<'_> {
 
         let mut done_killer = false;
 
+        let counter = if self.ply > 0
+            && let Some(pc) = self.info.ss[self.ply - 1].piece_moved
+            && let Some(sq) = self.info.ss[self.ply - 1].square_moved_to
+        {
+            self.info.counter_moves[pc][sq]
+        } else {
+            None
+        };
+
         while let Some(m) = movepicker.get_next(
             best_move,
             self.info.killer_moves[self.ply],
+            counter,
             position,
             &mut movelist,
             &mut good_caps,
@@ -367,6 +378,7 @@ impl Thread<'_> {
             }
 
             let is_check = position.checkers != 0;
+            let piece_moved = m.piece_moved(&position);
 
             // Early Pruning: try to prune moves before we search them properly
             // by showing that they're not worth investigating
@@ -409,6 +421,8 @@ impl Thread<'_> {
 
             if self.ply < MAX_PLY {
                 self.info.ss[self.ply].square_moved_to = Some(m.square_to());
+                self.info.ss[self.ply].piece_moved = Some(piece_moved);
+
                 if tactical {
                     self.info.ss[self.ply].made_capture = true;
                 }
@@ -521,8 +535,7 @@ impl Thread<'_> {
 
                             r -= is_check as i32;
 
-                            r -= self.info.history_table[m.piece_moved(position)][m.square_to()]
-                                / 8192;
+                            r -= self.info.history_table[piece_moved][m.square_to()] / 8192;
                         }
 
                         let mut reduced_depth = (new_depth as i32 - r).max(1) as u8;
@@ -674,6 +687,7 @@ impl Thread<'_> {
             } else {
                 None
             },
+            None,
             position,
             &mut movelist,
             &mut good_caps,
