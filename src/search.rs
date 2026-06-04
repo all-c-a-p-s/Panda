@@ -759,19 +759,6 @@ impl Thread<'_> {
         }
         best_score
     }
-
-    pub fn reset_thread(&mut self) {
-        self.nodes = 0;
-        self.pv_length = [0; 64];
-        self.pv = [[NULL_MOVE; MAX_PLY]; MAX_PLY];
-        self.ply = 0;
-        self.moves_fully_searched = 0;
-
-        //reset tables
-        self.info.killer_moves = [None; MAX_PLY];
-        self.info.history_table = [[0; 64]; 12];
-        self.info.caphist_table = [[[0; 5]; 64]; 12];
-    }
 }
 
 pub struct MoveData {
