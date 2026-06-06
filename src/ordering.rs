@@ -420,6 +420,8 @@ impl MovePicker {
         }
     }
 
+    /// Gets next pseudo-legal move based on our ordering.
+    /// Note each case in the function falls through.
     #[allow(clippy::too_many_arguments)]
     pub fn get_next(
         &mut self,
@@ -674,6 +676,7 @@ impl MovePicker {
         None
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn score_between(
         &mut self,
         movelist: &mut MoveList,

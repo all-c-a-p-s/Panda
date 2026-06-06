@@ -676,7 +676,7 @@ impl Board {
             return false;
         }
 
-        if (m.is_promotion() || m.is_en_passant() || m.is_double_push(&self))
+        if (m.is_promotion() || m.is_en_passant() || m.is_double_push(self))
             && piece_type(pc) != PieceType::Pawn
         {
             return false;

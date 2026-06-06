@@ -26,7 +26,7 @@ const FULL_DEPTH_MOVES: u8 = 1;
 // name, type, val, min, max
 
 tuneable_params! {
-    //params for search conditions
+    // params for search conditions
     SINGULARITY_DE_MARGIN, i32, 21, 10, 150;
     ASPIRATION_WINDOW, i32, 17, 10, 70;
     RAZORING_MARGIN, i32, 273, 100, 500;
@@ -43,7 +43,7 @@ tuneable_params! {
     LMP_DEPTH, u8, 4, 1, 12;
     IIR_DEPTH_MINIMUM, u8, 9, 1, 12;
 
-    //move ordering scores
+    // move ordering scores
     HASH_MOVE_SCORE, i32, 1_000_000, 1_000_000, 1_000_000;
     QUEEN_PROMOTION, i32, 750_000, -999_999, 999_999;
     WINNING_CAPTURE, i32, 500_000, -999_999, 999_999;
@@ -51,7 +51,7 @@ tuneable_params! {
     LOSING_CAPTURE, i32, -300_000, -999_999, 999_999;
     UNDER_PROMOTION, i32, -500_000, -999_999, 999_999;
 
-    //factors affecting reductions etc
+    // factors affecting reductions etc
     NMP_FACTOR, i32, 22, 1, 100;
     NMP_BASE, i32, 200, 50, 500;
     HISTORY_NODE_DIVISOR, usize, 655, 256, 8192;
@@ -61,7 +61,7 @@ tuneable_params! {
     LMR_QUIET_BASE, i32, 144, 0, 500;
     LMR_QUIET_DIVISOR, i32, 285, 100, 500;
 
-    //LERP weights
+    // LERP weights
     RFP_BETA_WEIGHT, i32, 22, 0, 1024;
     NMP_BETA_WEIGHT, i32, 327, 0, 1024;
     STAND_PAT_BETA_WEIGHT, i32, 170, 0, 1024;
@@ -115,7 +115,7 @@ impl Thread<'_> {
     ) -> Option<i32> {
         position.undo_move(best_move, commit);
         self.ply -= 1;
-        //undo move already made on board
+        // undo move already made on board
         let threshold = (tt_score - (depth as i32 * 2 + 20)).max(-INFINITY);
 
         self.info.excluded[self.ply] = Some(best_move);
@@ -202,7 +202,7 @@ impl Thread<'_> {
 
             // We accept values from the TT if:
             //      (1) the depth of the entry >= our depth, with the correct bound
-            // OR   (2) we don't expect much from this node, and the eval is well above beta
+            // OR   (2) we are in an expected cutnode, and the eval is well above beta
             if tt_cutoff!(
                 singular, root, pv_node, depth, entry, beta, alpha, cutnode, in_check
             ) {
@@ -217,7 +217,7 @@ impl Thread<'_> {
             false
         };
 
-        //reset killers for child nodes
+        // reset killers for child nodes
         self.info.killer_moves[self.ply + 1] = None;
 
         let mut static_eval = evaluate(position);
@@ -298,7 +298,7 @@ impl Thread<'_> {
                 let reduced_depth = (depth as i32 - r).max(1) as u8;
                 let null_move_eval =
                     -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
-                //minimal window used because all that matters is whether the search result is better than beta
+                // null window used because all that matters is whether the search result is better than beta
                 position.undo_null_move(&undo);
                 self.ply -= 1;
                 if null_move_eval >= beta {
@@ -379,7 +379,7 @@ impl Thread<'_> {
                 continue;
             }
 
-            let piece_moved = m.piece_moved(&position);
+            let piece_moved = m.piece_moved(position);
 
             // Early Pruning: try to prune moves before we search them properly
             // by showing that they're not worth investigating
@@ -417,7 +417,7 @@ impl Thread<'_> {
                 }
             }
 
-            //checked to be legal above
+            // checked to be legal above
             let commit = position.play_unchecked(m);
 
             if self.ply < MAX_PLY {
@@ -466,7 +466,7 @@ impl Thread<'_> {
                 // Internal Aspiration Window:
                 // Assume the value of our lower-depth search has some merit, so we may be able to search on
                 // a tighter window around this value.
-                if do_iiw!(
+                if do_iaw!(
                     pv_node, tt_hit, tt_bound, root, singular, tt_score, alpha, beta
                 ) {
                     let depth_diff = (depth as i32 - tt_depth as i32).abs().max(1);
@@ -514,25 +514,30 @@ impl Thread<'_> {
                     -self.negamax(position, new_depth, -beta, -alpha, false)
                 }
             } else {
-                // PVS:
+                // Principle Variation Search (PVS):
                 // Assume that our move ordering is good enough that
                 // we will be able to prove relatively inexpensively that late
                 // moves aren't worth investigating.
 
                 let mut r_eval = -INFINITY;
-                let do_deeper_zw =
+                let do_full_depth_zw =
                     if should_reduce!(legal, pv_node, tt_move, root, tactical, depth, not_mated) {
                         let mut r = 1;
+                        // fixed reduction of 1 for captures seems to work well
                         if quiet {
                             r = self.info.lmr_table.reduction_table[quiet as usize]
                                 [depth.min(31) as usize][legal.min(31) as usize];
 
-                            r -= pv_node as i32;
+                            // reduce more when we have reason to expect little from this move
                             r += tt_move_capture as i32;
                             r += !improving as i32;
 
+                            // reduce less when this move is important/promising
+                            r -= pv_node as i32;
                             r -= in_check as i32;
+                            r -= (is_killer || is_counter) as i32;
 
+                            // either increase or decrease reduction depending on history score
                             r -= self.info.history_table[piece_moved][m.square_to()] / 8192;
                         }
 
@@ -545,7 +550,7 @@ impl Thread<'_> {
                         true
                     };
 
-                if do_deeper_zw {
+                if do_full_depth_zw {
                     // failed to prove that move is bad -> re-search with same depth but still zw
                     r_eval = -self.negamax(position, new_depth, -alpha - 1, -alpha, !cutnode);
                 }
@@ -617,7 +622,7 @@ impl Thread<'_> {
     }
 
     /// Quiescence Search:
-    /// Search all noisy moves, or all moves if in check.
+    /// Search all noisy moves, or find an evasion if in check.
     /// This is done to prevent the horizon effect.
     pub fn qsearch(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;

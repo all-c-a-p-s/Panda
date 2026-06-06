@@ -96,7 +96,7 @@ macro_rules! maybe_singular {
 }
 
 #[macro_export]
-macro_rules! do_iiw {
+macro_rules! do_iaw {
     ($pv_node:expr, $tt_hit:expr, $tt_bound:expr, $root:expr, $singular:expr,
      $tt_score:expr, $alpha:expr, $beta:expr) => {
         $pv_node
@@ -159,8 +159,8 @@ pub(crate) use can_razor;
 pub(crate) use can_rfp;
 pub(crate) use can_static_prune;
 pub(crate) use corrhist_update_allowed;
+pub(crate) use do_iaw;
 pub(crate) use do_iir;
-pub(crate) use do_iiw;
 pub(crate) use do_lmp;
 pub(crate) use do_see_pruning;
 pub(crate) use maybe_singular;
