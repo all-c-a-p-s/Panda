@@ -205,7 +205,7 @@ impl Thread<'_> {
 
     pub fn update_corrhist(&mut self, b: &Board, depth: u8, diff: i32) {
         let idx = b.pawn_hash as usize % CORRHIST_SIZE;
-        let side = (b.side_to_move == Colour::White) as usize;
+        let side = b.side_to_move as usize;
 
         let entry = &mut self.info.corrhist[side][idx];
 
@@ -219,7 +219,7 @@ impl Thread<'_> {
 
     pub fn eval_with_corrhist(&self, b: &Board, raw_eval: i32) -> i32 {
         let idx = b.pawn_hash as usize % CORRHIST_SIZE;
-        let side = (b.side_to_move == Colour::White) as usize;
+        let side = b.side_to_move as usize;
 
         let entry = self.info.corrhist[side][idx];
         (raw_eval + entry / CORRHIST_GRAIN).clamp(-MATE + 1, MATE - 1)

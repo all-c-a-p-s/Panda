@@ -324,7 +324,7 @@ impl Thread<'_> {
         let (mut legal, mut considered) = (0, 0);
         let mut best_score = -INFINITY;
 
-        let mut done_killer = false;
+        let (mut done_killer, mut done_counter) = (false, false);
 
         let counter = if self.ply > 0
             && let Some(pc) = self.info.ss[self.ply - 1].piece_moved
@@ -366,18 +366,19 @@ impl Thread<'_> {
             let not_mated = best_score > -MATE;
 
             let is_killer = self.info.killer_moves[self.ply] == Some(m);
+            let is_counter = Some(m) == counter;
 
-            if is_killer && done_killer {
+            if is_killer && done_killer || is_counter && done_counter {
                 continue;
             }
 
             done_killer |= is_killer;
+            done_counter |= is_counter;
 
             if !position.is_legal(m) {
                 continue;
             }
 
-            let is_check = position.checkers != 0;
             let piece_moved = m.piece_moved(&position);
 
             // Early Pruning: try to prune moves before we search them properly
@@ -462,12 +463,9 @@ impl Thread<'_> {
             let new_depth = (depth as i32 - 1 + extension.unwrap()).clamp(0, MAX_PLY as i32) as u8;
 
             let eval = if legal == 1 {
-                // note that this is one because the variable is updated above
-                // normal search on pv move (no moves searched yet)
-
-                // basically like an internal aspiration window:
-                // assume the value of our lower-depth search has some merit, so we may be able to search on
-                // a tighter window
+                // Internal Aspiration Window:
+                // Assume the value of our lower-depth search has some merit, so we may be able to search on
+                // a tighter window around this value.
                 if do_iiw!(
                     pv_node, tt_hit, tt_bound, root, singular, tt_score, alpha, beta
                 ) {
@@ -516,13 +514,13 @@ impl Thread<'_> {
                     -self.negamax(position, new_depth, -beta, -alpha, false)
                 }
             } else {
-                // non-pv move -> search with reduced window
-                // this assumes that our move ordering is good enough
-                // that we will be able to prove that these moves are bad
-                // often enough that it outweighs the cost of re-searching
-                // then if we are unable to prove so
+                // PVS:
+                // Assume that our move ordering is good enough that
+                // we will be able to prove relatively inexpensively that late
+                // moves aren't worth investigating.
 
-                let mut reduction_eval =
+                let mut r_eval = -INFINITY;
+                let do_deeper_zw =
                     if should_reduce!(legal, pv_node, tt_move, root, tactical, depth, not_mated) {
                         let mut r = 1;
                         if quiet {
@@ -533,31 +531,30 @@ impl Thread<'_> {
                             r += tt_move_capture as i32;
                             r += !improving as i32;
 
-                            r -= is_check as i32;
+                            r -= in_check as i32;
 
                             r -= self.info.history_table[piece_moved][m.square_to()] / 8192;
                         }
 
-                        let mut reduced_depth = (new_depth as i32 - r).max(1) as u8;
-                        reduced_depth = reduced_depth.clamp(1, new_depth);
+                        let reduced_depth = (new_depth as i32 - r).clamp(1, new_depth as i32) as u8;
                         // avoid dropping into qsearch or extending
 
-                        -self.negamax(position, reduced_depth, -alpha - 1, -alpha, true)
+                        r_eval = -self.negamax(position, reduced_depth, -alpha - 1, -alpha, true);
+                        r_eval > alpha && reduced_depth < new_depth
                     } else {
-                        alpha + 1
+                        true
                     };
-                if reduction_eval > alpha {
-                    // failed to prove that move is bad -> re-search with same depth but reduced
-                    // window
-                    reduction_eval =
-                        -self.negamax(position, new_depth, -alpha - 1, -alpha, !cutnode);
+
+                if do_deeper_zw {
+                    // failed to prove that move is bad -> re-search with same depth but still zw
+                    r_eval = -self.negamax(position, new_depth, -alpha - 1, -alpha, !cutnode);
                 }
 
-                if reduction_eval > alpha && reduction_eval < beta {
+                if pv_node && r_eval > alpha {
                     // move actually inside PV window -> search at full depth
-                    reduction_eval = -self.negamax(position, new_depth, -beta, -alpha, false);
+                    r_eval = -self.negamax(position, new_depth, -beta, -alpha, false);
                 }
-                reduction_eval
+                r_eval
             };
 
             position.undo_move(m, &commit);

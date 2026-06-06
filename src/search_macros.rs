@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "datagen", allow(dead_code, unused))]
+
 #[macro_export]
 macro_rules! singularity_de {
     ($self_:expr, $pv_node:expr, $excluded_eval:expr, $threshold:expr) => {
