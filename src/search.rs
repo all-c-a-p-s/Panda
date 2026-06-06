@@ -522,12 +522,10 @@ impl Thread<'_> {
                 let mut r_eval = -INFINITY;
                 let do_full_depth_zw =
                     if should_reduce!(legal, pv_node, tt_move, root, tactical, depth, not_mated) {
-                        let mut r = 1;
+                        let mut r = self.info.lmr_table.reduction_table[1][depth.min(31) as usize]
+                            [legal.min(31) as usize];
                         // fixed reduction of 1 for captures seems to work well
                         if quiet {
-                            r = self.info.lmr_table.reduction_table[quiet as usize]
-                                [depth.min(31) as usize][legal.min(31) as usize];
-
                             // reduce more when we have reason to expect little from this move
                             r += tt_move_capture as i32;
                             r += !improving as i32;
