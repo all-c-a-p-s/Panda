@@ -446,7 +446,7 @@ impl Board {
         }
 
         if (self.bitboards[Piece::WN] > 0 && self.bitboards[Piece::WB] > 0)
-            || (self.bitboards[Piece::WN] > 0 && self.bitboards[Piece::WB] > 0)
+            || (self.bitboards[Piece::BN] > 0 && self.bitboards[Piece::BB] > 0)
         {
             return false;
         }
@@ -549,6 +549,7 @@ impl Board {
             .iter()
             .rev()
             .take(self.fifty_move as usize)
+            .step_by(2)
         {
             if key == self.hash_key {
                 return true;
