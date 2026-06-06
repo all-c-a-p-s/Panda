@@ -180,7 +180,7 @@ impl Thread<'_> {
 
         if !root && !singular {
             if position.is_drawn() {
-                return 0;
+                return 1 * if self.ply % 2 == 0 { 1 } else { -1 };
             }
 
             // Mate Distance Pruning:
@@ -628,7 +628,7 @@ impl Thread<'_> {
         self.nodes += 1;
 
         if position.is_drawn() {
-            return 0;
+            return 1 * if self.ply % 2 == 0 { 1 } else { -1 };
         }
 
         if self.should_exit() {
