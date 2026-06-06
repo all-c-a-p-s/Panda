@@ -30,7 +30,7 @@ tuneable_params! {
     SINGULARITY_DE_MARGIN, i32, 21, 10, 150;
     ASPIRATION_WINDOW, i32, 17, 10, 70;
     RAZORING_MARGIN, i32, 273, 100, 500;
-    MAX_RAZOR_DEPTH, u8, 1, 1, 12;
+    MAX_RAZOR_DEPTH, u8, 4, 1, 12;
     RFP_DEPTH, u8, 6, 1, 12;
     RFP_MARGIN, u8, 26, 20, 200;
     TT_FUTILITY_MARGIN, i32, 154, 40, 400;
@@ -268,8 +268,8 @@ impl Thread<'_> {
             }
 
             // Razoring:
-            // If we're very far behind it's likely that the only way to raise alpha will be with
-            // captures, so just run a qsearch
+            // If our opponent just captured and the static eval is far below alpha, it's likely
+            // that only captures can raise alpha. Hence, we just run a qsearch.
             if can_razor!(
                 depth,
                 static_eval,

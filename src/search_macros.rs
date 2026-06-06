@@ -55,10 +55,10 @@ macro_rules! can_razor {
     ($depth:expr, $static_eval:expr, $improving:expr, $opponent_captured:expr,
      $opponent_worsening:expr, $alpha:expr) => {
         $depth <= read_param!(MAX_RAZOR_DEPTH)
+            && $opponent_captured
             && $static_eval
                 + read_param!(RAZORING_MARGIN)
-                    * ($depth as i32 + $improving as i32
-                        - ($opponent_captured || !$opponent_worsening) as i32)
+                    * ($depth as i32 + $improving as i32 - $opponent_worsening as i32)
                 <= $alpha
     };
 }
