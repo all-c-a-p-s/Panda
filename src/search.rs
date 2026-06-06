@@ -535,14 +535,13 @@ impl Thread<'_> {
                             // reduce less when this move is important/promising
                             r -= pv_node as i32;
                             r -= in_check as i32;
+                            r -= (is_killer || is_counter) as i32;
 
                             // either increase or decrease reduction depending on history score
                             r -= self.info.history_table[piece_moved][m.square_to()] / 8192;
                         }
 
-                        let r = (r as u8).clamp(0, new_depth - 1);
-
-                        let reduced_depth = new_depth - r;
+                        let reduced_depth = (new_depth as i32 - r).clamp(1, new_depth as i32) as u8;
                         // avoid dropping into qsearch or extending
 
                         r_eval = -self.negamax(position, reduced_depth, -alpha - 1, -alpha, true);
