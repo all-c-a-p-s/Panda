@@ -29,14 +29,14 @@ impl Thread<'_> {
         &mut self,
         b: &Board,
         quiets: &Vec<Move>,
-        caps: &Vec<Move>,
+        tacticals: &Vec<Move>,
         cutoff_move: Move,
         tactical: bool,
         depth: u8,
     ) {
-        self.update_history(b, quiets, caps, cutoff_move, tactical, depth);
-        self.update_counter_correlation(cutoff_move, depth, tactical, caps, quiets, b);
-        self.update_followup_correlation(cutoff_move, depth, tactical, caps, quiets, b);
+        self.update_history(b, quiets, tacticals, cutoff_move, tactical, depth);
+        self.update_counter_correlation(cutoff_move, depth, tactical, tacticals, quiets, b);
+        self.update_followup_correlation(cutoff_move, depth, tactical, tacticals, quiets, b);
         if !tactical {
             self.update_killer_moves(cutoff_move);
         }
@@ -51,7 +51,7 @@ impl Thread<'_> {
         cutoff_move: Move,
         depth: u8,
         tactical: bool,
-        caps: &Vec<Move>,
+        tacticals: &Vec<Move>,
         quiets: &Vec<Move>,
         b: &Board,
     ) {
@@ -73,14 +73,14 @@ impl Thread<'_> {
         let side = (b.side_to_move == Colour::White) as usize;
 
         if tactical {
-            for &m in caps {
+            for &m in tacticals {
                 let sq = m.square_to();
 
                 let entry = &mut self.info.followup_correlation[side][prev][sq];
                 update(entry, m);
             }
         } else {
-            for &m in caps {
+            for &m in tacticals {
                 let sq = m.square_to();
 
                 let entry = &mut self.info.followup_correlation[side][prev][sq];
@@ -101,7 +101,7 @@ impl Thread<'_> {
         cutoff_move: Move,
         depth: u8,
         tactical: bool,
-        caps: &Vec<Move>,
+        tacticals: &Vec<Move>,
         quiets: &Vec<Move>,
         b: &Board,
     ) {
@@ -131,14 +131,14 @@ impl Thread<'_> {
         let side = (b.side_to_move == Colour::White) as usize;
 
         if tactical {
-            for &m in caps {
+            for &m in tacticals {
                 let sq = m.square_to();
 
                 let entry = &mut self.info.counter_correlation[side][prev][sq];
                 update(entry, m);
             }
         } else {
-            for &m in caps {
+            for &m in tacticals {
                 let sq = m.square_to();
 
                 let entry = &mut self.info.counter_correlation[side][prev][sq];
@@ -159,7 +159,7 @@ impl Thread<'_> {
         &mut self,
         b: &Board,
         quiets: &Vec<Move>,
-        caps: &Vec<Move>,
+        tacticals: &Vec<Move>,
         cutoff_move: Move,
         tactical: bool,
         depth: u8,
@@ -175,7 +175,10 @@ impl Thread<'_> {
 
         if tactical {
             // penalise all captures that failed to cause cutoff
-            for &m in caps {
+            for &m in tacticals {
+                if !m.is_capture(&b) {
+                    continue;
+                }
                 let piece = m.piece_moved(b);
                 let target = m.square_to();
                 let captured = piece_type(m.piece_captured(b));
@@ -193,7 +196,10 @@ impl Thread<'_> {
                 update(entry, m);
             }
 
-            for &m in caps {
+            for &m in tacticals {
+                if !m.is_capture(&b) {
+                    continue;
+                }
                 let piece = m.piece_moved(b);
                 let target = m.square_to();
                 let captured = piece_type(m.piece_captured(b));
@@ -210,6 +216,7 @@ impl Thread<'_> {
         let entry = &mut self.info.corrhist[side][idx];
 
         let new_weight = (depth + 1).min(16) as i32;
+
         let scaled_diff = diff * CORRHIST_GRAIN;
 
         *entry =

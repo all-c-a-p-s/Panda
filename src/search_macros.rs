@@ -127,7 +127,8 @@ macro_rules! corrhist_update_allowed {
         !($in_check
             || $best_move.is_capture($position)
             || ($hash_flag == EntryFlag::LowerBound && $best_score <= $static_eval)
-            || ($hash_flag == EntryFlag::UpperBound && $best_score >= $static_eval))
+            || ($hash_flag == EntryFlag::UpperBound && $best_score >= $static_eval)
+            || $best_score.abs() >= 20_000)
     };
 }
 

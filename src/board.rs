@@ -287,7 +287,7 @@ impl Board {
         //used to avoid null move pruning in king and pawn endgames
         //where zugzwang is very common
         self.occupancies[OccupancyIndex::BothOccupancies]
-            ^ (self.bitboards[Piece::WP]
+            & !(self.bitboards[Piece::WP]
                 | self.bitboards[Piece::WK]
                 | self.bitboards[Piece::BP]
                 | self.bitboards[Piece::BK])
@@ -423,6 +423,10 @@ impl Board {
 
     #[must_use]
     pub fn get_piece_at(&self, sq: Square) -> Piece {
+        if self.pieces_array[sq].is_none() {
+            self.print_board();
+            println!("{:?}", sq);
+        }
         //SAFETY: this must only be called when we know there is a piece on sq
         unsafe { self.pieces_array[sq].unwrap_unchecked() }
     }

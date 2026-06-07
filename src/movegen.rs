@@ -161,12 +161,13 @@ impl MoveList {
                 self.used += 1;
             }
 
-            let dp = unsafe { offset(from, 16) };
-            if rank(from) == 7 - seventh_rank
-                && get_bit(dp, board.occupancies[OccupancyIndex::BothOccupancies]) == 0
-            {
-                self.moves[self.used] = encode_move(from, dp, None, NO_FLAG);
-                self.used += 1;
+            if rank(from) == 7 - seventh_rank {
+                let dp = unsafe { offset(from, 16) };
+                if get_bit(dp, board.occupancies[OccupancyIndex::BothOccupancies]) == 0
+                {
+                    self.moves[self.used] = encode_move(from, dp, None, NO_FLAG);
+                    self.used += 1;
+                }
             }
             pawns = pop_bit(from, pawns);
         }

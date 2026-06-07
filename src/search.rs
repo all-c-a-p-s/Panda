@@ -388,11 +388,9 @@ impl Thread<'_> {
                 // Late Move Pruning (LMP):
                 // after a certain point start skipping all quiets after the current
                 // move. The threshold I'm currently using comes from Weiss
-                let lmp_threshold = if improving {
-                    2 + depth * depth
-                } else {
-                    depth * depth / 2
-                };
+                let d_sq = depth.min(15) * depth.min(15);
+                // avoid overflow...
+                let lmp_threshold = if improving { 2 + d_sq } else { d_sq / 2 };
                 if do_lmp!(depth, legal, lmp_threshold, in_check) {
                     movepicker.skip_quiets(&movelist);
                 }
