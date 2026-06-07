@@ -9,6 +9,7 @@ edition = "2024"
 debug = true
 
 [dependencies]
+arrayvec = "0.7.6"
 colored = "3.0.0"
 indicatif = "0.17.11"
 lazy_static = "1.4.0"
