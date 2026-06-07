@@ -423,10 +423,6 @@ impl Board {
 
     #[must_use]
     pub fn get_piece_at(&self, sq: Square) -> Piece {
-        if self.pieces_array[sq].is_none() {
-            self.print_board();
-            println!("{:?}", sq);
-        }
         //SAFETY: this must only be called when we know there is a piece on sq
         unsafe { self.pieces_array[sq].unwrap_unchecked() }
     }
@@ -564,26 +560,5 @@ impl Board {
         }
 
         self.is_insufficient_material()
-    }
-
-    // finds maximum value of any opponent piece, regardless of whether it is actually possible to
-    // take it
-    #[must_use]
-    pub fn get_max_gain(&self) -> i32 {
-        let opponent_pieces = if self.side_to_move == Colour::White {
-            [Piece::BQ, Piece::BR, Piece::BB, Piece::BN, Piece::BP]
-        } else {
-            [Piece::WQ, Piece::WR, Piece::WB, Piece::WN, Piece::WP]
-        };
-        // see values * 1.2 for margin
-        let piece_values = [1110, 588, 386, 370, 102];
-
-        for (&piece, value) in opponent_pieces.iter().zip(piece_values) {
-            if self.bitboards[piece] != 0 {
-                return value;
-            }
-        }
-
-        0
     }
 }
