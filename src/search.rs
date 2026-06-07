@@ -1,5 +1,7 @@
 #![cfg_attr(feature = "datagen", allow(dead_code, unused))]
 
+use arrayvec::ArrayVec;
+
 use crate::board::Board;
 use crate::eval::evaluate;
 use crate::helper::{read_param, tuneable_params};
@@ -314,7 +316,7 @@ impl Thread<'_> {
             depth -= 1;
         }
 
-        let (mut quiets, mut caps) = (vec![], vec![]);
+        let (mut quiets, mut caps) = (ArrayVec::<Move, 64>::new(), ArrayVec::<Move, 64>::new());
 
         let mut movelist = MoveList::empty();
         let mut movepicker = MovePicker::new();
@@ -572,9 +574,9 @@ impl Thread<'_> {
                 self.moves_fully_searched += 1;
             }
 
-            if quiet {
+            if quiet && !quiets.is_full() {
                 quiets.push(m);
-            } else {
+            } else if !caps.is_full() {
                 caps.push(m);
             }
 

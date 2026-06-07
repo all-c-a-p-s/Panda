@@ -28,8 +28,8 @@ impl Thread<'_> {
     pub fn update_search_tables(
         &mut self,
         b: &Board,
-        quiets: &Vec<Move>,
-        tacticals: &Vec<Move>,
+        quiets: &[Move],
+        tacticals: &[Move],
         cutoff_move: Move,
         tactical: bool,
         depth: u8,
@@ -51,8 +51,8 @@ impl Thread<'_> {
         cutoff_move: Move,
         depth: u8,
         tactical: bool,
-        tacticals: &Vec<Move>,
-        quiets: &Vec<Move>,
+        tacticals: &[Move],
+        quiets: &[Move],
         b: &Board,
     ) {
         if self.ply <= 1 {
@@ -101,8 +101,8 @@ impl Thread<'_> {
         cutoff_move: Move,
         depth: u8,
         tactical: bool,
-        tacticals: &Vec<Move>,
-        quiets: &Vec<Move>,
+        tacticals: &[Move],
+        quiets: &[Move],
         b: &Board,
     ) {
         if self.ply == 0 {
@@ -158,8 +158,8 @@ impl Thread<'_> {
     pub fn update_history(
         &mut self,
         b: &Board,
-        quiets: &Vec<Move>,
-        tacticals: &Vec<Move>,
+        quiets: &[Move],
+        tacticals: &[Move],
         cutoff_move: Move,
         tactical: bool,
         depth: u8,
