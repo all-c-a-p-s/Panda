@@ -1,5 +1,6 @@
 use crate::board::{Board, Colour};
 use crate::helper::rank;
+use crate::search::MATE;
 
 use crate::types::{Piece, Square};
 
@@ -61,11 +62,12 @@ pub fn evaluate(b: &Board) -> i32 {
     let side_sm = side_has_sufficient_material(b, b.side_to_move);
     let opp_sm = side_has_sufficient_material(b, b.side_to_move.opponent());
 
-    if side_sm && opp_sm {
+    let r = if side_sm && opp_sm {
         s
     } else if side_sm {
         s.max(0)
     } else {
         s.min(0)
-    }
+    };
+    r.clamp(-MATE, MATE)
 }

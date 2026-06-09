@@ -24,6 +24,8 @@ pub const RANK_8: BitBoard = 0xFF00000000000000;
 //max number of legal moves possible in a position (that has been found)
 pub const MAX_MOVES: usize = 218;
 
+pub const BIG_INF: i32 = 1_000_000_000;
+
 #[must_use]
 pub fn file_indices() -> HashMap<char, usize> {
     let mut files = HashMap::new();

@@ -17,7 +17,7 @@ use core::option::Option::Some;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
 
-pub const INFINITY: i32 = 1_000_000_000;
+pub const INFINITY: i32 = 30_000;
 pub const MAX_PLY: usize = 64;
 pub const MATE: i32 = INFINITY - MAX_PLY as i32;
 

@@ -1,3 +1,4 @@
+use crate::helper::BIG_INF;
 use crate::r#move::{Move, MoveList};
 use crate::movegen::MovegenMode;
 use crate::movegen::get_attackers;
@@ -695,7 +696,7 @@ impl MovePicker {
     }
 
     fn get_next_between(&mut self, l: usize, r: usize, movelist: &mut MoveList) -> Move {
-        let mut best = -INFINITY;
+        let mut best = -BIG_INF;
         let mut idx = l;
         for i in l..=r {
             if self.scores[i] > best {

@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use crate::helper::BIG_INF;
 #[cfg(feature = "tuning")]
 use crate::set_param;
 
@@ -10,8 +11,8 @@ use crate::thread::{Searcher, Thread};
 use crate::transposition::TranspositionTable;
 use crate::types::{Piece, PieceType, Square};
 use crate::{
-    Board, CASTLING_FLAG, Colour, EN_PASSANT_FLAG, INFINITY, Move, MoveData, NO_FLAG,
-    PROMOTION_FLAG, coordinate, encode_move, perft, piece_type, square,
+    Board, CASTLING_FLAG, Colour, EN_PASSANT_FLAG, Move, MoveData, NO_FLAG, PROMOTION_FLAG,
+    coordinate, encode_move, perft, piece_type, square,
 };
 
 pub enum CommandType {
@@ -235,7 +236,7 @@ pub fn parse_go(
 ) -> MoveData {
     //go wtime x btime x winc x binc x movestogo x
 
-    let max_nodes = INFINITY as usize;
+    let max_nodes = BIG_INF as usize;
     let mut movetime = 0;
     // if go command sets move time for engine
 
