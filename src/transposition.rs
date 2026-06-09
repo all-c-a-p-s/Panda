@@ -164,9 +164,23 @@ impl TT for TranspositionTable {
             .filter(|&entry| entry.hash_key == hash_key)
     }
 
-    fn write(&self, hash: u64, entry: TTEntry) {
+    fn write(&self, hash: u64, mut entry: TTEntry) {
         let index = self.index(hash);
+
+        if let Some(old) = self.lookup(hash) {
+            // don't overwrite superior entry from same position
+            if old.flag == EntryFlag::Exact && old.depth > entry.depth + 4 {
+                return;
+            }
+
+            // use best move from older entry if we have it
+            if entry.best_move.is_null() {
+                entry.best_move = old.best_move;
+            }
+        }
+
         let (d, k) = entry.to_u64s();
+
         self.tt[index].data.store(d, Relaxed);
         self.tt[index].key.store(k, Relaxed);
     }
