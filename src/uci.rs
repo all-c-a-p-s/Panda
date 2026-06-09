@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 #[cfg(feature = "tuning")]
@@ -14,10 +15,12 @@ use crate::{
     PROMOTION_FLAG, coordinate, encode_move, perft, piece_type, square,
 };
 
+static UCI_MODE: AtomicBool = AtomicBool::new(false);
+
 pub enum CommandType {
     Unknown,
     Uci,
-    UciNewGame, //can basically ignore
+    UciNewGame,
     IsReady,
     Position,
     Perft,
@@ -25,7 +28,8 @@ pub enum CommandType {
     SetOption,
     Stop,
     Quit,
-    D, //not an actual UCI command but can be used to debug and display the board
+    D,
+    Play,
 }
 
 const DEFAULT_HASH_SIZE: usize = 16;
@@ -97,6 +101,7 @@ pub fn recognise_command(words: &[&str]) -> CommandType {
         "stop" => CommandType::Stop,
         "quit" => CommandType::Quit,
         "d" => CommandType::D,
+        "play" => CommandType::Play,
         _ => CommandType::Unknown,
     }
 }
@@ -109,8 +114,6 @@ pub fn parse_move(input: &str, board: &Board) -> Move {
     let sq_to = unsafe { Square::from(square(&input[2..4]) as u8) };
     let piece = board.get_piece_at(sq_from);
     if input.len() == 5 {
-        //only type of piece encoded because only 2 bits used in the move
-        //and the flag is used to detect promotions
         let promoted_piece = match input.chars().collect::<Vec<char>>()[4] {
             'q' | 'Q' => PieceType::Queen,
             'r' | 'R' => PieceType::Rook,
@@ -204,13 +207,19 @@ pub fn parse_position(words: &[&str], b: &mut Board) {
     parse_position_words(words, b, words.len());
 }
 
+fn parse_play(words: &[&str], b: &mut Board) {
+    match words[..] {
+        ["play", m] => apply_uci_move(b, m),
+        _ => panic!("expected command in the following format: play <move>"),
+    }
+}
+
 pub fn parse_special_go(
     words: &[&str],
     b: &mut Board,
     tt: &TranspositionTable,
     opts: &UciOptions,
 ) -> MoveData {
-    //special combination of go and position command by lichess bot api
     reset(b);
     assert!((words.len() >= 2), "invalid position command");
 
@@ -233,16 +242,12 @@ pub fn parse_go(
     tt: &TranspositionTable,
     opts: &UciOptions,
 ) -> MoveData {
-    //go wtime x btime x winc x binc x movestogo x
-
     let max_nodes = INFINITY as usize;
     let mut movetime = 0;
-    // if go command sets move time for engine
 
     let (mut w_inc, mut b_inc, mut moves_to_go) = (0, 0, 0);
 
     if words[1] == "moves" {
-        //special command lichess-bot protocol uses
         return parse_special_go(words, position, tt, opts);
     } else if words[1] == "movetime" {
         movetime = words[2].parse().expect("failed to convert movetime to int");
@@ -359,6 +364,89 @@ fn set_options(words: &[&str], opts: &mut UciOptions, tt: &mut TranspositionTabl
     }
 }
 
+const RESET: &str = "\x1b[0m";
+
+fn lerp(a: u8, b: u8, t: f32) -> u8 {
+    (a as f32 + (b as f32 - a as f32) * t).round() as u8
+}
+
+fn pretty_score(eval: i32) -> String {
+    let is_mate = eval.abs() > INFINITY - 100;
+
+    let s = if is_mate {
+        if eval > 0 {
+            format!("#{}", (INFINITY - eval + 1) / 2)
+        } else {
+            format!("#-{}", (INFINITY + eval + 1) / 2)
+        }
+    } else {
+        format!("{:+.2}", eval as f32 / 100.0)
+    };
+
+    let (r, g, b) = if is_mate {
+        (220, 140, 255)
+    } else if eval >= 0 {
+        let t = (eval.min(500) as f32 / 500.0).sqrt();
+        (lerp(255, 0, t), lerp(255, 160, t), 255)
+    } else {
+        let t = ((-eval).min(500) as f32 / 500.0).sqrt();
+        (lerp(255, 160, t), lerp(255, 0, t), 255)
+    };
+
+    format!("\x1b[1;38;2;{r};{g};{b}m{s}{RESET}")
+}
+
+fn pretty_piece(piece: Option<Piece>) -> &'static str {
+    match piece {
+        // assume they are using dark mode
+        Some(Piece::WP) => "♟",
+        Some(Piece::WN) => "♞",
+        Some(Piece::WB) => "♝",
+        Some(Piece::WR) => "♜",
+        Some(Piece::WQ) => "♛",
+        Some(Piece::WK) => "♚",
+        Some(Piece::BP) => "♙",
+        Some(Piece::BN) => "♘",
+        Some(Piece::BB) => "♗",
+        Some(Piece::BR) => "♖",
+        Some(Piece::BQ) => "♕",
+        Some(Piece::BK) => "♔",
+        None => "·",
+    }
+}
+
+impl Board {
+    pub fn pretty_print_board(&self) {
+        println!();
+        println!("    a b c d e f g h");
+        println!("  ┌─────────────────┐");
+
+        for rank in (0..8).rev() {
+            print!("{} │", rank + 1);
+
+            for file in 0..8 {
+                let sq = unsafe { Square::from((rank * 8 + file) as u8) };
+                print!(" {}", pretty_piece(self.pieces_array[sq]));
+            }
+
+            println!(" │ {}", rank + 1);
+        }
+
+        println!("  └─────────────────┘");
+        println!("    a b c d e f g h");
+
+        let side = match self.side_to_move {
+            Colour::White => "White to move",
+            Colour::Black => "Black to move",
+        };
+
+        const WIDTH: usize = 23;
+        println!("{side:^WIDTH$}");
+
+        println!();
+    }
+}
+
 pub fn print_thinking(depth: u8, eval: i32, s: &Thread, start: Instant) {
     let pv = s.pv[0]
         .iter()
@@ -366,23 +454,29 @@ pub fn print_thinking(depth: u8, eval: i32, s: &Thread, start: Instant) {
         .map(|m| m.uci())
         .collect::<Vec<_>>()
         .join(" ");
-    println!(
-        "info depth {} score cp {} nodes {} pv {} time {} nps {}",
-        depth,
-        eval,
-        s.nodes,
-        pv,
-        start.elapsed().as_millis(),
-        {
-            let micros = start.elapsed().as_micros() as usize;
-            #[allow(clippy::manual_checked_ops)]
-            if micros == 0 {
-                s.nodes * 1_000_000
-            } else {
-                s.nodes * 1_000_000 / micros
-            }
-        }
-    );
+
+    if UCI_MODE.load(Ordering::Relaxed) {
+        let time = start.elapsed().as_millis();
+        let micros = start.elapsed().as_micros() as usize;
+
+        #[allow(clippy::manual_checked_ops)]
+        let nps = if micros == 0 {
+            s.nodes * 1_000_000
+        } else {
+            s.nodes * 1_000_000 / micros
+        };
+
+        println!(
+            "info depth {} seldepth {} score cp {} nodes {} pv {} time {} nps {}",
+            depth, s.seldepth, eval, s.nodes, pv, time, nps
+        );
+    } else {
+        println!(
+            "{depth:>2}/{seldepth:<2} {score:>20}  {pv}",
+            seldepth = s.seldepth,
+            score = pretty_score(eval),
+        );
+    }
 }
 
 pub fn uci_loop() {
@@ -408,16 +502,38 @@ pub fn uci_loop() {
         let command_type = recognise_command(&words);
         match command_type {
             CommandType::D => board.print_board(),
-            CommandType::Uci => parse_uci(&words),
+            CommandType::Uci => {
+                UCI_MODE.store(true, Ordering::Relaxed);
+                parse_uci(&words);
+            }
             CommandType::IsReady => parse_isready(&words),
             CommandType::Position => parse_position(&words, &mut board),
+            CommandType::Play => parse_play(&words, &mut board),
             CommandType::Go => {
                 let move_data = parse_go(&words, &mut board, &tt, &opts);
                 if move_data.m.is_null() {
                     break;
                 }
-                print!("bestmove ");
-                println!("{}", move_data.m.uci());
+
+                if UCI_MODE.load(Ordering::Relaxed) {
+                    print!("bestmove ");
+                    println!("{}", move_data.m.uci());
+                } else {
+                    let m = move_data.m;
+                    println!("played {}", m.uci());
+
+                    let Ok(_) = board.try_move(m) else {
+                        panic!(
+                            concat!(
+                                "Panda tried to play an illegal move {}.\n",
+                                "Most likely, this means you made an incorrect input somewhere which confused it."
+                            ),
+                            m.uci()
+                        );
+                    };
+
+                    board.pretty_print_board();
+                }
             }
             CommandType::Perft => parse_perft(&words, &mut board),
             CommandType::SetOption => set_options(&words, &mut opts, &mut tt),
