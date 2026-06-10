@@ -388,7 +388,7 @@ impl Thread<'_> {
             let piece_moved = m.piece_moved(position);
 
             // Early Pruning: try to prune moves before we search them properly
-            // byshowing that they're not worth investigating
+            // by showing that they're not worth investigating
             #[cfg(not(feature = "datagen"))]
             if !root && not_mated {
                 // Late Move Pruning (LMP):
@@ -538,7 +538,6 @@ impl Thread<'_> {
                             // reduce more when we have reason to expect little from this move
                             r += tt_move_capture as i32;
                             r += !improving as i32;
-                            r += (extension == 2) as i32;
 
                             // reduce less when this move is important/promising
                             r -= pv_node as i32;
