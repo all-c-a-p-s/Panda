@@ -246,13 +246,5 @@ impl Thread<'_> {
         self.moves_fully_searched = 0;
 
         self.age_corrhist();
-
-        //reset tables
-        self.info.killer_moves = [None; MAX_PLY];
-        self.info.history_table = [[0; 64]; 12];
-        self.info.caphist_table = [[[0; 5]; 64]; 12];
-
-        self.info.counter_correlation = [[[0; 64]; 64]; 2];
-        self.info.followup_correlation = [[[0; 64]; 64]; 2];
     }
 }

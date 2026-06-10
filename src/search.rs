@@ -569,8 +569,6 @@ impl Thread<'_> {
             position.undo_move(m, &commit);
             self.ply -= 1;
 
-            //self.info.ss[self.ply] = SearchStackEntry::default();
-
             if self.is_stopped() {
                 return 0;
             }
