@@ -6,7 +6,7 @@ macro_rules! singularity_de {
         DO_SINGULARITY_DE
             && !$pv_node
             && $excluded_eval < $threshold - read_param!(SINGULARITY_DE_MARGIN)
-            && $self_.double_extensions <= 6
+            && $self_.double_extensions < 4
     };
 }
 
@@ -111,9 +111,9 @@ macro_rules! do_iaw {
 
 #[macro_export]
 macro_rules! should_reduce {
-    ($legal:expr, $pv_node:expr, $tt_move:expr, $root:expr, $tactical:expr,
+    ($played:expr, $pv_node:expr, $tt_move:expr, $root:expr, $tactical:expr,
      $depth:expr, $not_mated:expr) => {
-        $legal
+        $played
             > (FULL_DEPTH_MOVES + $pv_node as u8 + !$tt_move as u8 + $root as u8 + $tactical as u8)
             && $depth >= REDUCTION_LIMIT
             && $not_mated
@@ -143,8 +143,8 @@ macro_rules! should_correct_with_tt {
 
 #[macro_export]
 macro_rules! do_lmp {
-    ($depth:expr, $legal:expr, $lmp_threshold:expr, $in_check:expr) => {
-        $depth <= read_param!(LMP_DEPTH) && $legal > $lmp_threshold && !$in_check
+    ($depth:expr, $played:expr, $lmp_threshold:expr, $in_check:expr) => {
+        $depth <= read_param!(LMP_DEPTH) && $played > $lmp_threshold && !$in_check
     };
 }
 

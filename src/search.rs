@@ -29,7 +29,7 @@ const FULL_DEPTH_MOVES: u8 = 1;
 
 tuneable_params! {
     // params for search conditions
-    SINGULARITY_DE_MARGIN, i32, 21, 10, 150;
+    SINGULARITY_DE_MARGIN, i32, 25, 10, 150;
     ASPIRATION_WINDOW, i32, 17, 10, 70;
     RAZORING_MARGIN, i32, 273, 100, 500;
     MAX_RAZOR_DEPTH, u8, 4, 1, 12;
@@ -327,7 +327,7 @@ impl Thread<'_> {
 
         let (mut good_caps, mut bad_caps) = (MoveList::empty(), MoveList::empty());
 
-        let (mut legal, mut considered) = (0, 0);
+        let (mut played, mut considered) = (0, 0);
         let mut best_score = -INFINITY;
 
         let (mut done_killer, mut done_counter) = (false, false);
@@ -388,7 +388,7 @@ impl Thread<'_> {
             let piece_moved = m.piece_moved(position);
 
             // Early Pruning: try to prune moves before we search them properly
-            // by showing that they're not worth investigating
+            // byshowing that they're not worth investigating
             #[cfg(not(feature = "datagen"))]
             if !root && not_mated {
                 // Late Move Pruning (LMP):
@@ -397,7 +397,7 @@ impl Thread<'_> {
                 let d_sq = depth.min(15) * depth.min(15);
                 // avoid overflow...
                 let lmp_threshold = if improving { 2 + d_sq } else { d_sq / 2 };
-                if do_lmp!(depth, legal, lmp_threshold, in_check) {
+                if do_lmp!(depth, played, lmp_threshold, in_check) {
                     movepicker.skip_quiets(&movelist);
                 }
 
@@ -435,7 +435,7 @@ impl Thread<'_> {
 
             let nodes_before = self.nodes;
 
-            legal += 1;
+            played += 1;
             self.ply += 1;
             // update after pruning above
 
@@ -444,7 +444,7 @@ impl Thread<'_> {
             let maybe_singular =
                 maybe_singular!(root, depth, singular, m, best_move, tt_depth, tt_bound);
 
-            let extension = if maybe_singular {
+            let ext = if maybe_singular {
                 self.singularity(
                     position, best_move, &commit, tt_score, depth, pv_node, alpha, beta, cutnode,
                 )
@@ -452,21 +452,24 @@ impl Thread<'_> {
                 Some((in_check && !root) as i32)
             };
 
-            if extension.is_none() {
+            let Some(extension) = ext else {
                 // MultiCut case from singularity() function
                 return tt_score - (depth as i32 * 2);
-            } else if maybe_singular {
+            };
+
+            if maybe_singular {
                 position.play_unchecked(best_move);
                 self.ply += 1;
                 // we unmade the move while calling the singularity() function
-                if extension == Some(2) {
-                    self.double_extensions += 1;
-                }
             }
 
-            let new_depth = (depth as i32 - 1 + extension.unwrap()).clamp(0, MAX_PLY as i32) as u8;
+            if extension == 2 {
+                self.double_extensions += 1;
+            }
 
-            let eval = if legal == 1 {
+            let new_depth = (depth as i32 - 1 + extension).clamp(0, MAX_PLY as i32) as u8;
+
+            let eval = if played == 1 {
                 // Internal Aspiration Window:
                 // Assume the value of our lower-depth search has some merit, so we may be able to search on
                 // a tighter window around this value.
@@ -525,16 +528,17 @@ impl Thread<'_> {
 
                 let mut r_eval = -INFINITY;
                 let do_full_depth_zw =
-                    if should_reduce!(legal, pv_node, tt_move, root, tactical, depth, not_mated) {
+                    if should_reduce!(played, pv_node, tt_move, root, tactical, depth, not_mated) {
                         let mut r = 1;
                         // fixed reduction of 1 for captures seems to work well
                         if quiet {
                             r = self.info.lmr_table.reduction_table[quiet as usize]
-                                [depth.min(31) as usize][legal.min(31) as usize];
+                                [depth.min(31) as usize][played.min(31) as usize];
 
                             // reduce more when we have reason to expect little from this move
                             r += tt_move_capture as i32;
                             r += !improving as i32;
+                            r += (extension == 2) as i32;
 
                             // reduce less when this move is important/promising
                             r -= pv_node as i32;
@@ -569,6 +573,10 @@ impl Thread<'_> {
             position.undo_move(m, &commit);
             self.ply -= 1;
 
+            if extension == 2 {
+                self.double_extensions -= 1;
+            }
+
             if self.is_stopped() {
                 return 0;
             }
@@ -600,7 +608,7 @@ impl Thread<'_> {
             }
         }
 
-        if legal == 0 {
+        if played == 0 {
             return (-INFINITY + self.ply as i32) * in_check as i32;
         }
 
