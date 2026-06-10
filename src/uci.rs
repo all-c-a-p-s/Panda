@@ -392,7 +392,7 @@ fn pretty_score(eval: i32) -> String {
         (lerp(255, 0, t), lerp(255, 160, t), 255)
     } else {
         let t = ((-eval).min(500) as f32 / 500.0).sqrt();
-        (lerp(255, 160, t), lerp(255, 0, t), 255)
+        (255, lerp(255, 0, t), lerp(255, 0, t))
     };
 
     format!("\x1b[1;38;2;{r};{g};{b}m{s}{RESET}")

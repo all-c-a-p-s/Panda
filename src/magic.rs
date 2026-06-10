@@ -6,7 +6,6 @@ use crate::helper::{
 };
 use crate::rng::magic_candidate;
 use crate::types::Square;
-// max number of relevant blocker bits
 
 pub enum SliderType {
     Bishop,
