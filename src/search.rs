@@ -158,7 +158,12 @@ impl Thread<'_> {
     ) -> i32 {
         if self.should_exit() {
             return 0;
-        } else if self.ply == MAX_PLY - 1 {
+        }
+
+        self.seldepth = self.seldepth.max(self.ply as u8);
+        self.nodes += 1;
+
+        if self.ply == MAX_PLY - 1 {
             return evaluate(position);
         }
         let pv_node = beta - alpha != 1;
@@ -172,7 +177,6 @@ impl Thread<'_> {
         }
 
         let mut hash_flag = EntryFlag::UpperBound;
-        self.nodes += 1;
 
         let (mut tt_depth, mut tt_bound, mut tt_score, mut tt_hit) =
             (0, EntryFlag::Missing, 0, false);
@@ -626,6 +630,7 @@ impl Thread<'_> {
     /// This is done to prevent the horizon effect.
     pub fn qsearch(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
+        self.seldepth = self.seldepth.max(self.ply as u8);
 
         if position.is_drawn() {
             return 1 * if self.ply % 2 == 0 { 1 } else { -1 };

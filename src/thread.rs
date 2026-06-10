@@ -161,6 +161,7 @@ pub struct Thread<'a> {
     pub do_pruning: bool,
     pub info: SearchInfo,
     pub double_extensions: u8,
+    pub seldepth: u8,
 }
 
 pub struct Timer {
@@ -201,6 +202,7 @@ impl<'a> Thread<'a> {
             do_pruning: true,
             info: SearchInfo::default(),
             double_extensions: 0,
+            seldepth: 0,
         }
     }
 }
