@@ -7,7 +7,7 @@ use crate::set_param;
 #[cfg(feature = "tuning")]
 use crate::search::{list_params, params};
 
-use crate::thread::{Searcher, Thread};
+use crate::thread::{SearchInfo, Searcher, Thread};
 use crate::transposition::TranspositionTable;
 use crate::types::{Piece, PieceType, Square};
 use crate::{
@@ -218,6 +218,7 @@ pub fn parse_special_go(
     words: &[&str],
     b: &mut Board,
     tt: &TranspositionTable,
+    info: &mut SearchInfo,
     opts: &UciOptions,
 ) -> MoveData {
     reset(b);
@@ -233,13 +234,14 @@ pub fn parse_special_go(
     let mut go_words = vec!["go"];
     go_words.extend_from_slice(&words[end_of_moves..]);
 
-    parse_go(&go_words, b, tt, opts)
+    parse_go(&go_words, b, tt, info, opts)
 }
 
 pub fn parse_go(
     words: &[&str],
     position: &mut Board,
     tt: &TranspositionTable,
+    info: &mut SearchInfo,
     opts: &UciOptions,
 ) -> MoveData {
     let max_nodes = INFINITY as usize;
@@ -248,10 +250,10 @@ pub fn parse_go(
     let (mut w_inc, mut b_inc, mut moves_to_go) = (0, 0, 0);
 
     if words[1] == "moves" {
-        return parse_special_go(words, position, tt, opts);
+        return parse_special_go(words, position, tt, info, opts);
     } else if words[1] == "movetime" {
         movetime = words[2].parse().expect("failed to convert movetime to int");
-        let s = Searcher::new(tt);
+        let mut s = Searcher::new(tt, info);
         return s.start_search(position, 0, 0, 0, movetime, max_nodes, opts.threads);
     }
 
@@ -270,7 +272,7 @@ pub fn parse_go(
             b_inc = y.parse().expect("failed to covnert binc to int");
             moves_to_go = z.parse().expect("failed to convert movestogo to int");
         }
-        _ => return parse_special_go(words, position, tt, opts),
+        _ => return parse_special_go(words, position, tt, info, opts),
     }
 
     let (engine_time, engine_inc) = match position.side_to_move {
@@ -278,7 +280,7 @@ pub fn parse_go(
         Colour::Black => (b_time, b_inc),
     };
 
-    let s = Searcher::new(tt);
+    let mut s = Searcher::new(tt, info);
     s.start_search(
         position,
         engine_time,
@@ -482,6 +484,7 @@ pub fn print_thinking(depth: u8, eval: i32, s: &Thread, start: Instant) {
 pub fn uci_loop() {
     let mut board = Board::from(STARTPOS);
     let mut tt = TranspositionTable::in_megabytes(DEFAULT_HASH_SIZE);
+    let mut info = SearchInfo::default();
 
     let mut opts = UciOptions::default();
 
@@ -510,7 +513,7 @@ pub fn uci_loop() {
             CommandType::Position => parse_position(&words, &mut board),
             CommandType::Play => parse_play(&words, &mut board),
             CommandType::Go => {
-                let move_data = parse_go(&words, &mut board, &tt, &opts);
+                let move_data = parse_go(&words, &mut board, &tt, &mut info, &opts);
                 if move_data.m.is_null() {
                     break;
                 }

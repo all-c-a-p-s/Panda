@@ -3,7 +3,7 @@ use crate::board::Board;
 use crate::helper::piece_type;
 use crate::r#move::{Move, NULL_MOVE};
 use crate::search::{INFINITY, MAX_PLY};
-use crate::thread::{CORRHIST_SIZE, Thread};
+use crate::thread::{CORRHIST_SIZE, NodeTable, Thread};
 
 const HISTORY_MAX: i32 = 16_384;
 const CORRELATION_MAX: i32 = 4_096;
@@ -232,19 +232,19 @@ impl Thread<'_> {
         (raw_eval + entry / CORRHIST_GRAIN).clamp(-MATE + 1, MATE - 1)
     }
 
+    pub fn age_corrhist(&mut self) {
+        self.info.corrhist[0].iter_mut().for_each(|x| *x /= 2);
+        self.info.corrhist[1].iter_mut().for_each(|x| *x /= 2);
+    }
+
     pub fn reset_thread(&mut self) {
         self.nodes = 0;
+        self.info.nodetable = NodeTable::default();
         self.pv_length = [0; 64];
         self.pv = [[NULL_MOVE; MAX_PLY]; MAX_PLY];
         self.ply = 0;
         self.moves_fully_searched = 0;
 
-        //reset tables
-        self.info.killer_moves = [None; MAX_PLY];
-        self.info.history_table = [[0; 64]; 12];
-        self.info.caphist_table = [[[0; 5]; 64]; 12];
-
-        self.info.counter_correlation = [[[0; 64]; 64]; 2];
-        self.info.followup_correlation = [[[0; 64]; 64]; 2];
+        self.age_corrhist();
     }
 }

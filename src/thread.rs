@@ -48,6 +48,7 @@ pub struct SearchStackEntry {
     pub eval: i32,
 }
 
+#[derive(Copy, Clone)]
 pub struct SearchInfo {
     pub ss: [SearchStackEntry; MAX_PLY],
     pub lmr_table: LMRTable,
@@ -65,6 +66,7 @@ pub struct SearchInfo {
     pub excluded: [Option<Move>; MAX_PLY],
 }
 
+#[derive(Copy, Clone)]
 pub struct LMRTable {
     pub reduction_table: [[[i32; 32]; 32]; 2],
 }
@@ -159,7 +161,7 @@ pub struct Thread<'a> {
     pub stop: &'a AtomicBool,
     pub moves_fully_searched: usize,
     pub do_pruning: bool,
-    pub info: SearchInfo,
+    pub info: &'a mut SearchInfo,
     pub double_extensions: u8,
     pub seldepth: u8,
 }
@@ -183,6 +185,7 @@ impl<'a> Thread<'a> {
         end_time: Instant,
         max_nodes: usize,
         tt: &'a TranspositionTable,
+        info: &'a mut SearchInfo,
         stop: &'a AtomicBool,
     ) -> Self {
         let timer = Timer {
@@ -200,7 +203,7 @@ impl<'a> Thread<'a> {
             stop,
             moves_fully_searched: 0,
             do_pruning: true,
-            info: SearchInfo::default(),
+            info,
             double_extensions: 0,
             seldepth: 0,
         }
@@ -210,20 +213,22 @@ impl<'a> Thread<'a> {
 pub struct Searcher<'a> {
     _nodecount: AtomicU64,
     tt: &'a TranspositionTable,
+    info: &'a mut SearchInfo,
 }
 
 impl<'a> Searcher<'a> {
     #[must_use]
-    pub fn new(tt: &'a TranspositionTable) -> Self {
+    pub fn new(tt: &'a TranspositionTable, info: &'a mut SearchInfo) -> Self {
         Self {
             _nodecount: AtomicU64::new(0),
             tt,
+            info,
         }
     }
-    //this is for threads variable which is unused in datagen mode
+    // this attribute is for threads variable which is unused in datagen mode
     #[allow(unused, clippy::too_many_arguments)]
     pub fn start_search(
-        &self,
+        &mut self,
         position: &mut Board,
         time_left: usize,
         inc: usize,
@@ -255,7 +260,7 @@ impl<'a> Searcher<'a> {
 
         let stop = AtomicBool::new(false);
 
-        let mut main_thread = Thread::new(end_time, max_nodes, self.tt, &stop);
+        let mut main_thread = Thread::new(end_time, max_nodes, self.tt, self.info, &stop);
 
         //datagen is already multi-threaded so only search on one thread
         #[cfg(feature = "datagen")]
@@ -268,6 +273,10 @@ impl<'a> Searcher<'a> {
             );
         }
 
+        let mut infos = (0..threads - 1)
+            .map(|_| SearchInfo::default())
+            .collect::<Vec<_>>();
+
         #[cfg(not(feature = "datagen"))]
         std::thread::scope(|s| {
             let main_handle = s.spawn(|| {
@@ -279,9 +288,10 @@ impl<'a> Searcher<'a> {
                 )
             });
 
-            for _ in 0..threads - 1 {
+            for info in infos.iter_mut() {
                 let mut pos = *position;
-                let mut worker = Thread::new(end_time, max_nodes, self.tt, &stop);
+                let mut worker = Thread::new(end_time, max_nodes, self.tt, info, &stop);
+
                 s.spawn(move || {
                     iterative_deepening::<false>(&mut pos, soft_limit, hard_limit, &mut worker)
                 });

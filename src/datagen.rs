@@ -7,6 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::movegen::MovegenMode;
+use crate::thread::SearchInfo;
 use crate::thread::{Searcher, Thread};
 use crate::transposition::TranspositionTable;
 use crate::types::OccupancyIndex;
@@ -70,21 +71,21 @@ impl Node {
     }
 
     // this function merely needs to determine the value of the node, not of its moves
-    fn value(&mut self, tt: &TranspositionTable) -> i32 {
-        let s = Searcher::new(tt);
+    fn value(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) -> i32 {
+        let mut s = Searcher::new(tt, info);
         let move_data = s.start_search(&mut self.position, 0, 0, 0, 10, 8192, 1);
         move_data.eval
     }
 
-    pub fn choose_move(&mut self, tt: &TranspositionTable) {
-        let s = Searcher::new(tt);
+    pub fn choose_move(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) {
+        let mut s = Searcher::new(tt, info);
         let move_data = s.start_search(&mut self.position, 0, 0, 0, 10, 8192, 1);
 
         self.choice = Some(move_data.m);
         self.value = move_data.eval;
     }
 
-    pub fn choose_opening_move(&mut self, tt: &TranspositionTable) {
+    pub fn choose_opening_move(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) {
         let mut movelist = MoveList::empty();
         movelist.gen_moves(&self.position, MovegenMode::All);
 
@@ -106,7 +107,13 @@ impl Node {
             };
 
             let stop = AtomicBool::new(false);
-            let mut t = Thread::new(Instant::now() + Duration::from_millis(1), 4096, tt, &stop);
+            let mut t = Thread::new(
+                Instant::now() + Duration::from_millis(1),
+                4096,
+                tt,
+                info,
+                &stop,
+            );
 
             let score = -t.negamax(&mut self.position, 4, -INFINITY, INFINITY, false);
             scores.push((score, m));
@@ -131,12 +138,18 @@ impl Node {
     }
 
     // must be called when choice is not None and when choice is not the only legal move
-    pub fn choose_second(&mut self, tt: &TranspositionTable) {
+    pub fn choose_second(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) {
         let m = self.choice.unwrap();
 
         let stop = AtomicBool::new(false);
 
-        let mut t = Thread::new(Instant::now() + Duration::from_millis(10), 8192, tt, &stop);
+        let mut t = Thread::new(
+            Instant::now() + Duration::from_millis(10),
+            8192,
+            tt,
+            info,
+            &stop,
+        );
         t.info.excluded[0] = Some(m);
         let move_data = iterative_deepening::<false>(&mut self.position, 10, 10, &mut t);
         self.choice = Some(move_data.m);
@@ -150,7 +163,7 @@ impl Game {
         Self { positions: vec![n] }
     }
 
-    fn next(&mut self, tt: &TranspositionTable) -> Result<bool, ()> {
+    fn next(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) -> Result<bool, ()> {
         let mut pos = self.positions.last().unwrap().position;
         let movelist = MoveList::gen_legal(&mut pos);
         let repetition_table = self
@@ -173,9 +186,9 @@ impl Game {
         }
 
         if pos.ply < OPENING_PLIES {
-            leaf.choose_opening_move(tt);
+            leaf.choose_opening_move(tt, info);
         } else {
-            leaf.choose_move(tt);
+            leaf.choose_move(tt, info);
         }
 
         if leaf.choice.unwrap().is_null() {
@@ -192,10 +205,11 @@ impl Game {
     #[must_use]
     pub fn generate() -> Option<Self> {
         let tt = TranspositionTable::in_megabytes(16);
+        let mut info = SearchInfo::default();
 
         let mut g = Self::new();
         loop {
-            let r = g.next(&tt);
+            let r = g.next(&tt, &mut info);
             if let Ok(q) = r {
                 if !q {
                     break;
@@ -204,13 +218,13 @@ impl Game {
                 return None;
             }
         }
-        g.backtrack(&tt);
+        g.backtrack(&tt, &mut info);
         Some(g)
     }
 
     // the purpose of the backtracking algorithm is to try to use the information we gained by
     // playing the game to more accurately score the nodes in the game
-    fn backtrack(&mut self, tt: &TranspositionTable) {
+    fn backtrack(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) {
         use rand::Rng;
         let wdl = |x: i32| -> f32 { 1.0 / (1.0 + ((-x as f32) * 2.55 / 400.0).exp()) };
 
@@ -256,13 +270,13 @@ impl Game {
                 let it = movelist.moves.iter().filter(|x| !x.is_null());
 
                 if it.count() != 1 {
-                    p.choose_second(tt);
+                    p.choose_second(tt, info);
 
                     if !p.choice.unwrap().is_null() {
                         pos.play_unchecked(p.choice.unwrap());
 
                         let mut n = Node::from_position(&pos);
-                        let s = -n.value(tt);
+                        let s = -n.value(tt, info);
 
                         p.value = std::cmp::max(v_b, s);
                     }
