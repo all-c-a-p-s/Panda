@@ -569,6 +569,8 @@ impl Thread<'_> {
             position.undo_move(m, &commit);
             self.ply -= 1;
 
+            //self.info.ss[self.ply] = SearchStackEntry::default();
+
             if self.is_stopped() {
                 return 0;
             }
@@ -890,11 +892,15 @@ pub fn iterative_deepening<const SHOW_THINKING: bool>(
         id.depth += 1;
 
         let fraction = s.info.nodetable.get(id.pv[0][0]) as f64 / s.nodes as f64;
+
         let multiplier = 2.2 * (1.3 * fraction).cos(); //guessed with some desmos eyeballing
 
         let soft_end =
             id.start_time + Duration::from_millis((soft_limit as f64 * multiplier) as u64);
-        let end = s.timer.end_time.min(soft_end);
+        let mut end = s.timer.end_time;
+        if soft_limit < hard_limit {
+            end = end.min(soft_end);
+        }
 
         if Instant::now() > end {
             //not the same as above break statement because eval was updated
