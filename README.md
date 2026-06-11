@@ -58,4 +58,5 @@ Inspired by other engines (Viridithas in particular), I created a TUI for Panda,
 - [Carp](https://github.com/dede1751/carp) - extremely clear Rust code, which is always useful to read when I'm struggling to understand something
 - Jamie Whiting for creating [bullet](https://github.com/jw1912/bullet/tree/main), which I use to train Panda's networks, and [akimbo](https://github.com/jw1912/akimbo/tree/main), which Panda's Lazy SMP implementation is inspired by
 - [@mcthouacbb](https://github.com/mcthouacbb) for several helpful suggestions
+- [@rwbc](https://github.com/rwbc) for kindly providing windows binaries
 - [weather-factory](https://github.com/jnlt3/weather-factory) for SPSA tuning search parameters
