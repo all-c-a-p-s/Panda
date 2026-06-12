@@ -186,12 +186,18 @@ fn parse_position_words(words: &[&str], b: &mut Board, end: usize) {
         "fen" => {
             let fen_string = words
                 .iter()
-                .take(end)
-                .copied()
                 .skip(2)
+                .take(6)
+                .copied()
                 .collect::<Vec<_>>()
                 .join(" ");
             *b = Board::from(&fen_string);
+
+            if end != 8 {
+                for &w in words.iter().take(end).skip(9) {
+                    apply_uci_move(b, w);
+                }
+            }
         }
         "moves" => {
             for &w in words.iter().take(end).skip(2) {
