@@ -1,9 +1,9 @@
-use crate::MAX_GAME_PLY;
 use crate::eval::evaluate;
 use crate::helper::{coordinate, count, lsfb, pop_bit, set_bit, square};
 use crate::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS};
 use crate::movegen::RAY_BETWEEN;
 use crate::nnue::Accumulator;
+use crate::search::REPETITION_TABLE_SIZE;
 use crate::types::OccupancyIndex;
 use crate::types::{Piece, Square};
 use crate::uci::pretty_piece;
@@ -28,7 +28,7 @@ pub struct Board {
     pub last_move_null: bool,
     pub hash_key: u64,
     pub pawn_hash: u64,
-    pub history: [u64; MAX_GAME_PLY],
+    pub history: [u64; REPETITION_TABLE_SIZE],
 
     //Used in movegen
     pub checkers: BitBoard,
@@ -94,7 +94,7 @@ impl Board {
             last_move_null: false,
             hash_key: 0,
             pawn_hash: 0,
-            history: [0; MAX_GAME_PLY],
+            history: [0; REPETITION_TABLE_SIZE],
             checkers: 0,
             pinned: 0,
             nnue: Accumulator::default(),

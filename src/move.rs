@@ -11,6 +11,7 @@ use crate::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, K_ATTACKS, N_ATTACKS, ROOK_EDGE
 use crate::magic::{get_bishop_attacks, get_queen_attacks, get_rook_attacks};
 use crate::movegen::{CASTLING_MASKS, CASTLING_PATHS};
 use crate::movegen::{RAY_BETWEEN, check_en_passant, is_attacked};
+use crate::search::REPETITION_TABLE_SIZE;
 use crate::zobrist::CASTLING_KEYS;
 
 use crate::types::{CastlingType, OccupancyIndex, Piece, PieceType, Square};
@@ -565,6 +566,18 @@ impl Board {
 
         self.side_to_move = self.side_to_move.opponent();
         self.ply += 1;
+
+        // this line is kind of hideous so I think it needs some explaining:
+        // we only use the ply count of the board to check repetition history, so
+        // we can save some memory by only storing the last 200 hash keys. Then
+        // if we pass REPETITION_TABLE_SIZE, we can't reset it to zero because then when
+        // when we undo the move, it will underflow, so we reset it to the middle
+        // of the table. Note that we won't falsely detect repetitions because we
+        // all the moves before the midpoint of the table occured more than 100 ply
+        // ago (so the game would have been drawn by the 50 move rule).
+        if self.ply >= REPETITION_TABLE_SIZE {
+            self.ply = REPETITION_TABLE_SIZE / 2;
+        }
 
         self.hash_key ^= CASTLING_KEYS[castling_rights_before as usize];
         self.hash_key ^= CASTLING_KEYS[self.castling as usize];
