@@ -42,7 +42,7 @@ fn init_all() {
 #[allow(dead_code)]
 enum Mode {
     Profile,
-    Bench,
+    Prep,
     Debug,
     Datagen,
     Uci,
@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "datagen" => Mode::Datagen,
         "profile" => Mode::Profile,
         "debug" => Mode::Debug,
-        "bench" => Mode::Bench,
+        "prep" => Mode::Prep,
         _ => Mode::Uci,
     };
 
@@ -74,7 +74,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Mode::Uci => uci_loop(),
         Mode::Profile => full_perft(),
         Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(ONE_HOUR * 100))?,
-        Mode::Bench => prepare_bench()?,
+        Mode::Prep => prepare_bench()?,
         Mode::Debug => {}
     }
 
