@@ -263,7 +263,7 @@ impl<'a> Searcher<'a> {
         let mut main_thread = Thread::new(end_time, max_nodes, self.tt, self.info, &stop);
 
         //datagen is already multi-threaded so only search on one thread
-        #[cfg(any(feature = "datagen", feature = "bench"))]
+        #[cfg(feature = "datagen")]
         {
             return iterative_deepening::<false>(
                 &mut position.clone(),

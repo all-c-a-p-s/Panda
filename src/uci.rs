@@ -32,8 +32,8 @@ pub enum CommandType {
     Play,
 }
 
-const DEFAULT_HASH_SIZE: usize = 16;
-const DEFAULT_THREAD_COUNT: usize = 1;
+pub const DEFAULT_HASH_SIZE: usize = 16;
+pub const DEFAULT_THREAD_COUNT: usize = 1;
 
 pub struct UciOptions {
     pub hash_size: usize,

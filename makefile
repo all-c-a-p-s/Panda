@@ -18,24 +18,28 @@ default: pgo
 PGO_DIR = $(CURDIR)/pgo-data
 PROFDATA = $(PGO_DIR)/merged.profdata
 
+pgo: pgo_gen pgo_run pgo_merge pgo_build pgo_clean
+
 pgo_gen:
 	rm -rf $(PGO_DIR)
 	mkdir -p $(PGO_DIR)
-	RUSTFLAGS="-Cprofile-generate=$(PGO_DIR)" \
-		cargo rustc --release --features bench -- -C target-cpu=native --emit link=$(NAME)
+	RUSTFLAGS="-Cprofile-generate=$(PGO_DIR) -C target-feature=+crt-static" \
+		cargo rustc --release -- -C target-cpu=native --emit link=$(NAME)
 
 pgo_run:
-	LLVM_PROFILE_FILE="$(PGO_DIR)/panda-%p-%m.profraw" ./$(NAME) bench
+	LLVM_PROFILE_FILE="$(PGO_DIR)/panda-%p-%m.profraw" ./$(NAME) < bench.txt
 
 pgo_merge:
-	rust-profdata merge -o $(PROFDATA) $(PGO_DIR)/*.profraw
+	llvm-profdata merge -o $(PROFDATA) $(PGO_DIR)/*.profraw
 	ls -lh $(PROFDATA)
 
 pgo_build:
-	RUSTFLAGS="-Cprofile-use=$(PROFDATA)" \
+	RUSTFLAGS="-Cprofile-use=$(PROFDATA) -C target-feature=+crt-static" \
 		cargo rustc --release -- -C target-cpu=native --emit link=$(NAME)
 
-pgo: pgo_gen pgo_run pgo_merge pgo_build
+pgo_clean:
+	rm -rf $(PGO_DIR)
+	rm -f *.pdb
 
 for_sprt:
 	cargo rustc --release -- -C target-cpu=native --emit link=$(TEST_NAME)
