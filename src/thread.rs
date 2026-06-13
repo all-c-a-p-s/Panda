@@ -15,7 +15,7 @@ pub const CORRHIST_SIZE: usize = 16_384;
 
 //returns ideal time window, hard deadline
 #[must_use]
-pub fn move_time(time: usize, increment: usize, moves_to_go: usize, _ply: usize) -> (usize, usize) {
+pub fn move_time(time: usize, increment: usize, moves_to_go: usize) -> (usize, usize) {
     if time < MOVE_OVERHEAD {
         return ((time / 2).min(MIN_MOVE_TIME), (time / 2).min(MIN_MOVE_TIME));
     }
@@ -224,7 +224,7 @@ impl<'a> Searcher<'a> {
         //             time taken > this, then exit search
         // in practice you should mostly exit at the soft-limit
         let (soft_limit, hard_limit) = match movetime {
-            0 => move_time(time_left, inc, moves_to_go, position.ply),
+            0 => move_time(time_left, inc, moves_to_go),
 
             k => {
                 if k <= MOVE_OVERHEAD {

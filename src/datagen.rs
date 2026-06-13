@@ -153,8 +153,8 @@ impl Game {
         &mut self,
         tt: &TranspositionTable,
         info: &mut SearchInfo,
-        opening_length: usize,
         opening_cp_margin: i32,
+        opening: bool,
     ) -> Result<bool, ()> {
         let mut pos = self.positions.last().unwrap().position;
         let movelist = MoveList::gen_legal(&mut pos);
@@ -172,7 +172,7 @@ impl Game {
             return Ok(false);
         }
 
-        if pos.ply < opening_length {
+        if opening {
             leaf.choose_opening_move(tt, info, opening_cp_margin);
         } else {
             leaf.choose_move(tt, info);
@@ -196,10 +196,14 @@ impl Game {
 
         let mut g = Self::new();
 
+        let mut ply = 0;
+
         loop {
-            let Ok(q) = g.next(&tt, &mut info, opening_length, opening_cp_margin) else {
+            let Ok(q) = g.next(&tt, &mut info, opening_cp_margin, ply < opening_length) else {
                 return None;
             };
+
+            ply += 1;
 
             if !q {
                 break;

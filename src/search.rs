@@ -72,7 +72,7 @@ tuneable_params! {
 const DO_SINGULARITY_EXTENSION: bool = true;
 const DO_SINGULARITY_DE: bool = true;
 
-pub const REPETITION_TABLE_SIZE: usize = 200 + 1;
+pub const REPETITION_TABLE_SIZE: usize = 100;
 
 fn lerp(u: i32, v: i32, w1: i32) -> i32 {
     ((u as i64 * w1 as i64 + v as i64 * (1024 - w1) as i64) / 1024) as i32
