@@ -46,15 +46,27 @@ I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lich
 
 [Panda Lichess Bot](https://lichess.org/@/PandaBot2)
 
+## Usage
+
+You can clone the repo for dev build, or get the latest published version from [Releases](https://github.com/all-c-a-p-s/Panda/releases). To build/run any version of Panda, you will need to [Download Rust](https://www.rust-lang.org/).
+
+> [!IMPORTANT]
+> If you would like a fully optimised build, then you should use the pgo-optimised compilation (which is the default in the makefile). In my testing, this seems to be worth 5-10 elo, so please make sure you use this compilation if you are formally testing the engine!
+> This adds the following dependencies:
+> ```bash
+> rustup component add llvm-tools-preview
+> cargo install cargo-binutils
+> ```
+> You can then build the project using `make` or `make pgo`.
+> The pgo compilation itself will take a few minutes. Thanks for you patience :)
+
+Alternatively, you can build the project using `make build` or run it immediately with `make run` if you just want to try out the engine in a context where optimal performance isn't super crucial.
+
+If you want to play against the engine or watch it play, you can connect to a UCI gui such as [CuteChess](https://cutechess.com/).
+
 ## Todo
 - endgame tablebases
 - stronger NNUE
-
-## Usage
-- [Download Rust](https://www.rust-lang.org/)
-- clone the repo for dev build, or get the latest published version from [Releases](https://github.com/all-c-a-p-s/Panda/releases)
-- Build and run the project using `make run` or build to an executable using `make build`
-- connect to a UCI gui such as [CuteChess](https://cutechess.com/)
 
 ## Credits
 - [BBC Chess Engine](https://github.com/maksimKorzh/bbc) + videos, which explain magic bitboards very clearly
