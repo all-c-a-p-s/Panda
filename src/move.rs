@@ -6,12 +6,8 @@
 /// 1000 0000 0000 0000 castling flag      0x8000
 /// 1100 0000 0000 0000 promotion flag     0xc000
 use crate::board::{BitBoard, Board, Colour};
-use crate::helper::{
-    MAX_MOVES, coordinate, count, get_bit, lsfb, piece_type, pop_bit, rank, set_bit,
-};
-use crate::magic::{
-    BISHOP_EDGE_RAYS, BP_ATTACKS, K_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS,
-};
+use crate::helper::{MAX_MOVES, coordinate, count, get_bit, lsfb, piece_type, pop_bit, rank, set_bit};
+use crate::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, K_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS};
 use crate::magic::{get_bishop_attacks, get_queen_attacks, get_rook_attacks};
 use crate::movegen::{CASTLING_MASKS, CASTLING_PATHS};
 use crate::movegen::{RAY_BETWEEN, check_en_passant, is_attacked};
@@ -58,19 +54,12 @@ pub struct Commit {
 impl Move {
     #[must_use]
     pub fn from_promotion(from: Square, to: Square, promoted_piece: PieceType) -> Self {
-        Self {
-            data: from as u16
-                | (to as u16) << 6
-                | (promoted_piece as u16 - 1) << 12
-                | PROMOTION_FLAG,
-        }
+        Self { data: from as u16 | (to as u16) << 6 | (promoted_piece as u16 - 1) << 12 | PROMOTION_FLAG }
     }
 
     #[must_use]
     pub fn from_flags(from: Square, to: Square, flags: u16) -> Self {
-        Self {
-            data: from as u16 | (to as u16) << 6 | flags,
-        }
+        Self { data: from as u16 | (to as u16) << 6 | flags }
     }
 
     #[must_use]
@@ -144,11 +133,7 @@ impl Move {
 #[allow(clippy::too_many_arguments)]
 impl Move {
     pub fn print_move(&self) {
-        println!(
-            "{}{}",
-            coordinate(self.square_from()),
-            coordinate(self.square_to())
-        );
+        println!("{}{}", coordinate(self.square_from()), coordinate(self.square_to()));
 
         println!(
             "promoted to {}",
@@ -206,9 +191,7 @@ static LINE_RAYS: [[BitBoard; 64]; 64] = {
     while a < 64 {
         let mut b = 0;
         while b < 64 {
-            r[a][b] = get_line_rays(unsafe { Square::from(a as u8) }, unsafe {
-                Square::from(b as u8)
-            });
+            r[a][b] = get_line_rays(unsafe { Square::from(a as u8) }, unsafe { Square::from(b as u8) });
             b += 1;
         }
         a += 1;
@@ -246,8 +229,7 @@ impl Board {
             self.bitboards[piece] = set_bit(from, self.bitboards[piece]);
             self.pieces_array[from] = Some(piece);
             //remove promoted piece from bitboard
-            self.nnue
-                .undo_move(piece, c.piece_captured, Some(promoted_piece), from, to);
+            self.nnue.undo_move(piece, c.piece_captured, Some(promoted_piece), from, to);
         } else {
             self.bitboards[piece] = pop_bit(to, self.bitboards[piece]);
             self.pieces_array[to] = c.piece_captured;
@@ -307,14 +289,12 @@ impl Board {
             match self.side_to_move {
                 Colour::White => {
                     //white to move before move was made
-                    self.bitboards[Piece::BP] =
-                        set_bit(unsafe { to.sub_unchecked(8) }, self.bitboards[Piece::BP]);
+                    self.bitboards[Piece::BP] = set_bit(unsafe { to.sub_unchecked(8) }, self.bitboards[Piece::BP]);
                     self.pieces_array[unsafe { to.sub_unchecked(8) }] = Some(Piece::BP);
                     self.nnue.undo_ep(piece, Some(Piece::BP), from, to);
                 }
                 Colour::Black => {
-                    self.bitboards[Piece::WP] =
-                        set_bit(unsafe { to.add_unchecked(8) }, self.bitboards[Piece::WP]);
+                    self.bitboards[Piece::WP] = set_bit(unsafe { to.add_unchecked(8) }, self.bitboards[Piece::WP]);
                     self.pieces_array[unsafe { to.add_unchecked(8) }] = Some(Piece::WP);
                     self.nnue.undo_ep(piece, Some(Piece::WP), from, to);
                 }
@@ -335,9 +315,8 @@ impl Board {
             | self.bitboards[Piece::BQ]
             | self.bitboards[Piece::BK];
 
-        self.occupancies[OccupancyIndex::BothOccupancies] = self.occupancies
-            [OccupancyIndex::WhiteOccupancies]
-            | self.occupancies[OccupancyIndex::BlackOccupancies];
+        self.occupancies[OccupancyIndex::BothOccupancies] =
+            self.occupancies[OccupancyIndex::WhiteOccupancies] | self.occupancies[OccupancyIndex::BlackOccupancies];
 
         self.en_passant = c.ep_reset;
         self.castling = c.castling_reset;
@@ -500,8 +479,7 @@ impl Board {
                             self.checkers |= N_ATTACKS[enemy_king] & set_bit(to, 0);
                         }
 
-                        self.nnue
-                            .promotion_update(piece_moved, Some(promoted_piece), from, to);
+                        self.nnue.promotion_update(piece_moved, Some(promoted_piece), from, to);
                     } else {
                         if rank(from).abs_diff(rank(to)) == 2 {
                             match colour {
@@ -515,14 +493,12 @@ impl Board {
                         } else if m.is_en_passant() {
                             match colour {
                                 Colour::White => {
-                                    self.bitboards[Piece::BP] ^=
-                                        set_bit(unsafe { to.sub_unchecked(8) }, 0);
+                                    self.bitboards[Piece::BP] ^= set_bit(unsafe { to.sub_unchecked(8) }, 0);
                                     self.pieces_array[unsafe { to.sub_unchecked(8) }] = None;
                                     self.nnue.ep_update(piece_moved, Piece::BP, from, to);
                                 }
                                 Colour::Black => {
-                                    self.bitboards[Piece::WP] ^=
-                                        set_bit(unsafe { to.add_unchecked(8) }, 0);
+                                    self.bitboards[Piece::WP] ^= set_bit(unsafe { to.add_unchecked(8) }, 0);
                                     self.pieces_array[unsafe { to.add_unchecked(8) }] = None;
                                     self.nnue.ep_update(piece_moved, Piece::WP, from, to);
                                 }
@@ -563,28 +539,22 @@ impl Board {
             | self.bitboards[Piece::BQ]
             | self.bitboards[Piece::BK];
 
-        self.occupancies[OccupancyIndex::BothOccupancies] = self.occupancies
-            [OccupancyIndex::WhiteOccupancies]
-            | self.occupancies[OccupancyIndex::BlackOccupancies];
+        self.occupancies[OccupancyIndex::BothOccupancies] =
+            self.occupancies[OccupancyIndex::WhiteOccupancies] | self.occupancies[OccupancyIndex::BlackOccupancies];
         //update occupancies
 
         let mut our_attackers = if colour == Colour::White {
             self.occupancies[OccupancyIndex::WhiteOccupancies]
-                & ((BISHOP_EDGE_RAYS[enemy_king]
-                    & (self.bitboards[Piece::WB] | self.bitboards[Piece::WQ]))
-                    | ROOK_EDGE_RAYS[enemy_king]
-                        & (self.bitboards[Piece::WR] | self.bitboards[Piece::WQ]))
+                & ((BISHOP_EDGE_RAYS[enemy_king] & (self.bitboards[Piece::WB] | self.bitboards[Piece::WQ]))
+                    | ROOK_EDGE_RAYS[enemy_king] & (self.bitboards[Piece::WR] | self.bitboards[Piece::WQ]))
         } else {
             self.occupancies[OccupancyIndex::BlackOccupancies]
-                & ((BISHOP_EDGE_RAYS[enemy_king]
-                    & (self.bitboards[Piece::BB] | self.bitboards[Piece::BQ]))
-                    | ROOK_EDGE_RAYS[enemy_king]
-                        & (self.bitboards[Piece::BR] | self.bitboards[Piece::BQ]))
+                & ((BISHOP_EDGE_RAYS[enemy_king] & (self.bitboards[Piece::BB] | self.bitboards[Piece::BQ]))
+                    | ROOK_EDGE_RAYS[enemy_king] & (self.bitboards[Piece::BR] | self.bitboards[Piece::BQ]))
         };
 
         while let Some(sq) = lsfb(our_attackers) {
-            let ray_between =
-                RAY_BETWEEN[sq][enemy_king] & self.occupancies[OccupancyIndex::BothOccupancies];
+            let ray_between = RAY_BETWEEN[sq][enemy_king] & self.occupancies[OccupancyIndex::BothOccupancies];
             match count(ray_between) {
                 0 => self.checkers |= set_bit(sq, 0),
                 1 => self.pinned |= ray_between,
@@ -676,9 +646,7 @@ impl Board {
             return false;
         }
 
-        if (m.is_promotion() || m.is_en_passant() || m.is_double_push(self))
-            && piece_type(pc) != PieceType::Pawn
-        {
+        if (m.is_promotion() || m.is_en_passant() || m.is_double_push(self)) && piece_type(pc) != PieceType::Pawn {
             return false;
         }
 
@@ -700,18 +668,15 @@ impl Board {
             Piece::WP => WP_ATTACKS[sq_from],
             Piece::BP => BP_ATTACKS[sq_from],
             Piece::WN | Piece::BN => N_ATTACKS[sq_from],
-            Piece::WB | Piece::BB => get_bishop_attacks(
-                sq_from as usize,
-                self.occupancies[OccupancyIndex::BothOccupancies],
-            ),
-            Piece::WR | Piece::BR => get_rook_attacks(
-                sq_from as usize,
-                self.occupancies[OccupancyIndex::BothOccupancies],
-            ),
-            Piece::WQ | Piece::BQ => get_queen_attacks(
-                sq_from as usize,
-                self.occupancies[OccupancyIndex::BothOccupancies],
-            ),
+            Piece::WB | Piece::BB => {
+                get_bishop_attacks(sq_from as usize, self.occupancies[OccupancyIndex::BothOccupancies])
+            }
+            Piece::WR | Piece::BR => {
+                get_rook_attacks(sq_from as usize, self.occupancies[OccupancyIndex::BothOccupancies])
+            }
+            Piece::WQ | Piece::BQ => {
+                get_queen_attacks(sq_from as usize, self.occupancies[OccupancyIndex::BothOccupancies])
+            }
             Piece::WK | Piece::BK => K_ATTACKS[sq_from],
         } & !blockers;
 
@@ -751,9 +716,7 @@ impl Board {
             }
         } else if pc == Piece::WK && sq_from == Square::E1 {
             if self.castling & CASTLING_MASKS[CastlingType::WhiteKingside] > 0
-                && self.occupancies[OccupancyIndex::BothOccupancies]
-                    & CASTLING_PATHS[CastlingType::WhiteKingside]
-                    == 0
+                && self.occupancies[OccupancyIndex::BothOccupancies] & CASTLING_PATHS[CastlingType::WhiteKingside] == 0
                 && !is_attacked(Square::E1, Colour::Black, self)
                 && !is_attacked(Square::F1, Colour::Black, self)
             {
@@ -761,9 +724,7 @@ impl Board {
             }
 
             if self.castling & CASTLING_MASKS[CastlingType::WhiteQueenside] > 0
-                && self.occupancies[OccupancyIndex::BothOccupancies]
-                    & CASTLING_PATHS[CastlingType::WhiteQueenside]
-                    == 0
+                && self.occupancies[OccupancyIndex::BothOccupancies] & CASTLING_PATHS[CastlingType::WhiteQueenside] == 0
                 && !is_attacked(Square::E1, Colour::Black, self)
                 && !is_attacked(Square::D1, Colour::Black, self)
             {
@@ -771,9 +732,7 @@ impl Board {
             }
         } else if pc == Piece::BK && sq_from == Square::E8 {
             if self.castling & CASTLING_MASKS[CastlingType::BlackKingside] > 0
-                && self.occupancies[OccupancyIndex::BothOccupancies]
-                    & CASTLING_PATHS[CastlingType::BlackKingside]
-                    == 0
+                && self.occupancies[OccupancyIndex::BothOccupancies] & CASTLING_PATHS[CastlingType::BlackKingside] == 0
                 && !is_attacked(Square::E8, Colour::White, self)
                 && !is_attacked(Square::F8, Colour::White, self)
             {
@@ -781,9 +740,7 @@ impl Board {
             }
 
             if self.castling & CASTLING_MASKS[CastlingType::BlackQueenside] > 0
-                && self.occupancies[OccupancyIndex::BothOccupancies]
-                    & CASTLING_PATHS[CastlingType::BlackQueenside]
-                    == 0
+                && self.occupancies[OccupancyIndex::BothOccupancies] & CASTLING_PATHS[CastlingType::BlackQueenside] == 0
                 && !is_attacked(Square::E8, Colour::White, self)
                 && !is_attacked(Square::D8, Colour::White, self)
             {

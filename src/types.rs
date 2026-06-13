@@ -73,23 +73,9 @@ pub const PIECES: [Piece; 12] = [
     Piece::BK,
 ];
 
-pub const WHITE_PIECES: [Piece; 6] = [
-    Piece::WP,
-    Piece::WB,
-    Piece::WN,
-    Piece::WR,
-    Piece::WQ,
-    Piece::WK,
-];
+pub const WHITE_PIECES: [Piece; 6] = [Piece::WP, Piece::WB, Piece::WN, Piece::WR, Piece::WQ, Piece::WK];
 
-pub const BLACK_PIECES: [Piece; 6] = [
-    Piece::BP,
-    Piece::BB,
-    Piece::BN,
-    Piece::BR,
-    Piece::BQ,
-    Piece::BK,
-];
+pub const BLACK_PIECES: [Piece; 6] = [Piece::BP, Piece::BB, Piece::BN, Piece::BR, Piece::BQ, Piece::BK];
 impl<T> Index<Square> for [T; 64] {
     type Output = T;
 

@@ -47,10 +47,7 @@ pub struct TTEntryInternal {
 
 impl Clone for TTEntryInternal {
     fn clone(&self) -> Self {
-        Self {
-            data: AtomicU64::new(self.data.load(Relaxed)),
-            key: AtomicU64::new(self.key.load(Relaxed)),
-        }
+        Self { data: AtomicU64::new(self.data.load(Relaxed)), key: AtomicU64::new(self.key.load(Relaxed)) }
     }
 }
 
@@ -73,13 +70,7 @@ impl TTEntry {
     const FLAG_SHIFT: u64 = 56;
     #[must_use]
     pub fn new(depth: u8, eval: i32, flag: EntryFlag, best_move: Move, hash_key: u64) -> Self {
-        Self {
-            hash_key,
-            eval,
-            best_move,
-            depth,
-            flag,
-        }
+        Self { hash_key, eval, best_move, depth, flag }
     }
 
     fn from_internal(x: TTEntryInternal) -> TTEntry {
@@ -114,9 +105,7 @@ impl TranspositionTable {
     pub fn with_log2_capacity(n: usize) -> Self {
         let capacity: usize = 1 << n;
         TranspositionTable {
-            tt: (0..capacity)
-                .map(|_| TTEntryInternal::default())
-                .collect::<Vec<_>>(),
+            tt: (0..capacity).map(|_| TTEntryInternal::default()).collect::<Vec<_>>(),
             size: capacity,
             mask: capacity - 1,
         }
@@ -160,8 +149,7 @@ impl TranspositionTable {
 
 impl TT for TranspositionTable {
     fn lookup(&self, hash_key: u64) -> Option<TTEntry> {
-        self.get(hash_key)
-            .filter(|&entry| entry.hash_key == hash_key)
+        self.get(hash_key).filter(|&entry| entry.hash_key == hash_key)
     }
 
     fn write(&self, hash: u64, mut entry: TTEntry) {

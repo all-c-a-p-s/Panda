@@ -68,12 +68,7 @@ pub struct Node {
 impl Node {
     #[must_use]
     pub fn from_position(pos: &Board) -> Self {
-        Self {
-            position: *pos,
-            value: 0,
-            choice: None,
-            result: None,
-        }
+        Self { position: *pos, value: 0, choice: None, result: None }
     }
 
     // this function merely needs to determine the value of the node, not of its moves
@@ -91,12 +86,7 @@ impl Node {
         self.value = move_data.eval;
     }
 
-    pub fn choose_opening_move(
-        &mut self,
-        tt: &TranspositionTable,
-        info: &mut SearchInfo,
-        margin: i32,
-    ) {
+    pub fn choose_opening_move(&mut self, tt: &TranspositionTable, info: &mut SearchInfo, margin: i32) {
         let mut movelist = MoveList::empty();
         movelist.gen_moves(&self.position, MovegenMode::All);
 
@@ -106,11 +96,7 @@ impl Node {
         // then pick from the moves which are within some margin from the best one
         let mut scores = vec![];
 
-        for m in movelist.moves {
-            if m.is_null() {
-                break;
-            }
-
+        for &m in movelist.moves.iter().take(movelist.used) {
             let Ok(commit) = self.position.try_move(m) else {
                 continue;
             };
@@ -118,13 +104,7 @@ impl Node {
             let stop = AtomicBool::new(false);
             // the time/node limits are intentionally high here (won't be reached)
             // because we don't want to just hit them and return zero
-            let mut t = Thread::new(
-                Instant::now() + Duration::from_millis(10),
-                INFINITY as usize,
-                tt,
-                info,
-                &stop,
-            );
+            let mut t = Thread::new(Instant::now() + Duration::from_millis(10), INFINITY as usize, tt, info, &stop);
 
             let score = -t.negamax(&mut self.position, 4, -INFINITY, INFINITY, false);
 
@@ -135,11 +115,8 @@ impl Node {
         }
 
         let (s, chosen_move) = {
-            let candidates = scores
-                .iter()
-                .filter(|&x| best_score - margin <= x.0)
-                .copied()
-                .collect::<Vec<(i32, Move)>>();
+            let candidates =
+                scores.iter().filter(|&x| best_score - margin <= x.0).copied().collect::<Vec<(i32, Move)>>();
 
             let i = rand::random::<usize>() % candidates.len();
 
@@ -156,13 +133,7 @@ impl Node {
 
         let stop = AtomicBool::new(false);
 
-        let mut t = Thread::new(
-            Instant::now() + Duration::from_millis(10),
-            8192,
-            tt,
-            info,
-            &stop,
-        );
+        let mut t = Thread::new(Instant::now() + Duration::from_millis(10), 8192, tt, info, &stop);
         t.info.excluded[0] = Some(m);
         let move_data = iterative_deepening::<false>(&mut self.position, 10, 10, &mut t);
         self.choice = Some(move_data.m);
@@ -176,6 +147,8 @@ impl Game {
         Self { positions: vec![n] }
     }
 
+    /// Returns Result<b, ()> where b represents whether the game is still going.
+    /// Err represents game failed to generate.
     fn next(
         &mut self,
         tt: &TranspositionTable,
@@ -185,15 +158,10 @@ impl Game {
     ) -> Result<bool, ()> {
         let mut pos = self.positions.last().unwrap().position;
         let movelist = MoveList::gen_legal(&mut pos);
-        let repetition_table = self
-            .positions
-            .iter()
-            .map(|x| x.position.hash_key)
-            .collect::<Vec<u64>>();
 
-        let found_move = !movelist.moves[0].is_null();
+        let found_move = movelist.used > 0;
         let leaf = self.positions.last_mut().unwrap();
-        if let Some(res) = game_result(found_move, &pos, &repetition_table) {
+        if let Some(res) = game_result(found_move, &pos) {
             leaf.result = Some(res);
             leaf.value = match res {
                 0.0 => -INFINITY,
@@ -227,14 +195,14 @@ impl Game {
         let mut info = SearchInfo::default();
 
         let mut g = Self::new();
+
         loop {
-            let r = g.next(&tt, &mut info, opening_length, opening_cp_margin);
-            if let Ok(q) = r {
-                if !q {
-                    break;
-                }
-            } else {
+            let Ok(q) = g.next(&tt, &mut info, opening_length, opening_cp_margin) else {
                 return None;
+            };
+
+            if !q {
+                break;
             }
         }
         g.backtrack(&tt, &mut info);
@@ -256,11 +224,7 @@ impl Game {
                 continue;
             }
 
-            let (a, b, c) = (
-                self.positions[ply],
-                self.positions[ply + 1],
-                self.positions[ply + 2],
-            );
+            let (a, b, c) = (self.positions[ply], self.positions[ply + 1], self.positions[ply + 2]);
 
             let (v_a, v_b, v_c) = (a.value, -b.value, c.value);
 
@@ -286,9 +250,8 @@ impl Game {
                 let mut pos = p.position;
 
                 let movelist = MoveList::gen_legal(&mut pos);
-                let it = movelist.moves.iter().filter(|x| !x.is_null());
 
-                if it.count() != 1 {
+                if movelist.used > 1 {
                     p.choose_second(tt, info);
 
                     if !p.choice.unwrap().is_null() {
@@ -309,22 +272,10 @@ impl Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.position.print_board();
         let mut s = format!("value: {}", self.value);
-        s += format!("\nchoice: {}", {
-            if let Some(m) = self.choice {
-                m.uci()
-            } else {
-                "None".to_string()
-            }
-        })
-        .as_str();
-        s += format!("\nresult: {}", {
-            if let Some(r) = self.result {
-                format!("{r}")
-            } else {
-                "Unknown".to_string()
-            }
-        })
-        .as_str();
+        s += format!("\nchoice: {}", { if let Some(m) = self.choice { m.uci() } else { "None".to_string() } }).as_str();
+        s +=
+            format!("\nresult: {}", { if let Some(r) = self.result { format!("{r}") } else { "Unknown".to_string() } })
+                .as_str();
 
         writeln!(f, "{s}")
     }
@@ -335,7 +286,7 @@ fn is_terminal(eval: i32) -> bool {
     eval.abs() > INFINITY / 2
 }
 
-fn game_result(found_move: bool, board: &Board, history: &[u64]) -> Option<f32> {
+fn game_result(found_move: bool, board: &Board) -> Option<f32> {
     if !found_move {
         match board.side_to_move {
             Colour::White => return Some(if board.checkers != 0 { 0.0 } else { 0.5 }),
@@ -343,11 +294,7 @@ fn game_result(found_move: bool, board: &Board, history: &[u64]) -> Option<f32> 
         }
     }
 
-    if board.fifty_move == 100 || history.iter().filter(|x| **x == board.hash_key).count() == 2 {
-        Some(0.5)
-    } else {
-        None
-    }
+    if board.is_drawn() { Some(0.5) } else { None }
 }
 
 #[must_use]
@@ -360,9 +307,8 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
     let mut attempts = 0;
 
     let opening_length = OPENING_PLIES + random::<usize>() % 2;
-    let opening_cp_margin = (random::<i32>().abs()
-        % (MAX_OPENING_CP_MARGIN - MIN_OPENING_CP_MARGIN))
-        + MIN_OPENING_CP_MARGIN;
+    let opening_cp_margin =
+        (random::<i32>().abs() % (MAX_OPENING_CP_MARGIN - MIN_OPENING_CP_MARGIN)) + MIN_OPENING_CP_MARGIN;
 
     let mut try_game = None;
     while try_game.is_none() {
@@ -376,16 +322,10 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
 
     let mut filtered = vec![];
 
-    for n in g
-        .positions
-        .iter()
-        .take(g.positions.len() - 1)
-        .skip(opening_length)
-    {
+    for n in g.positions.iter().take(g.positions.len() - 1).skip(opening_length) {
         let quiet = n.position.checkers == 0 && !n.choice.unwrap().is_capture(&n.position);
         let within_bounds = n.value.abs() < i16::MAX as i32;
-        let enough_pieces =
-            n.position.occupancies[OccupancyIndex::BothOccupancies].count_ones() > 3;
+        let enough_pieces = n.position.occupancies[OccupancyIndex::BothOccupancies].count_ones() > 3;
 
         let value = match n.position.side_to_move {
             Colour::White => n.value,
@@ -440,11 +380,8 @@ pub fn play_parallel_games(num_games: usize, num_threads: usize) -> Vec<(String,
 }
 
 fn next_checkpoint(path: &str, duration: Duration) -> Result<i32, std::io::Error> {
-    let mut file = if let Ok(f) = std::fs::OpenOptions::new().append(true).open(path) {
-        f
-    } else {
-        std::fs::File::create(path)?
-    };
+    let mut file =
+        if let Ok(f) = std::fs::OpenOptions::new().append(true).open(path) { f } else { std::fs::File::create(path)? };
 
     let mut added = 0;
 
@@ -459,11 +396,9 @@ fn next_checkpoint(path: &str, duration: Duration) -> Result<i32, std::io::Error
     pb.set_position(0);
 
     pb.set_style(
-        ProgressStyle::with_template(
-            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-        )
-        .unwrap()
-        .progress_chars("##-"),
+        ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
+            .unwrap()
+            .progress_chars("##-"),
     );
     while start.elapsed() < duration {
         let results = play_parallel_games(BATCH_SIZE, thread_count);
@@ -497,9 +432,7 @@ pub fn gen_data(path: &str, duration: Duration) -> std::io::Result<()> {
         added += added_this_checkpoint;
         remaining -= t;
 
-        println!(
-            "Checkpoint Entries: {added_this_checkpoint}\nAdded so far: {added}\nTime remaining: {remaining:?}\n"
-        );
+        println!("Checkpoint Entries: {added_this_checkpoint}\nAdded so far: {added}\nTime remaining: {remaining:?}\n");
     }
 
     println!("Done generating data. {added} entries added in total.");

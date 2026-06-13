@@ -99,9 +99,9 @@ impl Thread<'_> {
         self.stop.load(Relaxed)
     }
 
-    /// The purpose of the `singularity()` function is to prove that a move is better than alternatives by
-    /// a significant margin. If this is true, we should extend it since it is more important. This
-    /// function determines how much we should extend by.
+    /// Here we try to prove that a move is better than alternatives by a significant margin.
+    /// If this is true, we should extend it since it is more important. This function determines
+    /// how much we should extend by.
     #[allow(clippy::too_many_arguments)]
     fn singularity(
         &mut self,
@@ -147,15 +147,9 @@ impl Thread<'_> {
     /// Node Types:
     /// - PV-node: a node in which the value returned is between alpha and beta (exact)
     /// - Cutnode: a node in which a beta cutoff occurred, value returned >= beta (lower bound)
-    /// - All-node: a node in which all moves were searched and alpha returned (upper bound)
-    pub fn negamax(
-        &mut self,
-        position: &mut Board,
-        mut depth: u8,
-        mut alpha: i32,
-        beta: i32,
-        cutnode: bool,
-    ) -> i32 {
+    /// - All-node: a node in which all moves were searched and value returned <= alpha (upper bound)
+    /// If we can predict the type of a node, we can make better decisions about pruning.
+    pub fn negamax(&mut self, position: &mut Board, mut depth: u8, mut alpha: i32, beta: i32, cutnode: bool) -> i32 {
         if self.should_exit() {
             return 0;
         }
@@ -166,6 +160,7 @@ impl Thread<'_> {
         if self.ply == MAX_PLY - 1 {
             return evaluate(position);
         }
+
         let pv_node = beta - alpha != 1;
         let root = self.ply == 0;
         let singular = self.info.excluded[self.ply].is_some();
@@ -178,8 +173,7 @@ impl Thread<'_> {
 
         let mut hash_flag = EntryFlag::UpperBound;
 
-        let (mut tt_depth, mut tt_bound, mut tt_score, mut tt_hit) =
-            (0, EntryFlag::Missing, 0, false);
+        let (mut tt_depth, mut tt_bound, mut tt_score, mut tt_hit) = (0, EntryFlag::Missing, 0, false);
         let mut best_move = NULL_MOVE;
 
         let in_check = position.checkers != 0;
@@ -209,19 +203,13 @@ impl Thread<'_> {
             // We accept values from the TT if:
             //      (1) the depth of the entry >= our depth, with the correct bound
             // OR   (2) we are in an expected cutnode, and the eval is well above beta
-            if tt_cutoff!(
-                singular, root, pv_node, depth, entry, beta, alpha, cutnode, in_check
-            ) {
+            if tt_cutoff!(singular, root, pv_node, depth, entry, beta, alpha, cutnode, in_check) {
                 return entry.eval;
             }
         }
 
-        let tt_move = !best_move.is_null();
-        let tt_move_capture = if tt_move {
-            best_move.is_capture(position)
-        } else {
-            false
-        };
+        let tt_move_exists = !best_move.is_null();
+        let tt_move_capture = if tt_move_exists { best_move.is_capture(position) } else { false };
 
         // reset killers for child nodes
         self.info.killer_moves[self.ply + 1] = None;
@@ -239,12 +227,8 @@ impl Thread<'_> {
         }
 
         if self.ply < MAX_PLY {
-            self.info.ss[self.ply] = SearchStackEntry {
-                eval: static_eval,
-                square_moved_to: None,
-                piece_moved: None,
-                made_capture: false,
-            };
+            self.info.ss[self.ply] =
+                SearchStackEntry { eval: static_eval, square_moved_to: None, piece_moved: None, made_capture: false };
         }
 
         // Improving heuristic:
@@ -276,14 +260,7 @@ impl Thread<'_> {
             // Razoring:
             // If our opponent just captured and the static eval is far below alpha, it's likely
             // that only captures can raise alpha. Hence, we just run a qsearch.
-            if can_razor!(
-                depth,
-                static_eval,
-                improving,
-                opponent_captured,
-                opponent_worsening,
-                alpha
-            ) {
+            if can_razor!(depth, static_eval, improving, opponent_captured, opponent_worsening, alpha) {
                 let qeval = self.qsearch(position, alpha, beta);
                 if qeval < alpha {
                     return qeval;
@@ -302,8 +279,7 @@ impl Thread<'_> {
                     + improving as i32
                     + opponent_worsening as i32;
                 let reduced_depth = (depth as i32 - r).max(1) as u8;
-                let null_move_eval =
-                    -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
+                let null_move_eval = -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
                 // null window used because all that matters is whether the search result is better than beta
                 position.undo_null_move(&undo);
                 self.ply -= 1;
@@ -316,7 +292,7 @@ impl Thread<'_> {
         // Internal Iterative Reduction (IIR):
         // if we don't have a TT hit then move ordering here will be terrible
         // so its better to reduce and set up TT move for next iteration
-        if do_iir!(pv_node, cutnode, depth, tt_move) {
+        if do_iir!(pv_node, cutnode, depth, tt_move_exists) {
             depth -= 1;
         }
 
@@ -355,17 +331,17 @@ impl Thread<'_> {
             cutnode,
         ) {
             if m == best_move && considered > 0 {
-                continue;
-            }
-
-            if let Some(n) = self.info.excluded[self.ply]
-                && n == m
-            {
-                considered += 1;
+                // hash move being generated in a later stage, but we've considered it already
                 continue;
             }
 
             considered += 1;
+
+            if let Some(n) = self.info.excluded[self.ply]
+                && n == m
+            {
+                continue;
+            }
 
             let tactical = m.is_tactical(position);
             let quiet = !tactical;
@@ -375,6 +351,7 @@ impl Thread<'_> {
             let is_counter = Some(m) == counter;
 
             if is_killer && done_killer || is_counter && done_counter {
+                // killer/counter generated in later stage by movepicker
                 continue;
             }
 
@@ -409,11 +386,7 @@ impl Thread<'_> {
                 // SEE Pruning:
                 // skip moves that fail SEE by a depth-dependent threshold
                 if do_see_pruning!(lmr_depth, considered, pv_node) {
-                    let margin = if tactical {
-                        read_param!(SEE_NOISY_MARGIN)
-                    } else {
-                        read_param!(SEE_QUIET_MARGIN)
-                    };
+                    let margin = if tactical { read_param!(SEE_NOISY_MARGIN) } else { read_param!(SEE_QUIET_MARGIN) };
                     let threshold = margin * depth as i32;
                     if !m.see(position, threshold) {
                         continue;
@@ -441,26 +414,23 @@ impl Thread<'_> {
 
             // A singular move is a move which seems to be forced or at least much stronger than
             // others. We should therefore extend to investigate it further.
-            let maybe_singular =
-                maybe_singular!(root, depth, singular, m, best_move, tt_depth, tt_bound);
+            let maybe_singular = maybe_singular!(root, depth, singular, m, best_move, tt_depth, tt_bound);
 
             let ext = if maybe_singular {
-                self.singularity(
-                    position, best_move, &commit, tt_score, depth, pv_node, alpha, beta, cutnode,
-                )
+                self.singularity(position, best_move, &commit, tt_score, depth, pv_node, alpha, beta, cutnode)
             } else {
                 Some((in_check && !root) as i32)
             };
 
             let Some(extension) = ext else {
-                // MultiCut case from singularity() function
+                // MultiCut case from singularity function
                 return tt_score - (depth as i32 * 2);
             };
 
             if maybe_singular {
                 position.play_unchecked(best_move);
                 self.ply += 1;
-                // we unmade the move while calling the singularity() function
+                // we unmade the move while calling the singularity function
             }
 
             if extension == 2 {
@@ -473,9 +443,7 @@ impl Thread<'_> {
                 // Internal Aspiration Window:
                 // Assume the value of our lower-depth search has some merit, so we may be able to search on
                 // a tighter window around this value.
-                if do_iaw!(
-                    pv_node, tt_hit, tt_bound, root, singular, tt_score, alpha, beta
-                ) {
+                if do_iaw!(pv_node, tt_hit, tt_bound, root, singular, tt_score, alpha, beta) {
                     let depth_diff = (depth as i32 - tt_depth as i32).abs().max(1);
                     let mut delta = (tt_correction / 2).clamp(10, 25) * depth_diff;
 
@@ -528,12 +496,12 @@ impl Thread<'_> {
 
                 let mut r_eval = -INFINITY;
                 let do_full_depth_zw =
-                    if should_reduce!(played, pv_node, tt_move, root, tactical, depth, not_mated) {
+                    if should_reduce!(played, pv_node, tt_move_exists, root, tactical, depth, not_mated) {
                         let mut r = 1;
                         // fixed reduction of 1 for captures seems to work well
                         if quiet {
-                            r = self.info.lmr_table.reduction_table[quiet as usize]
-                                [depth.min(31) as usize][played.min(31) as usize];
+                            r = self.info.lmr_table.reduction_table[quiet as usize][depth.min(31) as usize]
+                                [played.min(31) as usize];
 
                             // reduce more when we have reason to expect little from this move
                             r += tt_move_capture as i32;
@@ -612,19 +580,11 @@ impl Thread<'_> {
         }
 
         if !self.is_stopped() && !singular {
-            let hash_entry =
-                TTEntry::new(depth, best_score, hash_flag, best_move, position.hash_key);
+            let hash_entry = TTEntry::new(depth, best_score, hash_flag, best_move, position.hash_key);
 
             self.tt.write(position.hash_key, hash_entry);
 
-            if corrhist_update_allowed!(
-                in_check,
-                best_move,
-                position,
-                hash_flag,
-                best_score,
-                static_eval
-            ) {
+            if corrhist_update_allowed!(in_check, best_move, position, hash_flag, best_score, static_eval) {
                 self.update_corrhist(position, depth, best_score - static_eval);
             }
         }
@@ -645,7 +605,9 @@ impl Thread<'_> {
 
         if self.should_exit() {
             return 0;
-        } else if self.ply == MAX_PLY - 1 {
+        }
+
+        if self.ply == MAX_PLY - 1 {
             return evaluate(position);
         }
 
@@ -669,7 +631,7 @@ impl Thread<'_> {
         let mut static_eval = evaluate(position);
         static_eval = self.eval_with_corrhist(position, static_eval);
 
-        let mut best_score = if in_check { -INFINITY + 1 } else { static_eval };
+        let mut best_score = if in_check { -INFINITY } else { static_eval };
 
         if best_score >= beta {
             return lerp(beta, best_score, read_param!(STAND_PAT_BETA_WEIGHT));
@@ -680,27 +642,15 @@ impl Thread<'_> {
         let mut movelist = MoveList::empty();
         let (mut good_caps, mut bad_caps) = (MoveList::empty(), MoveList::empty());
 
-        let mut movepicker = if in_check {
-            MovePicker::new()
-        } else {
-            MovePicker::for_qsearch()
-        };
+        let mut movepicker = if in_check { MovePicker::new() } else { MovePicker::for_qsearch() };
 
-        let q_hash = if in_check || best_move.is_tactical(position) {
-            best_move
-        } else {
-            NULL_MOVE
-        };
+        let q_hash = if in_check || best_move.is_tactical(position) { best_move } else { NULL_MOVE };
 
         let mut could_be_mated = in_check;
 
         while let Some(m) = movepicker.get_next(
             q_hash,
-            if in_check && could_be_mated {
-                self.info.killer_moves[self.ply]
-            } else {
-                None
-            },
+            if in_check && could_be_mated { self.info.killer_moves[self.ply] } else { None },
             None,
             position,
             &mut movelist,
@@ -728,10 +678,7 @@ impl Thread<'_> {
 
             //if we're far behind, only consider moves which win significant material
             if check_futility {
-                if !m.see(
-                    position,
-                    SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1,
-                ) {
+                if !m.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1) {
                     continue;
                 }
             } else if !m.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
@@ -900,8 +847,7 @@ pub fn iterative_deepening<const SHOW_THINKING: bool>(
 
         let multiplier = 2.2 * (1.3 * fraction).cos(); //guessed with some desmos eyeballing
 
-        let soft_end =
-            id.start_time + Duration::from_millis((soft_limit as f64 * multiplier) as u64);
+        let soft_end = id.start_time + Duration::from_millis((soft_limit as f64 * multiplier) as u64);
         let mut end = s.timer.end_time;
         if soft_limit < hard_limit {
             end = end.min(soft_end);
@@ -915,15 +861,7 @@ pub fn iterative_deepening<const SHOW_THINKING: bool>(
         }
     }
 
-    let pv = id.pv[0]
-        .iter()
-        .take(id.pv_length[0])
-        .fold(String::new(), |acc, m| acc + (m.uci() + " ").as_str());
+    let pv = id.pv[0].iter().take(id.pv_length[0]).fold(String::new(), |acc, m| acc + (m.uci() + " ").as_str());
 
-    MoveData {
-        m: id.pv[0][0],
-        nodes: s.nodes,
-        eval: id.eval,
-        pv,
-    }
+    MoveData { m: id.pv[0][0], nodes: s.nodes, eval: id.eval, pv }
 }

@@ -219,8 +219,7 @@ impl Thread<'_> {
 
         let scaled_diff = diff * CORRHIST_GRAIN;
 
-        *entry =
-            (*entry * (CORRHIST_SCALE - new_weight) + scaled_diff * new_weight) / CORRHIST_SCALE;
+        *entry = (*entry * (CORRHIST_SCALE - new_weight) + scaled_diff * new_weight) / CORRHIST_SCALE;
         *entry = (*entry).clamp(-CORRHIST_MAX, CORRHIST_MAX);
     }
 

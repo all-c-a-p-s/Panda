@@ -1,9 +1,7 @@
 #![allow(clippy::no_effect)]
 
 use crate::board::{BitBoard, Colour};
-use crate::helper::{
-    A_FILE, B_FILE, G_FILE, H_FILE, coordinate, count, get_bit, lsfb, pop_bit, set_bit,
-};
+use crate::helper::{A_FILE, B_FILE, G_FILE, H_FILE, coordinate, count, get_bit, lsfb, pop_bit, set_bit};
 use crate::rng::magic_candidate;
 use crate::types::Square;
 
@@ -410,9 +408,7 @@ pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> Bit
         }
         let mut ok: bool = true;
         for i in 0..blocker_combinations {
-            let magic_index: usize = ((blockers[i] * magic) >> (64 - relevant_bits))
-                .try_into()
-                .unwrap(); //shift ensures it is between 0 and 4095
+            let magic_index: usize = ((blockers[i] * magic) >> (64 - relevant_bits)).try_into().unwrap(); //shift ensures it is between 0 and 4095
             //test magic number multiplication
             if used_attacks[magic_index] == 0 {
                 used_attacks[magic_index] = attacks[i];
@@ -426,10 +422,7 @@ pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> Bit
             return magic;
         }
     }
-    eprintln!(
-        "failed to generate magic for {}",
-        coordinate(unsafe { crate::types::Square::from(square as u8) })
-    );
+    eprintln!("failed to generate magic for {}", coordinate(unsafe { crate::types::Square::from(square as u8) }));
     0
 }
 
@@ -634,11 +627,9 @@ pub fn init_bishop_attacks() {
         let blocker_indices = 1 << relevant_bits;
         for i in 0..blocker_indices {
             let blockers = set_blockers(i, relevant_bits, BISHOP_RAYS[square]);
-            let magic_index = (blockers.wrapping_mul(BISHOP_MAGICS[square]))
-                >> (64 - BISHOP_RELEVANT_BITS[square]);
+            let magic_index = (blockers.wrapping_mul(BISHOP_MAGICS[square])) >> (64 - BISHOP_RELEVANT_BITS[square]);
             unsafe {
-                BISHOP_ATTACKS[square][magic_index as usize] =
-                    mask_bishop_attacks(square, blockers);
+                BISHOP_ATTACKS[square][magic_index as usize] = mask_bishop_attacks(square, blockers);
             };
         }
     }
@@ -650,8 +641,7 @@ pub fn init_rook_attacks() {
         let blocker_indices = 1 << relevant_bits;
         for i in 0..blocker_indices {
             let blockers = set_blockers(i, relevant_bits, ROOK_RAYS[square]);
-            let magic_index =
-                (blockers.wrapping_mul(ROOK_MAGICS[square])) >> (64 - ROOK_RELEVANT_BITS[square]);
+            let magic_index = (blockers.wrapping_mul(ROOK_MAGICS[square])) >> (64 - ROOK_RELEVANT_BITS[square]);
             unsafe {
                 ROOK_ATTACKS[square][magic_index as usize] = mask_rook_attacks(square, blockers);
             };

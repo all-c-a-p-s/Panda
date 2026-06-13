@@ -34,6 +34,7 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
         let r = s.start_search(&mut b, 0, 0, 0, 1000, INFINITY as usize, 1);
 
         if r.m.is_null() {
+            // checkmate/stalemate
             break;
         }
 
@@ -59,6 +60,7 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
         let r = s.start_search(&mut b, 0, 0, 0, 1000, INFINITY as usize, 1);
 
         if r.m.is_null() {
+            // checkmate/stalemate
             break;
         }
 

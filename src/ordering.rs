@@ -4,10 +4,7 @@ use crate::movegen::get_attackers;
 use crate::search::{INFINITY, params};
 use crate::thread::Thread;
 use crate::types::{BLACK_PIECES, OccupancyIndex, Piece, PieceType, WHITE_PIECES};
-use crate::{
-    Board, Colour, MAX_MOVES, get_bishop_attacks, get_rook_attacks, lsfb, piece_type, read_param,
-    set_bit,
-};
+use crate::{Board, Colour, MAX_MOVES, get_bishop_attacks, get_rook_attacks, lsfb, piece_type, read_param, set_bit};
 
 const MVV: [i32; 6] = [0, 2400, 2400, 4800, 9600, 0];
 
@@ -55,25 +52,18 @@ impl Move {
             return true;
         }
 
-        let bishop_attackers = b.bitboards[Piece::WB]
-            | b.bitboards[Piece::BB]
-            | b.bitboards[Piece::WQ]
-            | b.bitboards[Piece::BQ];
-        let rook_attackers = b.bitboards[Piece::WR]
-            | b.bitboards[Piece::BR]
-            | b.bitboards[Piece::WQ]
-            | b.bitboards[Piece::BQ];
+        let bishop_attackers =
+            b.bitboards[Piece::WB] | b.bitboards[Piece::BB] | b.bitboards[Piece::WQ] | b.bitboards[Piece::BQ];
+        let rook_attackers =
+            b.bitboards[Piece::WR] | b.bitboards[Piece::BR] | b.bitboards[Piece::WQ] | b.bitboards[Piece::BQ];
 
-        let mut occupancies = b.occupancies[OccupancyIndex::BothOccupancies]
-            ^ (set_bit(sq_from, 0) | set_bit(sq_to, 0));
+        let mut occupancies =
+            b.occupancies[OccupancyIndex::BothOccupancies] ^ (set_bit(sq_from, 0) | set_bit(sq_to, 0));
 
-        let mut attackers = get_attackers(sq_to, Colour::White, b, occupancies)
-            | get_attackers(sq_to, Colour::Black, b, occupancies);
+        let mut attackers =
+            get_attackers(sq_to, Colour::White, b, occupancies) | get_attackers(sq_to, Colour::Black, b, occupancies);
 
-        let mut colour = match b.side_to_move {
-            Colour::White => Colour::Black,
-            Colour::Black => Colour::White,
-        };
+        let mut colour = b.side_to_move.opponent();
 
         loop {
             let side_attackers = attackers
@@ -101,10 +91,7 @@ impl Move {
             }
 
             //SAFETY: if this was zero we would have broken above
-            occupancies ^= set_bit(
-                unsafe { lsfb(side_attackers & b.bitboards[next_victim]).unwrap_unchecked() },
-                0,
-            );
+            occupancies ^= set_bit(unsafe { lsfb(side_attackers & b.bitboards[next_victim]).unwrap_unchecked() }, 0);
 
             if piece_type(next_victim) == PieceType::Pawn
                 || piece_type(next_victim) == PieceType::Bishop
@@ -114,18 +101,13 @@ impl Move {
                 attackers |= get_bishop_attacks(sq_to as usize, occupancies) & bishop_attackers;
             }
 
-            if piece_type(next_victim) == PieceType::Rook
-                || piece_type(next_victim) == PieceType::Queen
-            {
+            if piece_type(next_victim) == PieceType::Rook || piece_type(next_victim) == PieceType::Queen {
                 //same for rook attacks
                 attackers |= get_rook_attacks(sq_to as usize, occupancies) & rook_attackers;
             }
 
             attackers &= occupancies;
-            colour = match colour {
-                Colour::White => Colour::Black,
-                Colour::Black => Colour::White,
-            };
+            colour = colour.opponent();
 
             balance = -balance - 1 - SEE_VALUES[piece_type(next_victim)];
 
@@ -140,10 +122,7 @@ impl Move {
                         }])
                         > 0
                 {
-                    colour = match colour {
-                        Colour::White => Colour::Black,
-                        Colour::Black => Colour::White,
-                    };
+                    colour = colour.opponent();
                 }
                 break;
             }
@@ -180,25 +159,18 @@ impl Move {
             balance += SEE_VALUES[PieceType::Queen] - SEE_VALUES[PieceType::Pawn];
         }
 
-        let bishop_attackers = b.bitboards[Piece::WB]
-            | b.bitboards[Piece::BB]
-            | b.bitboards[Piece::WQ]
-            | b.bitboards[Piece::BQ];
-        let rook_attackers = b.bitboards[Piece::WR]
-            | b.bitboards[Piece::BR]
-            | b.bitboards[Piece::WQ]
-            | b.bitboards[Piece::BQ];
+        let bishop_attackers =
+            b.bitboards[Piece::WB] | b.bitboards[Piece::BB] | b.bitboards[Piece::WQ] | b.bitboards[Piece::BQ];
+        let rook_attackers =
+            b.bitboards[Piece::WR] | b.bitboards[Piece::BR] | b.bitboards[Piece::WQ] | b.bitboards[Piece::BQ];
 
-        let mut occupancies = b.occupancies[OccupancyIndex::BothOccupancies]
-            ^ (set_bit(sq_from, 0) | set_bit(sq_to, 0));
+        let mut occupancies =
+            b.occupancies[OccupancyIndex::BothOccupancies] ^ (set_bit(sq_from, 0) | set_bit(sq_to, 0));
 
-        let mut attackers = get_attackers(sq_to, Colour::White, b, occupancies)
-            | get_attackers(sq_to, Colour::Black, b, occupancies);
+        let mut attackers =
+            get_attackers(sq_to, Colour::White, b, occupancies) | get_attackers(sq_to, Colour::Black, b, occupancies);
 
-        let mut colour = match b.side_to_move {
-            Colour::White => Colour::Black,
-            Colour::Black => Colour::White,
-        };
+        let mut colour = b.side_to_move.opponent();
 
         let mut dp = [-INFINITY; 32];
 
@@ -241,10 +213,7 @@ impl Move {
             }
 
             //SAFETY: if this was zero we would have broken above
-            occupancies ^= set_bit(
-                unsafe { lsfb(side_attackers & b.bitboards[next_victim]).unwrap_unchecked() },
-                0,
-            );
+            occupancies ^= set_bit(unsafe { lsfb(side_attackers & b.bitboards[next_victim]).unwrap_unchecked() }, 0);
 
             if piece_type(next_victim) == PieceType::Pawn
                 || piece_type(next_victim) == PieceType::Bishop
@@ -254,18 +223,13 @@ impl Move {
                 attackers |= get_bishop_attacks(sq_to as usize, occupancies) & bishop_attackers;
             }
 
-            if piece_type(next_victim) == PieceType::Rook
-                || piece_type(next_victim) == PieceType::Queen
-            {
+            if piece_type(next_victim) == PieceType::Rook || piece_type(next_victim) == PieceType::Queen {
                 //same for rook attacks
                 attackers |= get_rook_attacks(sq_to as usize, occupancies) & rook_attackers;
             }
 
             attackers &= occupancies;
-            colour = match colour {
-                Colour::White => Colour::Black,
-                Colour::Black => Colour::White,
-            };
+            colour = colour.opponent();
 
             i += 1;
         }
@@ -391,23 +355,11 @@ pub struct MovePicker {
 impl MovePicker {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        Self {
-            stage: MovePickerStage::HashMove,
-            generated: false,
-            idx: 0,
-            scores: [0; MAX_MOVES],
-            skip_quiets: false,
-        }
+        Self { stage: MovePickerStage::HashMove, generated: false, idx: 0, scores: [0; MAX_MOVES], skip_quiets: false }
     }
 
     pub fn for_qsearch() -> Self {
-        Self {
-            stage: MovePickerStage::HashMove,
-            generated: false,
-            idx: 0,
-            scores: [0; MAX_MOVES],
-            skip_quiets: true,
-        }
+        Self { stage: MovePickerStage::HashMove, generated: false, idx: 0, scores: [0; MAX_MOVES], skip_quiets: true }
     }
 
     pub fn skip_quiets(&mut self, movelist: &MoveList) {
@@ -537,11 +489,7 @@ impl MovePicker {
         }
 
         if self.stage == MovePickerStage::Killers {
-            self.stage = if self.skip_quiets {
-                MovePickerStage::BadCaps
-            } else {
-                MovePickerStage::Quiets
-            };
+            self.stage = if self.skip_quiets { MovePickerStage::BadCaps } else { MovePickerStage::Quiets };
 
             if let Some(m) = killer
                 && b.is_pseudo_legal(m)

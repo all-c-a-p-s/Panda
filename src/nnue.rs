@@ -53,10 +53,7 @@ pub struct Accumulator {
 
 impl Default for Accumulator {
     fn default() -> Self {
-        Self {
-            white: MODEL.feature_biases,
-            black: MODEL.feature_biases,
-        }
+        Self { white: MODEL.feature_biases, black: MODEL.feature_biases }
     }
 }
 
@@ -77,10 +74,7 @@ impl Accumulator {
     // update values of hidden layer nodes depending after a bit is changed
     fn set<const STATE: bool>(&mut self, idx: (usize, usize)) {
         fn s<const STATE: bool>(acc: &mut SideAccumulator, idx: usize) {
-            for (x, &w) in acc
-                .iter_mut()
-                .zip(&MODEL.feature_weights[idx..idx + HL_SIZE])
-            {
+            for (x, &w) in acc.iter_mut().zip(&MODEL.feature_weights[idx..idx + HL_SIZE]) {
                 *x += if STATE { w } else { -w };
             }
         }
@@ -105,13 +99,7 @@ impl Accumulator {
     }
 
     //promotions that are also captures handled in capture_update()
-    pub fn promotion_update(
-        &mut self,
-        piece: Piece,
-        promotion: Option<Piece>,
-        from: Square,
-        to: Square,
-    ) {
+    pub fn promotion_update(&mut self, piece: Piece, promotion: Option<Piece>, from: Square, to: Square) {
         self.set_weight::<OFF>(piece, from);
         self.set_weight::<ON>(unsafe { promotion.unwrap_unchecked() }, to);
     }

@@ -1,20 +1,23 @@
 use rand::RngCore;
-use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaChaRng;
+use rand_chacha::rand_core::SeedableRng;
 
 //ChaChaRng pseudo-random number generator
-#[must_use] pub fn random_u32() -> u32 {
+#[must_use]
+pub fn random_u32() -> u32 {
     let mut r = ChaChaRng::from_entropy();
     ChaChaRng::next_u32(&mut r)
 }
 
-#[must_use] pub fn random_hash_u64() -> u64 {
+#[must_use]
+pub fn random_hash_u64() -> u64 {
     let mut r = ChaChaRng::from_entropy();
     ChaChaRng::next_u64(&mut r)
 }
 
 // method suggested by Tord Romstad (SF developer)
-#[must_use] pub fn random_u64() -> u64 {
+#[must_use]
+pub fn random_u64() -> u64 {
     // reduce non-zero bits in slices of 6
     let n1 = u64::from(random_u32()) & 0xFFFF;
     let n2 = u64::from(random_u32()) & 0xFFFF;
@@ -24,7 +27,8 @@ use rand_chacha::ChaChaRng;
     n1 | n2 << 16 | n3 << 32 | n4 << 48
 }
 
-#[must_use] pub fn magic_candidate() -> u64 {
+#[must_use]
+pub fn magic_candidate() -> u64 {
     // aim to generate random number with very few non-zero bits
     random_u64() & random_u64() & random_u64()
 }
@@ -38,7 +42,8 @@ const SEED: u64 = 0xF8D1C463A579BE02;
 //need a rng that I can call in a const fn
 impl XorShiftU64 {
     #[allow(clippy::new_without_default)]
-    #[must_use] pub const fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self { state: SEED }
     }
 

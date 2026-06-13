@@ -89,20 +89,13 @@ impl NodeTable {
 
 impl Default for NodeTable {
     fn default() -> Self {
-        Self {
-            table: [[0; 64]; 64],
-        }
+        Self { table: [[0; 64]; 64] }
     }
 }
 
 impl Default for SearchStackEntry {
     fn default() -> Self {
-        Self {
-            eval: -INFINITY,
-            piece_moved: None,
-            square_moved_to: None,
-            made_capture: false,
-        }
+        Self { eval: -INFINITY, piece_moved: None, square_moved_to: None, made_capture: false }
     }
 }
 
@@ -117,11 +110,9 @@ impl Default for LMRTable {
         #[allow(clippy::needless_range_loop)]
         for depth in 0..32 {
             for played in 0..32 {
-                reduction_table[0][depth][played] =
-                    (tb + f64::ln(depth as f64) * f64::ln(played as f64) / td) as i32;
+                reduction_table[0][depth][played] = (tb + f64::ln(depth as f64) * f64::ln(played as f64) / td) as i32;
                 //tactical move
-                reduction_table[1][depth][played] =
-                    (qb + f64::ln(depth as f64) * f64::ln(played as f64) / qd) as i32;
+                reduction_table[1][depth][played] = (qb + f64::ln(depth as f64) * f64::ln(played as f64) / qd) as i32;
                 //quiet move
             }
         }
@@ -173,10 +164,7 @@ pub struct Timer {
 
 impl Default for Timer {
     fn default() -> Self {
-        Self {
-            max_nodes: 0,
-            end_time: Instant::now(),
-        }
+        Self { max_nodes: 0, end_time: Instant::now() }
     }
 }
 
@@ -188,10 +176,7 @@ impl<'a> Thread<'a> {
         info: &'a mut SearchInfo,
         stop: &'a AtomicBool,
     ) -> Self {
-        let timer = Timer {
-            max_nodes,
-            end_time,
-        };
+        let timer = Timer { max_nodes, end_time };
 
         Thread {
             pv_length: [0; MAX_PLY],
@@ -219,11 +204,7 @@ pub struct Searcher<'a> {
 impl<'a> Searcher<'a> {
     #[must_use]
     pub fn new(tt: &'a TranspositionTable, info: &'a mut SearchInfo) -> Self {
-        Self {
-            _nodecount: AtomicU64::new(0),
-            tt,
-            info,
-        }
+        Self { _nodecount: AtomicU64::new(0), tt, info }
     }
     // this attribute is for threads variable which is unused in datagen mode
     #[allow(unused, clippy::too_many_arguments)]
@@ -265,36 +246,21 @@ impl<'a> Searcher<'a> {
         //datagen is already multi-threaded so only search on one thread
         #[cfg(feature = "datagen")]
         {
-            return iterative_deepening::<false>(
-                &mut position.clone(),
-                soft_limit,
-                hard_limit,
-                &mut main_thread,
-            );
+            return iterative_deepening::<false>(&mut position.clone(), soft_limit, hard_limit, &mut main_thread);
         }
 
-        let mut infos = (0..threads - 1)
-            .map(|_| SearchInfo::default())
-            .collect::<Vec<_>>();
+        let mut infos = (0..threads - 1).map(|_| SearchInfo::default()).collect::<Vec<_>>();
 
         #[cfg(not(feature = "datagen"))]
         std::thread::scope(|s| {
-            let main_handle = s.spawn(|| {
-                iterative_deepening::<true>(
-                    &mut position.clone(),
-                    soft_limit,
-                    hard_limit,
-                    &mut main_thread,
-                )
-            });
+            let main_handle = s
+                .spawn(|| iterative_deepening::<true>(&mut position.clone(), soft_limit, hard_limit, &mut main_thread));
 
             for info in infos.iter_mut() {
                 let mut pos = *position;
                 let mut worker = Thread::new(end_time, max_nodes, self.tt, info, &stop);
 
-                s.spawn(move || {
-                    iterative_deepening::<false>(&mut pos, soft_limit, hard_limit, &mut worker)
-                });
+                s.spawn(move || iterative_deepening::<false>(&mut pos, soft_limit, hard_limit, &mut worker));
             }
 
             main_handle.join().expect("error in main thread")

@@ -6,6 +6,7 @@ use crate::movegen::RAY_BETWEEN;
 use crate::nnue::Accumulator;
 use crate::types::OccupancyIndex;
 use crate::types::{Piece, Square};
+use crate::uci::pretty_piece;
 use crate::zobrist::{BLACK_TO_MOVE, EP_KEYS};
 
 pub(crate) type BitBoard = u64;
@@ -17,7 +18,7 @@ pub struct Board {
     pub bitboards: [BitBoard; 12],
     pub pieces_array: [Option<Piece>; 64],
     pub occupancies: [BitBoard; 3], //white, black, both
-    pub castling: u8, //4 bits only should be used 0001 = wk, 0010 = wq, 0100 = bk, 1000 = bq
+    pub castling: u8,               //4 bits only should be used 0001 = wk, 0010 = wq, 0100 = bk, 1000 = bq
     pub en_passant: Option<Square>,
     pub side_to_move: Colour,
     pub fifty_move: u8,
@@ -144,8 +145,7 @@ impl Board {
 
         new_board.fifty_move = flags[3].to_string().parse::<u8>().unwrap();
         let complete_moves = flags[4].to_string().parse::<usize>().unwrap();
-        new_board.ply =
-            (complete_moves - 1) * 2 + (new_board.side_to_move == Colour::Black) as usize;
+        new_board.ply = (complete_moves - 1) * 2 + (new_board.side_to_move == Colour::Black) as usize;
 
         let mut file = 0;
         let mut rank = 7;
@@ -162,8 +162,7 @@ impl Board {
                 b'1' | b'2' | b'3' | b'4' | b'5' | b'6' | b'7' | b'8' => {
                     file += (c - b'0') as usize;
                 }
-                b'P' | b'N' | b'B' | b'R' | b'Q' | b'K' | b'p' | b'n' | b'b' | b'r' | b'q'
-                | b'k' => {
+                b'P' | b'N' | b'B' | b'R' | b'Q' | b'K' | b'p' | b'n' | b'b' | b'r' | b'q' | b'k' => {
                     new_board.bitboards[ascii_to_piece(c as char)] = set_bit(
                         unsafe { Square::from((rank * 8 + file) as u8) },
                         new_board.bitboards[ascii_to_piece(c as char)],
@@ -206,34 +205,7 @@ impl Board {
         for rank in 0..8 {
             for file in 0..8 {
                 let sq = rank * 8 + file;
-                let sq = unsafe { Square::from(sq as u8) };
-                let mut empty = true;
-                for i in 0..self.bitboards.len() {
-                    if (self.bitboards[i] & set_bit(sq, 0)) != 0 {
-                        match i {
-                            0 => squares += "P",
-                            1 => squares += "N",
-                            2 => squares += "B",
-                            3 => squares += "R",
-                            4 => squares += "Q",
-                            5 => squares += "K",
-
-                            6 => squares += "p",
-                            7 => squares += "n",
-                            8 => squares += "b",
-                            9 => squares += "r",
-                            10 => squares += "q",
-                            11 => squares += "k",
-
-                            _ => unreachable!(),
-                        }
-                        empty = false;
-                        break;
-                    }
-                }
-                if empty {
-                    squares += ".";
-                }
+                squares += pretty_piece(self.pieces_array[sq]);
             }
         }
 
@@ -311,28 +283,28 @@ impl Board {
                     }
                     fen += "/";
                 }
-                if pc.is_none() {
-                    empty_count += 1;
-                } else {
+
+                if let Some(p) = pc {
                     if empty_count != 0 {
                         fen += format!("{empty_count}").as_str();
                         empty_count = 0;
                     }
-                    match pc {
-                        Some(Piece::WP) => fen += "P",
-                        Some(Piece::WN) => fen += "N",
-                        Some(Piece::WB) => fen += "B",
-                        Some(Piece::WR) => fen += "R",
-                        Some(Piece::WQ) => fen += "Q",
-                        Some(Piece::WK) => fen += "K",
-                        Some(Piece::BP) => fen += "p",
-                        Some(Piece::BN) => fen += "n",
-                        Some(Piece::BB) => fen += "b",
-                        Some(Piece::BR) => fen += "r",
-                        Some(Piece::BQ) => fen += "q",
-                        Some(Piece::BK) => fen += "k",
-                        _ => unreachable!(),
+                    match p {
+                        Piece::WP => fen += "P",
+                        Piece::WN => fen += "N",
+                        Piece::WB => fen += "B",
+                        Piece::WR => fen += "R",
+                        Piece::WQ => fen += "Q",
+                        Piece::WK => fen += "K",
+                        Piece::BP => fen += "p",
+                        Piece::BN => fen += "n",
+                        Piece::BB => fen += "b",
+                        Piece::BR => fen += "r",
+                        Piece::BQ => fen += "q",
+                        Piece::BK => fen += "k",
                     }
+                } else {
+                    empty_count += 1;
                 }
             }
         }
@@ -341,11 +313,7 @@ impl Board {
             fen += format!("{empty_count}").as_str();
         }
 
-        fen += if self.side_to_move == Colour::White {
-            " w"
-        } else {
-            " b"
-        };
+        fen += if self.side_to_move == Colour::White { " w" } else { " b" };
 
         fen += match self.castling {
             0b0000_0000 => " -",
@@ -376,7 +344,7 @@ impl Board {
         }
 
         fen += format!(" {}", self.fifty_move).as_str();
-        fen += format!(" {}", self.ply % 2 + 1).as_str();
+        fen += format!(" {}", self.ply / 2 + 1).as_str();
 
         fen
     }
@@ -397,21 +365,16 @@ impl Board {
 
         let mut their_attackers = if colour == Colour::White {
             self.occupancies[OccupancyIndex::BlackOccupancies]
-                & ((BISHOP_EDGE_RAYS[our_king]
-                    & (self.bitboards[Piece::BB] | self.bitboards[Piece::BQ]))
-                    | ROOK_EDGE_RAYS[our_king]
-                        & (self.bitboards[Piece::BR] | self.bitboards[Piece::BQ]))
+                & ((BISHOP_EDGE_RAYS[our_king] & (self.bitboards[Piece::BB] | self.bitboards[Piece::BQ]))
+                    | ROOK_EDGE_RAYS[our_king] & (self.bitboards[Piece::BR] | self.bitboards[Piece::BQ]))
         } else {
             self.occupancies[OccupancyIndex::WhiteOccupancies]
-                & ((BISHOP_EDGE_RAYS[our_king]
-                    & (self.bitboards[Piece::WB] | self.bitboards[Piece::WQ]))
-                    | ROOK_EDGE_RAYS[our_king]
-                        & (self.bitboards[Piece::WR] | self.bitboards[Piece::WQ]))
+                & ((BISHOP_EDGE_RAYS[our_king] & (self.bitboards[Piece::WB] | self.bitboards[Piece::WQ]))
+                    | ROOK_EDGE_RAYS[our_king] & (self.bitboards[Piece::WR] | self.bitboards[Piece::WQ]))
         };
 
         while let Some(sq) = lsfb(their_attackers) {
-            let ray_between =
-                RAY_BETWEEN[sq][our_king] & self.occupancies[OccupancyIndex::BothOccupancies];
+            let ray_between = RAY_BETWEEN[sq][our_king] & self.occupancies[OccupancyIndex::BothOccupancies];
             match count(ray_between) {
                 0 => self.checkers |= set_bit(sq, 0),
                 1 => self.pinned |= ray_between,
@@ -450,9 +413,7 @@ impl Board {
             return false;
         }
 
-        if self.bitboards[Piece::WB].count_ones() >= 2
-            || self.bitboards[Piece::BB].count_ones() >= 2
-        {
+        if self.bitboards[Piece::WB].count_ones() >= 2 || self.bitboards[Piece::BB].count_ones() >= 2 {
             return false;
         }
 
@@ -462,10 +423,7 @@ impl Board {
             return false;
         }
 
-        self.bitboards[Piece::WN]
-            .count_ones()
-            .max(self.bitboards[Piece::BN].count_ones())
-            <= 2
+        self.bitboards[Piece::WN].count_ones().max(self.bitboards[Piece::BN].count_ones()) <= 2
     }
 
     //make null move for NMP
@@ -492,21 +450,16 @@ impl Board {
 
         let mut their_attackers = if colour == Colour::White {
             self.occupancies[OccupancyIndex::BlackOccupancies]
-                & ((BISHOP_EDGE_RAYS[our_king]
-                    & (self.bitboards[Piece::BB] | self.bitboards[Piece::BQ]))
-                    | ROOK_EDGE_RAYS[our_king]
-                        & (self.bitboards[Piece::BR] | self.bitboards[Piece::BQ]))
+                & ((BISHOP_EDGE_RAYS[our_king] & (self.bitboards[Piece::BB] | self.bitboards[Piece::BQ]))
+                    | ROOK_EDGE_RAYS[our_king] & (self.bitboards[Piece::BR] | self.bitboards[Piece::BQ]))
         } else {
             self.occupancies[OccupancyIndex::WhiteOccupancies]
-                & ((BISHOP_EDGE_RAYS[our_king]
-                    & (self.bitboards[Piece::WB] | self.bitboards[Piece::WQ]))
-                    | ROOK_EDGE_RAYS[our_king]
-                        & (self.bitboards[Piece::WR] | self.bitboards[Piece::WQ]))
+                & ((BISHOP_EDGE_RAYS[our_king] & (self.bitboards[Piece::WB] | self.bitboards[Piece::WQ]))
+                    | ROOK_EDGE_RAYS[our_king] & (self.bitboards[Piece::WR] | self.bitboards[Piece::WQ]))
         };
 
         while let Some(sq) = lsfb(their_attackers) {
-            let ray_between =
-                RAY_BETWEEN[sq][our_king] & self.occupancies[OccupancyIndex::BothOccupancies];
+            let ray_between = RAY_BETWEEN[sq][our_king] & self.occupancies[OccupancyIndex::BothOccupancies];
             if count(ray_between) == 1 {
                 self.pinned |= ray_between;
             }
@@ -518,18 +471,10 @@ impl Board {
         if let Some(reset) = self.en_passant {
             self.hash_key ^= EP_KEYS[reset];
             self.en_passant = None;
-            return NullMoveUndo {
-                ep: Some(reset),
-                pinned: pinned_reset,
-                hash_key: hash_reset,
-            };
+            return NullMoveUndo { ep: Some(reset), pinned: pinned_reset, hash_key: hash_reset };
         }
 
-        NullMoveUndo {
-            ep: None,
-            pinned: pinned_reset,
-            hash_key: hash_reset,
-        }
+        NullMoveUndo { ep: None, pinned: pinned_reset, hash_key: hash_reset }
     }
 
     pub fn undo_null_move(&mut self, undo: &NullMoveUndo) {
@@ -556,12 +501,7 @@ impl Board {
             return true;
         }
 
-        for &key in self.history[..self.ply - 1]
-            .iter()
-            .rev()
-            .take(self.fifty_move as usize)
-            .step_by(2)
-        {
+        for &key in self.history[..self.ply - 1].iter().rev().take(self.fifty_move as usize).step_by(2) {
             if key == self.hash_key {
                 return true;
                 //return true on one repetition because otherwise the third

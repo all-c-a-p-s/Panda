@@ -11,8 +11,8 @@ use crate::thread::{SearchInfo, Searcher, Thread};
 use crate::transposition::TranspositionTable;
 use crate::types::{Piece, PieceType, Square};
 use crate::{
-    Board, CASTLING_FLAG, Colour, EN_PASSANT_FLAG, INFINITY, Move, MoveData, NO_FLAG,
-    PROMOTION_FLAG, coordinate, encode_move, perft, piece_type, square,
+    Board, CASTLING_FLAG, Colour, EN_PASSANT_FLAG, INFINITY, Move, MoveData, NO_FLAG, PROMOTION_FLAG, coordinate,
+    encode_move, perft, piece_type, square,
 };
 
 static UCI_MODE: AtomicBool = AtomicBool::new(false);
@@ -42,10 +42,7 @@ pub struct UciOptions {
 
 impl Default for UciOptions {
     fn default() -> Self {
-        Self {
-            hash_size: DEFAULT_HASH_SIZE,
-            threads: DEFAULT_THREAD_COUNT,
-        }
+        Self { hash_size: DEFAULT_HASH_SIZE, threads: DEFAULT_THREAD_COUNT }
     }
 }
 
@@ -91,11 +88,7 @@ pub fn recognise_command(words: &[&str]) -> CommandType {
         "go" => {
             assert!(!words.is_empty(), "invalid uci command");
 
-            if words[1] == "perft" {
-                CommandType::Perft
-            } else {
-                CommandType::Go
-            }
+            if words[1] == "perft" { CommandType::Perft } else { CommandType::Go }
         }
         "setoption" => CommandType::SetOption,
         "stop" => CommandType::Stop,
@@ -119,23 +112,15 @@ pub fn parse_move(input: &str, board: &Board) -> Move {
             'r' | 'R' => PieceType::Rook,
             'b' | 'B' => PieceType::Bishop,
             'n' | 'N' => PieceType::Knight,
-            _ => panic!(
-                "invalid promoted piece {}",
-                input.chars().collect::<Vec<char>>()[4]
-            ),
+            _ => panic!("invalid promoted piece {}", input.chars().collect::<Vec<char>>()[4]),
         };
         return encode_move(sq_from, sq_to, Some(promoted_piece), PROMOTION_FLAG);
     }
     if (sq_from == Square::E1 && piece == Piece::WK && (sq_to == Square::G1 || sq_to == Square::C1))
-        || (sq_from == Square::E8
-            && piece == Piece::BK
-            && (sq_to == Square::G8 || sq_to == Square::C8))
+        || (sq_from == Square::E8 && piece == Piece::BK && (sq_to == Square::G8 || sq_to == Square::C8))
     {
         return encode_move(sq_from, sq_to, None, CASTLING_FLAG);
-    } else if board.en_passant.is_some()
-        && board.en_passant.unwrap() == sq_to
-        && piece_type(piece) == PieceType::Pawn
-    {
+    } else if board.en_passant.is_some() && board.en_passant.unwrap() == sq_to && piece_type(piece) == PieceType::Pawn {
         return encode_move(sq_from, sq_to, None, EN_PASSANT_FLAG);
     }
     encode_move(sq_from, sq_to, None, NO_FLAG)
@@ -184,13 +169,7 @@ fn parse_position_words(words: &[&str], b: &mut Board, end: usize) {
             }
         }
         "fen" => {
-            let fen_string = words
-                .iter()
-                .skip(2)
-                .take(6)
-                .copied()
-                .collect::<Vec<_>>()
-                .join(" ");
+            let fen_string = words.iter().skip(2).take(6).copied().collect::<Vec<_>>().join(" ");
             *b = Board::from(&fen_string);
 
             if end != 8 {
@@ -230,10 +209,7 @@ pub fn parse_special_go(
     reset(b);
     assert!((words.len() >= 2), "invalid position command");
 
-    let end_of_moves = words
-        .iter()
-        .position(|x| x.starts_with('w'))
-        .expect("invalid go command");
+    let end_of_moves = words.iter().position(|x| x.starts_with('w')).expect("invalid go command");
 
     parse_position_words(words, b, end_of_moves);
 
@@ -287,15 +263,7 @@ pub fn parse_go(
     };
 
     let mut s = Searcher::new(tt, info);
-    s.start_search(
-        position,
-        engine_time,
-        engine_inc,
-        moves_to_go,
-        movetime,
-        max_nodes,
-        opts.threads,
-    )
+    s.start_search(position, engine_time, engine_inc, moves_to_go, movetime, max_nodes, opts.threads)
 }
 
 fn parse_perft(words: &[&str], position: &mut Board) {
@@ -309,11 +277,7 @@ fn parse_perft(words: &[&str], position: &mut Board) {
             let micros = start.elapsed().as_micros() as usize;
 
             #[allow(clippy::manual_checked_ops)]
-            let nps = if micros == 0 {
-                nodes * 1_000_000
-            } else {
-                nodes * 1_000_000 / micros
-            };
+            let nps = if micros == 0 { nodes * 1_000_000 } else { nodes * 1_000_000 / micros };
 
             let time = micros / 1000;
 
@@ -382,11 +346,7 @@ fn pretty_score(eval: i32) -> String {
     let is_mate = eval.abs() > INFINITY - 100;
 
     let s = if is_mate {
-        if eval > 0 {
-            format!("#{}", (INFINITY - eval + 1) / 2)
-        } else {
-            format!("#-{}", (INFINITY + eval + 1) / 2)
-        }
+        if eval > 0 { format!("#{}", (INFINITY - eval + 1) / 2) } else { format!("#-{}", (INFINITY + eval + 1) / 2) }
     } else {
         format!("{:+.2}", eval as f32 / 100.0)
     };
@@ -404,7 +364,7 @@ fn pretty_score(eval: i32) -> String {
     format!("\x1b[1;38;2;{r};{g};{b}m{s}{RESET}")
 }
 
-fn pretty_piece(piece: Option<Piece>) -> &'static str {
+pub fn pretty_piece(piece: Option<Piece>) -> &'static str {
     match piece {
         // assume they are using dark mode
         Some(Piece::WP) => "♟",
@@ -456,34 +416,21 @@ impl Board {
 }
 
 pub fn print_thinking(depth: u8, eval: i32, s: &Thread, start: Instant) {
-    let pv = s.pv[0]
-        .iter()
-        .take(s.pv_length[0])
-        .map(|m| m.uci())
-        .collect::<Vec<_>>()
-        .join(" ");
+    let pv = s.pv[0].iter().take(s.pv_length[0]).map(|m| m.uci()).collect::<Vec<_>>().join(" ");
 
     if UCI_MODE.load(Ordering::Relaxed) {
         let time = start.elapsed().as_millis();
         let micros = start.elapsed().as_micros() as usize;
 
         #[allow(clippy::manual_checked_ops)]
-        let nps = if micros == 0 {
-            s.nodes * 1_000_000
-        } else {
-            s.nodes * 1_000_000 / micros
-        };
+        let nps = if micros == 0 { s.nodes * 1_000_000 } else { s.nodes * 1_000_000 / micros };
 
         println!(
             "info depth {} seldepth {} score cp {} nodes {} pv {} time {} nps {}",
             depth, s.seldepth, eval, s.nodes, pv, time, nps
         );
     } else {
-        println!(
-            "{depth:>2}/{seldepth:<2} {score:>20}  {pv}",
-            seldepth = s.seldepth,
-            score = pretty_score(eval),
-        );
+        println!("{depth:>2}/{seldepth:<2} {score:>20}  {pv}", seldepth = s.seldepth, score = pretty_score(eval),);
     }
 }
 

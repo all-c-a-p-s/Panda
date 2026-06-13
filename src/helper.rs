@@ -47,11 +47,7 @@ pub const fn set_bit(square: Square, bitboard: BitBoard) -> BitBoard {
 #[inline(always)]
 #[must_use]
 pub const fn get_bit(square: Square, bitboard: BitBoard) -> usize {
-    if bitboard & (1 << square as u8) != 0 {
-        1
-    } else {
-        0
-    }
+    if bitboard & (1 << square as u8) != 0 { 1 } else { 0 }
 }
 
 #[inline(always)]
@@ -72,11 +68,7 @@ pub const fn count(bitboard: BitBoard) -> usize {
 #[inline(always)]
 #[must_use]
 pub const fn lsfb(bitboard: BitBoard) -> Option<Square> {
-    if bitboard != 0 {
-        Some(unsafe { Square::from(bitboard.trailing_zeros() as u8) })
-    } else {
-        None
-    }
+    if bitboard != 0 { Some(unsafe { Square::from(bitboard.trailing_zeros() as u8) }) } else { None }
 }
 
 #[must_use]
