@@ -1,5 +1,6 @@
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
+use rand::*;
 use std::fmt::{self, Display};
 use std::io::Write;
 use std::sync::atomic::AtomicBool;
@@ -13,7 +14,12 @@ use crate::transposition::TranspositionTable;
 use crate::types::OccupancyIndex;
 use crate::{Board, Colour, INFINITY, Move, MoveList, STARTPOS, iterative_deepening};
 
-const OPENING_CP_MARGIN: i32 = 20;
+// I think it makes sense to have to variation in how weird the positions will be.
+// Hence, we will pick a centipawn margin for each game and then when selecting opening moves,
+// we randomly choose from the set of all moves that lose this margin or less (based on a shallow
+// search).
+const MIN_OPENING_CP_MARGIN: i32 = 20;
+const MAX_OPENING_CP_MARGIN: i32 = 200;
 const OPENING_PLIES: usize = 16;
 
 const BATCH_SIZE: usize = 64;
@@ -85,7 +91,12 @@ impl Node {
         self.value = move_data.eval;
     }
 
-    pub fn choose_opening_move(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) {
+    pub fn choose_opening_move(
+        &mut self,
+        tt: &TranspositionTable,
+        info: &mut SearchInfo,
+        margin: i32,
+    ) {
         let mut movelist = MoveList::empty();
         movelist.gen_moves(&self.position, MovegenMode::All);
 
@@ -126,7 +137,7 @@ impl Node {
         let (s, chosen_move) = {
             let candidates = scores
                 .iter()
-                .filter(|&x| best_score - OPENING_CP_MARGIN <= x.0)
+                .filter(|&x| best_score - margin <= x.0)
                 .copied()
                 .collect::<Vec<(i32, Move)>>();
 
@@ -165,7 +176,13 @@ impl Game {
         Self { positions: vec![n] }
     }
 
-    fn next(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) -> Result<bool, ()> {
+    fn next(
+        &mut self,
+        tt: &TranspositionTable,
+        info: &mut SearchInfo,
+        opening_length: usize,
+        opening_cp_margin: i32,
+    ) -> Result<bool, ()> {
         let mut pos = self.positions.last().unwrap().position;
         let movelist = MoveList::gen_legal(&mut pos);
         let repetition_table = self
@@ -187,9 +204,8 @@ impl Game {
             return Ok(false);
         }
 
-        // randomise black/white exit
-        if pos.ply < OPENING_PLIES + rand::random::<usize>() % 2 {
-            leaf.choose_opening_move(tt, info);
+        if pos.ply < opening_length {
+            leaf.choose_opening_move(tt, info, opening_cp_margin);
         } else {
             leaf.choose_move(tt, info);
         }
@@ -206,13 +222,13 @@ impl Game {
     }
 
     #[must_use]
-    pub fn generate() -> Option<Self> {
+    pub fn generate(opening_length: usize, opening_cp_margin: i32) -> Option<Self> {
         let tt = TranspositionTable::in_megabytes(16);
         let mut info = SearchInfo::default();
 
         let mut g = Self::new();
         loop {
-            let r = g.next(&tt, &mut info);
+            let r = g.next(&tt, &mut info, opening_length, opening_cp_margin);
             if let Ok(q) = r {
                 if !q {
                     break;
@@ -228,7 +244,7 @@ impl Game {
     // the purpose of the backtracking algorithm is to try to use the information we gained by
     // playing the game to more accurately score the nodes in the game
     fn backtrack(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) {
-        use rand::Rng;
+        use Rng;
         let wdl = |x: i32| -> f32 { 1.0 / (1.0 + ((-x as f32) * 2.55 / 400.0).exp()) };
 
         for ply in (OPENING_PLIES..self.positions.len()).rev() {
@@ -343,10 +359,16 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
 
     let mut attempts = 0;
 
+    let opening_length = OPENING_PLIES + random::<usize>() % 2;
+    let opening_cp_margin = (random::<i32>().abs()
+        % (MAX_OPENING_CP_MARGIN - MIN_OPENING_CP_MARGIN))
+        + MIN_OPENING_CP_MARGIN;
+
     let mut try_game = None;
     while try_game.is_none() {
         assert!((attempts < 3), "failing to find moves too often...");
-        try_game = Game::generate();
+        // randomise whether we exit with black or white to move
+        try_game = Game::generate(opening_length, opening_cp_margin);
         attempts += 1;
     }
 
@@ -358,7 +380,7 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
         .positions
         .iter()
         .take(g.positions.len() - 1)
-        .skip(OPENING_PLIES)
+        .skip(opening_length)
     {
         let quiet = n.position.checkers == 0 && !n.choice.unwrap().is_capture(&n.position);
         let within_bounds = n.value.abs() < i16::MAX as i32;
