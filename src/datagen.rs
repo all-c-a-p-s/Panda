@@ -11,7 +11,7 @@ use crate::thread::SearchInfo;
 use crate::thread::{Searcher, Thread};
 use crate::transposition::TranspositionTable;
 use crate::types::OccupancyIndex;
-use crate::{Board, Colour, INFINITY, Move, MoveList, NULL_MOVE, STARTPOS, iterative_deepening};
+use crate::{Board, Colour, INFINITY, Move, MoveList, STARTPOS, iterative_deepening};
 
 const OPENING_CP_MARGIN: i32 = 20;
 const OPENING_PLIES: usize = 16;
@@ -89,8 +89,6 @@ impl Node {
         let mut movelist = MoveList::empty();
         movelist.gen_moves(&self.position, MovegenMode::All);
 
-        let (mut s, mut chosen_move) = (0, NULL_MOVE);
-
         let mut best_score = -INFINITY;
 
         // in the opening do a very shallow search of all legal moves in the root
@@ -107,31 +105,35 @@ impl Node {
             };
 
             let stop = AtomicBool::new(false);
+            // the time/node limits are intentionally high here (won't be reached)
+            // because we don't want to just hit them and return zero
             let mut t = Thread::new(
-                Instant::now() + Duration::from_millis(1),
-                4096,
+                Instant::now() + Duration::from_millis(10),
+                INFINITY as usize,
                 tt,
                 info,
                 &stop,
             );
 
             let score = -t.negamax(&mut self.position, 4, -INFINITY, INFINITY, false);
+
             scores.push((score, m));
             best_score = best_score.max(score);
 
             self.position.undo_move(m, &commit);
-
-            (s, chosen_move) = {
-                let candidates = scores
-                    .iter()
-                    .filter(|&x| best_score - OPENING_CP_MARGIN <= x.0)
-                    .copied()
-                    .collect::<Vec<(i32, Move)>>();
-
-                let i = rand::random::<usize>() % candidates.len();
-                candidates[i]
-            };
         }
+
+        let (s, chosen_move) = {
+            let candidates = scores
+                .iter()
+                .filter(|&x| best_score - OPENING_CP_MARGIN <= x.0)
+                .copied()
+                .collect::<Vec<(i32, Move)>>();
+
+            let i = rand::random::<usize>() % candidates.len();
+
+            candidates[i]
+        };
 
         self.value = s;
         self.choice = Some(chosen_move);
@@ -185,7 +187,8 @@ impl Game {
             return Ok(false);
         }
 
-        if pos.ply < OPENING_PLIES {
+        // randomise black/white exit
+        if pos.ply < OPENING_PLIES + rand::random::<usize>() % 2 {
             leaf.choose_opening_move(tt, info);
         } else {
             leaf.choose_move(tt, info);
@@ -424,9 +427,8 @@ fn next_checkpoint(path: &str, duration: Duration) -> Result<i32, std::io::Error
     let mut added = 0;
 
     let thread_count = match std::thread::available_parallelism() {
-        Ok(n) if n.get() > 1 => n.get() - 1, // leave one core for the OS
         Ok(n) => n.get(),
-        Err(_) => 1, // fallback to single thread
+        Err(_) => 1,
     };
 
     let start = Instant::now();
@@ -450,9 +452,6 @@ fn next_checkpoint(path: &str, duration: Duration) -> Result<i32, std::io::Error
         }
 
         pb.set_position(start.elapsed().as_secs());
-
-        std::thread::sleep(Duration::from_millis(10));
-        //apprently this might help cpus to not overheat ... idk
     }
     pb.finish();
 
