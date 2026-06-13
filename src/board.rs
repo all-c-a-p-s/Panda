@@ -1,7 +1,7 @@
 use crate::MAX_GAME_PLY;
 use crate::eval::evaluate;
 use crate::helper::{coordinate, count, lsfb, pop_bit, set_bit, square};
-use crate::magic::{BISHOP_EDGE_RAYS, ROOK_EDGE_RAYS};
+use crate::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS};
 use crate::movegen::RAY_BETWEEN;
 use crate::nnue::Accumulator;
 use crate::types::OccupancyIndex;
@@ -418,6 +418,17 @@ impl Board {
                 _ => {}
             }
             their_attackers = pop_bit(sq, their_attackers);
+        }
+
+        match colour {
+            Colour::White => {
+                self.checkers |= WP_ATTACKS[our_king] & self.bitboards[Piece::BP];
+                self.checkers |= N_ATTACKS[our_king] & self.bitboards[Piece::BN];
+            }
+            Colour::Black => {
+                self.checkers |= BP_ATTACKS[our_king] & self.bitboards[Piece::WP];
+                self.checkers |= N_ATTACKS[our_king] & self.bitboards[Piece::WN];
+            }
         }
     }
 

@@ -1,0 +1,416 @@
+uci
+isready
+ucinewgame
+
+position fen r2q1rk1/pp2ppbp/n2p1np1/2pP4/4PPb1/2NB1N2/PPP3PP/R1BQ1RK1 w - - 1 1
+go movetime 1000
+
+position fen r2q1rk1/p3ppbp/p2p1np1/2pP4/4PPb1/2N2N2/PPP3PP/R1BQ1RK1 w - - 0 1
+go movetime 1000
+
+position fen r1bq1rk1/p3ppbp/p2p1np1/2pP4/4PP2/2N2N1P/PPP3P1/R1BQ1RK1 w - - 1 1
+go movetime 1000
+
+position fen r1b2rk1/p3ppbp/pq1p1np1/2pP4/4PP2/2NQ1N1P/PPP3P1/R1B2RK1 w - - 3 1
+go movetime 1000
+
+position fen r1b2rk1/p3ppbp/pq1p1np1/3P4/2p1PP2/2NQ1N1P/PPP3P1/1RB2RK1 w - - 0 1
+go movetime 1000
+
+position fen r1b1r1k1/p3ppbp/pq1p1np1/3P4/2p1PP2/2N1QN1P/PPP3P1/1RB2RK1 w - - 2 1
+go movetime 1000
+
+position fen r3r1k1/pb2ppbp/pq1p1np1/3P4/2p1PP2/2N1QN1P/PPP3P1/1RBR2K1 w - - 4 1
+go movetime 1000
+
+position fen r3r1k1/pb2ppbp/pq1p1np1/3P4/4PP2/1pN1QN1P/P1P3P1/1RBR2K1 w - - 0 1
+go movetime 1000
+
+position fen r3r1k1/pbq1ppbp/p2p1np1/3P4/4PP2/1RN1QN1P/P1P3P1/2BR2K1 w - - 1 1
+go movetime 1000
+
+position fen r3r1k1/pbqnppbp/p2p2p1/3PP3/5P2/1RN1QN1P/P1P3P1/2BR2K1 w - - 1 1
+go movetime 1000
+
+position fen r3r1k1/pbqnp1bp/p2pp1p1/3P4/5P2/1RN1QN1P/P1P3P1/2BR2K1 w - - 0 1
+go movetime 1000
+
+position fen r3rnk1/pbq1p1bp/p2pp1p1/3P2N1/5P2/1RN1Q2P/P1P3P1/2BR2K1 w - - 2 1
+go movetime 1000
+
+position fen r3r1k1/pbq1p1bp/p2pn1p1/3P4/5P2/1RN1Q2P/P1P3P1/2BR2K1 w - - 0 1
+go movetime 1000
+
+position fen r3r2k/pbq1p1bp/p2pQ1p1/3P4/5P2/1RN4P/P1P3P1/2BR2K1 w - - 1 1
+go movetime 1000
+
+position fen 3rr2k/pbq1p1bp/p2pQ1p1/3P4/5P2/1RN4P/PBP3P1/3R2K1 w - - 3 1
+go movetime 1000
+
+position fen 2brr2k/p1q1p1bp/p2p2p1/3P4/5P2/1RN1Q2P/PBP3P1/3R2K1 w - - 5 1
+go movetime 1000
+
+position fen 2brr2k/p1q1p2p/p2p2p1/3P4/4NP2/1R2Q2P/PbP3P1/3R2K1 w - - 0 1
+go movetime 1000
+
+position fen 3rr2k/p1q1p2p/p2p2p1/3P1b2/4NP2/4Q2P/PRP3P1/3R2K1 w - - 1 1
+go movetime 1000
+
+position fen 3rr1k1/p1q1p2p/p2p2p1/3P1b2/3QNP2/7P/PRP3P1/3R2K1 w - - 3 1
+go movetime 1000
+
+position fen 3rr1k1/p1q1p2p/p2p2p1/3P4/2PQbP2/7P/PR4P1/3R2K1 w - - 0 1
+go movetime 1000
+
+position fen 2r1r1k1/p1q1p2p/p2p2p1/3P4/2P1QP2/7P/PR4P1/3R2K1 w - - 1 1
+go movetime 1000
+
+position fen 2r2rk1/p1q1p2p/p2p2p1/3P4/2P1QP2/7P/P1R3P1/3R2K1 w - - 3 1
+go movetime 1000
+
+position fen 2r3k1/p1q1pr1p/p2p2p1/3P4/2P1QP2/7P/P1R3PK/3R4 w - - 5 1
+go movetime 1000
+
+position fen 5rk1/p1q1pr1p/p2p2p1/3P4/2P1QP2/3R3P/P1R3PK/8 w - - 7 1
+go movetime 1000
+
+position fen 5rk1/p1q1p2p/p2p2p1/3P1r2/2P1QP2/5R1P/P1R3PK/8 w - - 9 1
+go movetime 1000
+
+position fen 6k1/p1q1pr1p/p2p2p1/3P1r2/2P1QP2/2R2R1P/P5PK/8 w - - 11 1
+go movetime 1000
+
+position fen 6k1/p3pr1p/p2p2p1/2qP1r2/2P1QP2/4RR1P/P5PK/8 w - - 13 1
+go movetime 1000
+
+position fen 6k1/p1q1pr1p/p2p2p1/3P1r2/2P1QP2/1R3R1P/P5PK/8 w - - 15 1
+go movetime 1000
+
+position fen 5rk1/p1q1p2p/p2p2p1/3P1r2/2P1QP2/5R1P/PR4PK/8 w - - 17 1
+go movetime 1000
+
+position fen 5rk1/p1q1pr1p/p2p2p1/3P4/1RP1QP2/5R1P/P5PK/8 w - - 19 1
+go movetime 1000
+
+position fen 5rk1/p1q1pr1p/3p2p1/p2P4/2P1QP2/1R3R1P/P5PK/8 w - - 0 1
+go movetime 1000
+
+position fen 2r3k1/p1q1pr1p/3p2p1/p2P4/2P1QP2/1R3RKP/P5P1/8 w - - 2 1
+go movetime 1000
+
+position fen 2r5/p1q1prkp/3p2p1/p2P4/2P1QP2/2R2RKP/P5P1/8 w - - 4 1
+go movetime 1000
+
+position fen 5r2/p1q1prkp/3p2p1/p2P1P2/2P1Q3/2R2RKP/P5P1/8 w - - 1 1
+go movetime 1000
+
+position fen 5r2/p1q1prk1/3p2p1/p2P4/2P1Q3/2R2RKP/P5P1/8 w - - 0 1
+go movetime 1000
+
+position fen 5r2/p3prk1/3p2p1/p1qP4/2P1Q3/2R1R1KP/P5P1/8 w - - 2 1
+go movetime 1000
+
+position fen 5r2/p1q1prk1/3p2p1/p2P4/2P3Q1/2R1R1KP/P5P1/8 w - - 4 1
+go movetime 1000
+
+position fen 5r2/p1q1p1k1/3pRrp1/p2P4/2P3Q1/2R3KP/P5P1/8 w - - 6 1
+go movetime 1000
+
+position fen 8/p1q1prk1/3pRrp1/p2P4/2PQ4/2R3KP/P5P1/8 w - - 8 1
+go movetime 1000
+
+position fen 8/p1q1prk1/3pRrp1/3P4/p1PQ4/4R1KP/P5P1/8 w - - 0 1
+go movetime 1000
+
+position fen 8/p3prk1/1q1pRrp1/3P4/p1PQ4/4R2P/P5PK/8 w - - 2 1
+go movetime 1000
+
+position fen 3q4/p3prk1/3pRrp1/3P4/p1P5/3QR2P/P5PK/8 w - - 4 1
+go movetime 1000
+
+position fen 8/p2qprk1/3p1rp1/3P4/p1P1R3/3QR2P/P5PK/8 w - - 6 1
+go movetime 1000
+
+position fen 8/p3prk1/3p1rp1/3P1q2/p1P1R3/3Q2RP/P5PK/8 w - - 8 1
+go movetime 1000
+
+position fen 8/p3prk1/3p1rp1/3P4/p1P1R3/4Q1RP/P5PK/5q2 w - - 10 1
+go movetime 1000
+
+position fen 8/4prk1/3p1rp1/p2P4/p1P3R1/4Q1RP/P5PK/5q2 w - a6 0 1
+go movetime 1000
+
+position fen 8/4prk1/3p1rp1/p2P1q2/p1P3R1/2Q3RP/P5PK/8 w - - 2 1
+go movetime 1000
+
+position fen 8/4prk1/3p1rq1/p2P4/p1P5/2Q3RP/P5PK/8 w - - 0 1
+go movetime 1000
+
+position fen 8/4prk1/5rq1/p1pP4/p7/2Q3RP/P5PK/8 w - - 0 1
+go movetime 1000
+
+position fen 8/4prk1/5r2/p1pP4/p7/P1Q3qP/6PK/8 w - - 0 1
+go movetime 1000
+
+position fen 8/4pr1k/5r2/p1pP4/p7/P1Q3KP/6P1/8 w - - 1 1
+go movetime 1000
+
+position fen 6k1/4pr2/5r2/p1QP4/p7/P5KP/6P1/8 w - - 1 1
+go movetime 1000
+
+position fen 6k1/4pr2/8/p1QP4/p7/P6P/5rPK/8 w - - 3 1
+go movetime 1000
+
+position fen 2Q5/4pr1k/8/p2P4/p7/P6P/5rPK/8 w - - 5 1
+go movetime 1000
+
+position fen 6k1/4pr2/8/p2P4/p1Q5/P6P/5rPK/8 w - - 7 1
+go movetime 1000
+
+position fen 6k1/4pr2/8/p2P4/p1Q2r2/P6P/6P1/6K1 w - - 9 1
+go movetime 1000
+
+position fen 2Q5/4prk1/8/p2P4/p4r2/P6P/6P1/6K1 w - - 11 1
+go movetime 1000
+
+position fen 5k2/4pr2/8/p1QP4/p4r2/P6P/6P1/6K1 w - - 13 1
+go movetime 1000
+
+position fen 5k2/4p3/5r2/p1QP4/p4r2/P6P/6PK/8 w - - 15 1
+go movetime 1000
+
+position fen 5k2/4p3/5r2/p1QP4/p3r3/P5KP/6P1/8 w - - 17 1
+go movetime 1000
+
+position fen 6k1/4p3/5r2/p2P4/p3r3/P1Q3KP/6P1/8 w - - 19 1
+go movetime 1000
+
+position fen 6k1/4p3/5r2/p2P4/p4r2/P1Q4P/6PK/8 w - - 21 1
+go movetime 1000
+
+position fen 5k2/4p3/5r2/p2P4/p4r2/P5QP/6PK/8 w - - 23 1
+go movetime 1000
+
+position fen 5k2/4p3/3r4/p2P4/p4r2/P2Q3P/6PK/8 w - - 25 1
+go movetime 1000
+
+position fen 5k2/4p3/3r1r2/p2P4/p7/P2Q2KP/6P1/8 w - - 27 1
+go movetime 1000
+
+position fen 5k2/8/3rpr2/p2P4/p6P/P2Q2K1/6P1/8 w - - 0 1
+go movetime 1000
+
+position fen 5k2/8/4pr2/p2r4/p6P/P2Q4/6PK/8 w - - 0 1
+go movetime 1000
+
+position fen 5k2/8/4p3/p2r4/p4r1P/P1Q5/6PK/8 w - - 2 1
+go movetime 1000
+
+position fen 2Q5/6k1/4p3/p2r4/p4r1P/P7/6PK/8 w - - 4 1
+go movetime 1000
+
+position fen 8/2Q2rk1/4p3/p2r4/p6P/P7/6PK/8 w - - 6 1
+go movetime 1000
+
+position fen 5k2/5r2/4p3/p2r4/p6P/P1Q5/6PK/8 w - - 8 1
+go movetime 1000
+
+position fen 5k2/5r2/4p3/p4r2/p6P/P1Q4K/6P1/8 w - - 10 1
+go movetime 1000
+
+position fen 2Q5/4kr2/4p3/p4r2/p6P/P6K/6P1/8 w - - 12 1
+go movetime 1000
+
+position fen 5k2/2Q2r2/4p3/p4r2/p6P/P6K/6P1/8 w - - 14 1
+go movetime 1000
+
+position fen 8/5rk1/3Qp3/p4r2/p6P/P6K/6P1/8 w - - 16 1
+go movetime 1000
+
+position fen 8/5r1k/4Q3/p4r2/p6P/P6K/6P1/8 w - - 1 1
+go movetime 1000
+
+position fen 8/5r1k/4Q3/p6r/p7/P6K/6P1/8 w - - 0 1
+go movetime 1000
+
+position fen 8/7k/4Q3/p4r1r/p5K1/P7/6P1/8 w - - 2 1
+go movetime 1000
+
+position fen 8/7k/8/p4r2/p5K1/P7/6P1/8 w - - 0 1
+go movetime 1000
+
+position fen 8/8/7k/p4K2/p7/P7/6P1/8 w - - 1 1
+go movetime 1000
+
+position fen 8/7k/8/p4K2/p5P1/P7/8/8 w - - 1 1
+go movetime 1000
+
+position fen 7k/8/5K2/p7/p5P1/P7/8/8 w - - 3 1
+go movetime 1000
+
+position fen 8/5K1k/8/p7/p5P1/P7/8/8 w - - 5 1
+go movetime 1000
+
+position fen 7k/5K2/8/p5P1/p7/P7/8/8 w - - 1 1
+go movetime 1000
+
+position fen 6k1/8/6K1/p5P1/p7/P7/8/8 w - - 3 1
+go movetime 1000
+
+position fen 8/5k2/7K/p5P1/p7/P7/8/8 w - - 5 1
+go movetime 1000
+
+position fen 8/8/4k1PK/p7/p7/P7/8/8 w - - 1 1
+go movetime 1000
+
+position fen 8/6P1/7K/p2k4/p7/P7/8/8 w - - 1 1
+go movetime 1000
+
+position fen 8/6P1/6K1/p7/p2k4/P7/8/8 w - - 3 1
+go movetime 1000
+
+position fen 8/6P1/8/p4K2/p7/P1k5/8/8 w - - 5 1
+go movetime 1000
+
+position fen 8/6P1/8/p7/p1k1K3/P7/8/8 w - - 7 1
+go movetime 1000
+
+position fen 6Q1/8/8/p1k5/p3K3/P7/8/8 w - - 1 1
+go movetime 1000
+
+position fen 6Q1/8/2k5/p3K3/p7/P7/8/8 w - - 3 1
+go movetime 1000
+
+position fen 2Q5/8/1k6/p3K3/p7/P7/8/8 w - - 5 1
+go movetime 1000
+
+position fen 2Q5/k7/4K3/p7/p7/P7/8/8 w - - 7 1
+go movetime 1000
+
+position fen 2Q5/8/1k1K4/p7/p7/P7/8/8 w - - 9 1
+go movetime 1000
+
+position fen Q7/8/3K4/pk6/p7/P7/8/8 w - - 11 1
+go movetime 1000
+
+isready
+ucinewgame
+
+position fen rnbq1rk1/ppp1b1pp/3pp3/8/2PPp3/6P1/PP1NPPBP/R1BQ1RK1 b - - 1 2
+go movetime 1000
+
+position fen rnbq1rk1/ppp1b1pp/4p3/3p4/2PPp3/5PP1/PP1NP1BP/R1BQ1RK1 b - - 0 2
+go movetime 1000
+
+position fen rnbq1rk1/ppp3pp/4pb2/3p4/2PPp3/4PPP1/PP1N2BP/R1BQ1RK1 b - - 0 2
+go movetime 1000
+
+position fen rnbq1rk1/ppp3pp/4pb2/3p4/2PP4/4PNP1/PP4BP/R1BQ1RK1 b - - 0 2
+go movetime 1000
+
+position fen rnbq1rk1/p1p3pp/1p2pb2/3pN3/2PP4/4P1P1/PP4BP/R1BQ1RK1 b - - 1 2
+go movetime 1000
+
+position fen rnbq1rk1/p5pp/1pp1pb2/3pN3/1PPP4/4P1P1/P5BP/R1BQ1RK1 b - b3 0 2
+go movetime 1000
+
+position fen rnbq1Rk1/p5pp/1pp1p3/3pb3/1PPP4/4P1P1/P5BP/R1BQ2K1 b - - 0 2
+go movetime 1000
+
+position fen rnb2qk1/p5pp/1pp1p3/3pP3/1PP5/4P1P1/P5BP/R1BQ2K1 b - - 0 2
+go movetime 1000
+
+position fen r1b2qk1/p5pp/npp1p3/3PP3/1P6/4P1P1/P5BP/R1BQ2K1 b - - 0 2
+go movetime 1000
+
+position fen r1b2qk1/p5pp/np2p3/3pP3/1P6/P3P1P1/6BP/R1BQ2K1 b - - 0 2
+go movetime 1000
+
+position fen r1b1q1k1/p5pp/np2p3/3pP3/1P6/P3P1P1/1B4BP/R2Q2K1 b - - 2 2
+go movetime 1000
+
+position fen r3q1k1/p2b2pp/np2p3/3pP3/1P2P3/P5P1/1B4BP/R2Q2K1 b - - 0 2
+go movetime 1000
+
+position fen r3q1k1/p5pp/np2p3/3pP3/bP1QP3/P5P1/1B4BP/R5K1 b - - 2 2
+go movetime 1000
+
+position fen r3q1k1/p5pp/np2p3/4P3/bP1Qp3/P5P1/1B4BP/2R3K1 b - - 1 2
+go movetime 1000
+
+position fen 3rq1k1/p5pp/np2p3/4P3/bP2Q3/P5P1/1B4BP/2R3K1 b - - 0 2
+go movetime 1000
+
+position fen 4q1k1/p2r2pp/np2p3/4P3/bP2Q3/P5P1/1B5P/2R2BK1 b - - 2 2
+go movetime 1000
+
+position fen 4q1k1/p1nr2pp/1p2p3/4P3/bP2Q3/P2B2P1/1B5P/2R3K1 b - - 4 2
+go movetime 1000
+
+position fen 4q1k1/p1nr3p/1p2p1p1/4P3/bP2Q3/P5P1/1B5P/2R2BK1 b - - 1 2
+go movetime 1000
+
+position fen 4q1k1/p1nr3p/1p2p1p1/1b2P3/1P2Q3/P5P1/1B4BP/2R3K1 b - - 3 2
+go movetime 1000
+
+position fen 5qk1/p1nr3p/1p2p1p1/1b2P3/1P5Q/P5P1/1B4BP/2R3K1 b - - 5 2
+go movetime 1000
+
+position fen 5qk1/p2r3p/1p2p1p1/1b1nP1Q1/1P6/P5P1/1B4BP/2R3K1 b - - 7 2
+go movetime 1000
+
+position fen 5q2/p2r2kp/1p2p1p1/1b1nP1Q1/1P6/P5P1/1B4BP/3R2K1 b - - 9 2
+go movetime 1000
+
+position fen 5q2/p2r2k1/1p2p1pp/1b1nP3/1P4Q1/P5P1/1B4BP/3R2K1 b - - 1 2
+go movetime 1000
+
+position fen 8/p2r1qk1/1p2p1pp/1b1nP3/1P2B1Q1/P5P1/1B5P/3R2K1 b - - 3 2
+go movetime 1000
+
+position fen 8/p2rnqk1/1p2p1pp/1b2P3/1P2B3/P4QP1/1B5P/3R2K1 b - - 5 2
+go movetime 1000
+
+position fen 8/p2R1qk1/1p2p1pp/1b2Pn2/1P2B3/P4QP1/1B5P/6K1 b - - 0 2
+go movetime 1000
+
+position fen 8/p2q2k1/1p2p1pp/1b2Pn2/1P2B1P1/P4Q2/1B5P/6K1 b - - 0 2
+go movetime 1000
+
+position fen 8/p2q2k1/1p2pQpp/1b2P3/1P2B1Pn/P7/1B5P/6K1 b - - 2 2
+go movetime 1000
+
+position fen 6k1/p2q4/1p2pQpp/1b2P3/1P4Pn/P7/1BB4P/6K1 b - - 4 2
+go movetime 1000
+
+position fen 6k1/p7/1pq1p1pp/1b2P3/1P4PQ/P7/1BB4P/6K1 b - - 0 2
+go movetime 1000
+
+position fen 3Q2k1/p7/1p2p1pp/1b2P3/1P4P1/P7/1Bq4P/6K1 b - - 1 2
+go movetime 1000
+
+position fen 8/p4k2/1p2pQpp/1b2P3/1P4P1/P7/1Bq4P/6K1 b - - 3 2
+go movetime 1000
+
+position fen 4k3/p7/1p2Q1pp/1b2P3/1P4P1/P7/1Bq4P/6K1 b - - 0 2
+go movetime 1000
+
+position fen 3k4/p7/1p4pp/1b1QP3/1P4P1/P7/1Bq4P/6K1 b - - 2 2
+go movetime 1000
+
+position fen 3k4/p2b4/1p2P1pp/3Q4/1P4P1/P7/1Bq4P/6K1 b - - 0 2
+go movetime 1000
+
+position fen 3k4/p2b4/1p2P1pp/3Q4/1P4P1/P7/1B3K1P/1q6 b - - 2 2
+go movetime 1000
+
+position fen 3k4/p2b4/1p2P1pp/3Q4/1P4P1/P7/1q5P/4K3 b - - 1 2
+go movetime 1000
+
+position fen 3k4/p2b4/1p2P1pp/3Q4/1P4P1/P1q5/4K2P/8 b - - 3 2
+go movetime 1000
+
+position fen 3k4/p2b4/1p2P1pp/3Q4/1P4P1/P3K3/2q4P/8 b - - 5 2
+go movetime 1000
+
+quit

@@ -1,3 +1,4 @@
+pub mod bench;
 pub mod board;
 pub mod datagen;
 pub mod eval;
@@ -21,6 +22,7 @@ pub(crate) mod search_macros;
 
 use std::error::Error;
 
+use crate::bench::prepare_bench;
 use crate::board::{BitBoard, Board, Colour};
 use crate::datagen::gen_data;
 use crate::helper::{MAX_MOVES, coordinate, lsfb, piece_type, pop_bit, set_bit, square};
@@ -40,6 +42,7 @@ fn init_all() {
 #[allow(dead_code)]
 enum Mode {
     Profile,
+    Prep,
     Debug,
     Datagen,
     Uci,
@@ -63,6 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "datagen" => Mode::Datagen,
         "profile" => Mode::Profile,
         "debug" => Mode::Debug,
+        "prep" => Mode::Prep,
         _ => Mode::Uci,
     };
 
@@ -70,6 +74,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Mode::Uci => uci_loop(),
         Mode::Profile => full_perft(),
         Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(ONE_HOUR * 100))?,
+        Mode::Prep => prepare_bench()?,
         Mode::Debug => {}
     }
 
