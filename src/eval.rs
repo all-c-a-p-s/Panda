@@ -1,5 +1,6 @@
 use crate::board::{Board, Colour};
 use crate::helper::rank;
+use crate::nnue::Accumulator;
 use crate::search::MATE;
 
 use crate::types::{Piece, Square};
@@ -57,8 +58,8 @@ fn side_has_sufficient_material(b: &Board, side: Colour) -> bool {
 }
 
 #[must_use]
-pub fn evaluate(b: &Board) -> i32 {
-    let s = b.nnue.evaluate(b.side_to_move);
+pub fn evaluate(b: &Board, acc: &Accumulator) -> i32 {
+    let s = acc.evaluate(b.side_to_move);
 
     let side_sm = side_has_sufficient_material(b, b.side_to_move);
     let opp_sm = side_has_sufficient_material(b, b.side_to_move.opponent());

@@ -43,7 +43,7 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
             writeln!(file, "go movetime 1000\n")?;
         }
 
-        b.play_unchecked(r.m);
+        b.play_unchecked(r.m, Some(&mut info.stck));
         b.pretty_print_board();
     }
 
@@ -69,7 +69,7 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
             writeln!(file, "go movetime 1000\n")?;
         }
 
-        b.play_unchecked(r.m);
+        b.play_unchecked(r.m, Some(&mut info.stck));
         b.pretty_print_board();
     }
 

@@ -29,7 +29,7 @@ use crate::helper::{MAX_MOVES, coordinate, lsfb, piece_type, pop_bit, set_bit, s
 use crate::magic::{get_bishop_attacks, get_rook_attacks, init_slider_attacks};
 use crate::r#move::{CASTLING_FLAG, EN_PASSANT_FLAG, Move, MoveList, NO_FLAG, NULL_MOVE, PROMOTION_FLAG, encode_move};
 use crate::perft::{full_perft, perft};
-use crate::search::{INFINITY, MAX_PLY, MoveData, iterative_deepening};
+use crate::search::{INFINITY, MAX_DEPTH, MoveData, iterative_deepening};
 use crate::uci::{STARTPOS, uci_loop};
 
 fn init_all() {

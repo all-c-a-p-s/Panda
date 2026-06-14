@@ -11,6 +11,7 @@ use crate::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, K_ATTACKS, N_ATTACKS, ROOK_EDGE
 use crate::magic::{get_bishop_attacks, get_queen_attacks, get_rook_attacks};
 use crate::movegen::{CASTLING_MASKS, CASTLING_PATHS};
 use crate::movegen::{RAY_BETWEEN, check_en_passant, is_attacked};
+use crate::thread::AccumulatorStack;
 use crate::zobrist::CASTLING_KEYS;
 
 use crate::types::{CastlingType, OccupancyIndex, Piece, PieceType, Square};
@@ -201,13 +202,13 @@ static LINE_RAYS: [[BitBoard; 64]; 64] = {
 };
 
 impl Board {
-    pub fn undo_move(&mut self, m: Move, c: &Commit) {
+    pub fn undo_move(&mut self, m: Move, c: &Commit, stck: Option<&mut AccumulatorStack>) {
+        if let Some(stck) = stck {
+            stck.pop();
+        }
+
         //incremental update should be faster than copying the whole board
-        self.side_to_move = match self.side_to_move {
-            //NOTE - updated at the beginning of the function
-            Colour::White => Colour::Black,
-            Colour::Black => Colour::White,
-        };
+        self.side_to_move = self.side_to_move.opponent();
         self.hash_key = c.hash_before;
         self.pawn_hash = c.pawn_hash;
 
@@ -230,13 +231,11 @@ impl Board {
             self.bitboards[piece] = set_bit(from, self.bitboards[piece]);
             self.pieces_array[from] = Some(piece);
             //remove promoted piece from bitboard
-            self.nnue.undo_move(piece, c.piece_captured, Some(promoted_piece), from, to);
         } else {
             self.bitboards[piece] = pop_bit(to, self.bitboards[piece]);
             self.pieces_array[to] = c.piece_captured;
             self.bitboards[piece] = set_bit(from, self.bitboards[piece]);
             self.pieces_array[from] = Some(piece);
-            self.nnue.undo_move(piece, c.piece_captured, None, from, to);
         }
 
         if let Some(victim) = c.piece_captured {
@@ -282,8 +281,6 @@ impl Board {
 
                 _ => unreachable!(),
             }
-
-            self.nnue.undo_castling(piece, from, to);
         }
 
         if m.is_en_passant() {
@@ -292,12 +289,10 @@ impl Board {
                     //white to move before move was made
                     self.bitboards[Piece::BP] = set_bit(unsafe { to.sub_unchecked(8) }, self.bitboards[Piece::BP]);
                     self.pieces_array[unsafe { to.sub_unchecked(8) }] = Some(Piece::BP);
-                    self.nnue.undo_ep(piece, Some(Piece::BP), from, to);
                 }
                 Colour::Black => {
                     self.bitboards[Piece::WP] = set_bit(unsafe { to.add_unchecked(8) }, self.bitboards[Piece::WP]);
                     self.pieces_array[unsafe { to.add_unchecked(8) }] = Some(Piece::WP);
-                    self.nnue.undo_ep(piece, Some(Piece::WP), from, to);
                 }
             }
         }
@@ -333,14 +328,14 @@ impl Board {
 
 impl Board {
     #[allow(clippy::result_unit_err)]
-    pub fn try_move(&mut self, m: Move) -> Result<Commit, ()> {
+    pub fn try_move(&mut self, m: Move, stck: Option<&mut AccumulatorStack>) -> Result<Commit, ()> {
         if !self.is_legal(m) {
             return Err(());
         }
-        Ok(self.play_unchecked(m))
+        Ok(self.play_unchecked(m, stck))
     }
 
-    pub fn play_unchecked(&mut self, m: Move) -> Commit {
+    pub fn play_unchecked(&mut self, m: Move, mut stck: Option<&mut AccumulatorStack>) -> Commit {
         let mut commit = Commit {
             castling_reset: self.castling,
             ep_reset: self.en_passant,
@@ -352,6 +347,10 @@ impl Board {
             pinned: self.pinned,
             checkers: self.checkers,
         };
+
+        if let Some(stck) = stck.as_mut() {
+            stck.partial_push();
+        }
 
         let castling_rights_before = self.castling;
         self.hash_update(&m);
@@ -384,8 +383,10 @@ impl Board {
 
         self.en_passant = None;
 
-        if !m.is_promotion() {
-            self.nnue.quiet_update(piece_moved, from, to);
+        if let Some(stck) = stck.as_mut()
+            && !m.is_promotion()
+        {
+            stck.accs[stck.idx].quiet_update(piece_moved, from, to);
         }
 
         if m.is_castling() {
@@ -442,7 +443,9 @@ impl Board {
                 _ => unreachable!(),
             }
 
-            self.nnue.castling_update(piece_moved, from, to);
+            if let Some(stck) = stck.as_mut() {
+                stck.accs[stck.idx].castling_update(piece_moved, from, to);
+            }
         } else {
             self.bitboards[piece_moved] ^= set_bit(from, 0);
             self.bitboards[piece_moved] ^= set_bit(to, 0);
@@ -462,7 +465,9 @@ impl Board {
                     _ => {}
                 }
 
-                self.nnue.capture_update(piece_moved, victim, from, to);
+                if let Some(stck) = stck.as_mut() {
+                    stck.accs[stck.idx].capture_update(piece_moved, victim, from, to);
+                }
             }
 
             match piece_moved {
@@ -484,7 +489,9 @@ impl Board {
                             self.checkers |= N_ATTACKS[enemy_king] & set_bit(to, 0);
                         }
 
-                        self.nnue.promotion_update(piece_moved, Some(promoted_piece), from, to);
+                        if let Some(stck) = stck.as_mut() {
+                            stck.accs[stck.idx].promotion_update(piece_moved, Some(promoted_piece), from, to);
+                        }
                     } else {
                         if rank(from).abs_diff(rank(to)) == 2 {
                             match colour {
@@ -500,12 +507,16 @@ impl Board {
                                 Colour::White => {
                                     self.bitboards[Piece::BP] ^= set_bit(unsafe { to.sub_unchecked(8) }, 0);
                                     self.pieces_array[unsafe { to.sub_unchecked(8) }] = None;
-                                    self.nnue.ep_update(piece_moved, Piece::BP, from, to);
+                                    if let Some(stck) = stck.as_mut() {
+                                        stck.accs[stck.idx].ep_update(piece_moved, Piece::BP, from, to);
+                                    }
                                 }
                                 Colour::Black => {
                                     self.bitboards[Piece::WP] ^= set_bit(unsafe { to.add_unchecked(8) }, 0);
                                     self.pieces_array[unsafe { to.add_unchecked(8) }] = None;
-                                    self.nnue.ep_update(piece_moved, Piece::WP, from, to);
+                                    if let Some(stck) = stck.as_mut() {
+                                        stck.accs[stck.idx].ep_update(piece_moved, Piece::WP, from, to);
+                                    }
                                 }
                             }
                         }

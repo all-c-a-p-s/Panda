@@ -1,8 +1,6 @@
-use crate::eval::evaluate;
 use crate::helper::{coordinate, count, lsfb, pop_bit, set_bit, square};
 use crate::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS};
 use crate::movegen::RAY_BETWEEN;
-use crate::nnue::Accumulator;
 use crate::search::REPETITION_TABLE_SIZE;
 use crate::types::OccupancyIndex;
 use crate::types::{Piece, Square};
@@ -36,9 +34,6 @@ pub struct Board {
     // Used in movegen
     pub checkers: BitBoard,
     pub pinned: BitBoard,
-
-    // Used in evaluation
-    pub nnue: Accumulator,
 }
 
 pub struct NullMoveUndo {
@@ -100,7 +95,6 @@ impl Board {
             repetition_table: [0; REPETITION_TABLE_SIZE],
             checkers: 0,
             pinned: 0,
-            nnue: Accumulator::default(),
         };
 
         let mut board_fen = String::new();
@@ -198,7 +192,6 @@ impl Board {
         new_board.repetition_table[new_board.fifty_move] = new_board.hash_key;
         new_board.pawn_hash = new_board.compute_pawn_hash();
         new_board.compute_checkers_and_pins();
-        new_board.nnue = Accumulator::from_board(&new_board);
 
         new_board
     }
@@ -254,7 +247,6 @@ impl Board {
 
         println!("FEN: {}", self.fen());
         println!("Hash key: {:x}", self.hash_key);
-        println!("Eval: {}", evaluate(self));
     }
 
     #[must_use]

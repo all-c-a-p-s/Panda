@@ -36,14 +36,14 @@ pub fn perft<const BULK: bool, const TEST_PSEUDOLEGAL: bool, const MODES: bool>(
             panic!("pseudo-legal move wasn't pseudo-legal :(");
         }
 
-        let Ok(commit) = b.try_move(m) else {
+        let Ok(commit) = b.try_move(m, None) else {
             continue;
         };
 
         let added = perft::<BULK, TEST_PSEUDOLEGAL, MODES>(depth - 1, b, reporting_depth);
         total += added;
 
-        b.undo_move(m, &commit);
+        b.undo_move(m, &commit, None);
 
         if let Some(d) = reporting_depth
             && depth == d
