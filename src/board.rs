@@ -14,7 +14,7 @@ pub(crate) const EMPTY: BitBoard = 0;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Board {
-    //Fundamental board state
+    // Fundamental board state
     pub bitboards: [BitBoard; 12],
     pub pieces_array: [Option<Piece>; 64],
     pub occupancies: [BitBoard; 3], //white, black, both
@@ -23,17 +23,21 @@ pub struct Board {
     pub side_to_move: Colour,
     pub fifty_move: usize,
 
-    //Used in search
+    // Used in search
     pub last_move_null: bool,
     pub hash_key: u64,
     pub pawn_hash: u64,
+
+    // Repetition Table used indexed by fifty move state to save memory.
+    // The crucial invariant is that in ANY board state (including after NMP etc)
+    // self.hash_key == self.repetition_table[self.fifty_moves].
     pub repetition_table: [u64; REPETITION_TABLE_SIZE],
 
-    //Used in movegen
+    // Used in movegen
     pub checkers: BitBoard,
     pub pinned: BitBoard,
 
-    //Used in evaluation
+    // Used in evaluation
     pub nnue: Accumulator,
 }
 
@@ -41,6 +45,7 @@ pub struct NullMoveUndo {
     ep: Option<Square>,
     pinned: BitBoard,
     hash_key: u64,
+    hash_overwritten: u64,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -432,6 +437,8 @@ impl Board {
         self.last_move_null = true;
         self.fifty_move += 1;
 
+        let hash_overwritten = self.repetition_table[self.fifty_move];
+
         let pinned_reset = self.pinned;
 
         let colour = self.side_to_move;
@@ -471,15 +478,16 @@ impl Board {
             self.hash_key ^= EP_KEYS[reset];
             self.repetition_table[self.fifty_move] = self.hash_key;
             self.en_passant = None;
-            return NullMoveUndo { ep: Some(reset), pinned: pinned_reset, hash_key: hash_reset };
+            return NullMoveUndo { ep: Some(reset), pinned: pinned_reset, hash_key: hash_reset, hash_overwritten };
         }
 
         self.repetition_table[self.fifty_move] = self.hash_key;
 
-        NullMoveUndo { ep: None, pinned: pinned_reset, hash_key: hash_reset }
+        NullMoveUndo { ep: None, pinned: pinned_reset, hash_key: hash_reset, hash_overwritten }
     }
 
     pub fn undo_null_move(&mut self, undo: &NullMoveUndo) {
+        self.repetition_table[self.fifty_move] = undo.hash_overwritten;
         self.side_to_move = self.side_to_move.opponent();
         self.last_move_null = false;
         self.en_passant = undo.ep;
