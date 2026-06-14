@@ -72,7 +72,7 @@ tuneable_params! {
 const DO_SINGULARITY_EXTENSION: bool = true;
 const DO_SINGULARITY_DE: bool = true;
 
-pub const MAX_GAME_PLY: usize = 1024;
+pub const REPETITION_TABLE_SIZE: usize = 100 + 1;
 
 fn lerp(u: i32, v: i32, w1: i32) -> i32 {
     ((u as i64 * w1 as i64 + v as i64 * (1024 - w1) as i64) / 1024) as i32
@@ -631,7 +631,7 @@ impl Thread<'_> {
         let mut static_eval = evaluate(position);
         static_eval = self.eval_with_corrhist(position, static_eval);
 
-        let mut best_score = if in_check { -INFINITY } else { static_eval };
+        let mut best_score = if in_check { -INFINITY + 1 } else { static_eval };
 
         if best_score >= beta {
             return lerp(beta, best_score, read_param!(STAND_PAT_BETA_WEIGHT));

@@ -1,9 +1,9 @@
-use crate::MAX_GAME_PLY;
 use crate::eval::evaluate;
 use crate::helper::{coordinate, count, lsfb, pop_bit, set_bit, square};
 use crate::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS};
 use crate::movegen::RAY_BETWEEN;
 use crate::nnue::Accumulator;
+use crate::search::REPETITION_TABLE_SIZE;
 use crate::types::OccupancyIndex;
 use crate::types::{Piece, Square};
 use crate::uci::pretty_piece;
@@ -14,27 +14,30 @@ pub(crate) const EMPTY: BitBoard = 0;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Board {
-    //Fundamental board state
+    // Fundamental board state
     pub bitboards: [BitBoard; 12],
     pub pieces_array: [Option<Piece>; 64],
     pub occupancies: [BitBoard; 3], //white, black, both
     pub castling: u8,               //4 bits only should be used 0001 = wk, 0010 = wq, 0100 = bk, 1000 = bq
     pub en_passant: Option<Square>,
     pub side_to_move: Colour,
-    pub fifty_move: u8,
+    pub fifty_move: usize,
 
-    //Used in search
-    pub ply: usize,
+    // Used in search
     pub last_move_null: bool,
     pub hash_key: u64,
     pub pawn_hash: u64,
-    pub history: [u64; MAX_GAME_PLY],
 
-    //Used in movegen
+    // Repetition Table used indexed by fifty move state to save memory.
+    // The crucial invariant is that in ANY board state (including after NMP etc)
+    // self.hash_key == self.repetition_table[self.fifty_moves].
+    pub repetition_table: [u64; REPETITION_TABLE_SIZE],
+
+    // Used in movegen
     pub checkers: BitBoard,
     pub pinned: BitBoard,
 
-    //Used in evaluation
+    // Used in evaluation
     pub nnue: Accumulator,
 }
 
@@ -42,6 +45,7 @@ pub struct NullMoveUndo {
     ep: Option<Square>,
     pinned: BitBoard,
     hash_key: u64,
+    hash_overwritten: u64,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -90,11 +94,10 @@ impl Board {
             en_passant: None,
             side_to_move: Colour::White,
             fifty_move: 0,
-            ply: 0,
             last_move_null: false,
             hash_key: 0,
             pawn_hash: 0,
-            history: [0; MAX_GAME_PLY],
+            repetition_table: [0; REPETITION_TABLE_SIZE],
             checkers: 0,
             pinned: 0,
             nnue: Accumulator::default(),
@@ -143,9 +146,8 @@ impl Board {
             _ => new_board.en_passant = Some(square(flags[2])),
         }
 
-        new_board.fifty_move = flags[3].to_string().parse::<u8>().unwrap();
-        let complete_moves = flags[4].to_string().parse::<usize>().unwrap();
-        new_board.ply = (complete_moves - 1) * 2 + (new_board.side_to_move == Colour::Black) as usize;
+        new_board.fifty_move = flags[3].to_string().parse::<usize>().unwrap();
+        let _complete_moves = flags[4].to_string().parse::<usize>().unwrap();
 
         let mut file = 0;
         let mut rank = 7;
@@ -193,6 +195,7 @@ impl Board {
             | new_board.occupancies[OccupancyIndex::BlackOccupancies];
 
         new_board.hash_key = new_board.compute_hash();
+        new_board.repetition_table[new_board.fifty_move] = new_board.hash_key;
         new_board.pawn_hash = new_board.compute_pawn_hash();
         new_board.compute_checkers_and_pins();
         new_board.nnue = Accumulator::from_board(&new_board);
@@ -344,7 +347,7 @@ impl Board {
         }
 
         fen += format!(" {}", self.fifty_move).as_str();
-        fen += format!(" {}", self.ply / 2 + 1).as_str();
+        fen += " 1";
 
         fen
     }
@@ -432,6 +435,9 @@ impl Board {
         let hash_reset = self.hash_key;
         self.side_to_move = self.side_to_move.opponent();
         self.last_move_null = true;
+        self.fifty_move += 1;
+
+        let hash_overwritten = self.repetition_table[self.fifty_move];
 
         let pinned_reset = self.pinned;
 
@@ -470,41 +476,43 @@ impl Board {
 
         if let Some(reset) = self.en_passant {
             self.hash_key ^= EP_KEYS[reset];
+            self.repetition_table[self.fifty_move] = self.hash_key;
             self.en_passant = None;
-            return NullMoveUndo { ep: Some(reset), pinned: pinned_reset, hash_key: hash_reset };
+            return NullMoveUndo { ep: Some(reset), pinned: pinned_reset, hash_key: hash_reset, hash_overwritten };
         }
 
-        NullMoveUndo { ep: None, pinned: pinned_reset, hash_key: hash_reset }
+        self.repetition_table[self.fifty_move] = self.hash_key;
+
+        NullMoveUndo { ep: None, pinned: pinned_reset, hash_key: hash_reset, hash_overwritten }
     }
 
     pub fn undo_null_move(&mut self, undo: &NullMoveUndo) {
-        self.side_to_move = match self.side_to_move {
-            Colour::White => Colour::Black,
-            Colour::Black => Colour::White,
-        };
+        self.repetition_table[self.fifty_move] = undo.hash_overwritten;
+        self.side_to_move = self.side_to_move.opponent();
         self.last_move_null = false;
         self.en_passant = undo.ep;
+        self.fifty_move -= 1;
 
         self.pinned = undo.pinned;
         self.hash_key = undo.hash_key;
+
+        self.repetition_table[self.fifty_move] = self.hash_key;
     }
 
     #[must_use]
     pub fn is_drawn(&self) -> bool {
-        if self.ply < 4 {
-            //technically you can only two-fold repeat on ply 4 but we don't wanna consider
-            //these moves anyway
-            return false;
+        if self.fifty_move < 4 {
+            return self.is_insufficient_material();
         }
 
         if self.fifty_move >= 100 {
             return true;
         }
 
-        for &key in self.history[..self.ply - 1].iter().rev().take(self.fifty_move as usize).step_by(2) {
+        for &key in self.repetition_table.iter().take(self.fifty_move - 3).rev().step_by(2) {
             if key == self.hash_key {
                 return true;
-                //return true on one repetition because otherwise the third
+                //return true on two-fold repetition because otherwise the third
                 //repetition will not be reached because the search will stop
                 //after a tt hit on the second repetition
             }

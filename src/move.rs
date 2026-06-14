@@ -43,9 +43,10 @@ pub struct Commit {
     //resets for irreversible fields of Board struct
     pub castling_reset: u8,
     pub ep_reset: Option<Square>,
-    pub fifty_move_reset: u8,
+    pub fifty_move_reset: usize,
     pub piece_captured: Option<Piece>,
-    pub hash_key: u64,
+    pub hash_before: u64,
+    pub hash_overwritten: u64,
     pub pawn_hash: u64,
     pub pinned: BitBoard,
     pub checkers: BitBoard,
@@ -207,7 +208,7 @@ impl Board {
             Colour::White => Colour::Black,
             Colour::Black => Colour::White,
         };
-        self.hash_key = c.hash_key;
+        self.hash_key = c.hash_before;
         self.pawn_hash = c.pawn_hash;
 
         let to = m.square_to();
@@ -318,14 +319,15 @@ impl Board {
         self.occupancies[OccupancyIndex::BothOccupancies] =
             self.occupancies[OccupancyIndex::WhiteOccupancies] | self.occupancies[OccupancyIndex::BlackOccupancies];
 
+        self.repetition_table[self.fifty_move] = c.hash_overwritten;
+
         self.en_passant = c.ep_reset;
         self.castling = c.castling_reset;
         self.fifty_move = c.fifty_move_reset;
         self.pinned = c.pinned;
         self.checkers = c.checkers;
-        self.ply -= 1;
 
-        self.history[self.ply + 1] = 0;
+        self.repetition_table[self.fifty_move] = self.hash_key;
     }
 }
 
@@ -344,7 +346,8 @@ impl Board {
             ep_reset: self.en_passant,
             fifty_move_reset: self.fifty_move,
             piece_captured: None,
-            hash_key: self.hash_key,
+            hash_before: self.hash_key,
+            hash_overwritten: 0,
             pawn_hash: self.pawn_hash,
             pinned: self.pinned,
             checkers: self.checkers,
@@ -376,6 +379,8 @@ impl Board {
         } else {
             self.fifty_move += 1;
         }
+
+        commit.hash_overwritten = self.repetition_table[self.fifty_move];
 
         self.en_passant = None;
 
@@ -564,13 +569,12 @@ impl Board {
         }
 
         self.side_to_move = self.side_to_move.opponent();
-        self.ply += 1;
 
         self.hash_key ^= CASTLING_KEYS[castling_rights_before as usize];
         self.hash_key ^= CASTLING_KEYS[self.castling as usize];
         //more efficient to do this here since we don't have to check all cases
 
-        self.history[self.ply] = self.hash_key;
+        self.repetition_table[self.fifty_move] = self.hash_key;
 
         commit
     }
