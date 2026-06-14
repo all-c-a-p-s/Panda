@@ -8,6 +8,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::board::movegen::MovegenMode;
+use crate::search::Limits;
+use crate::search::MAX_DEPTH;
 use crate::search::thread::SearchInfo;
 use crate::search::thread::{Searcher, Thread};
 use crate::search::transposition::TranspositionTable;
@@ -74,13 +76,19 @@ impl Node {
     // this function merely needs to determine the value of the node, not of its moves
     fn value(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) -> i32 {
         let mut s = Searcher::new(tt, info);
-        let move_data = s.start_search(&mut self.position, 0, 0, 0, 10, 8192, 1);
+
+        let limits = Limits::time_and_nodes(10, 8192);
+
+        let move_data = s.start_search(&mut self.position, 0, 0, 0, &limits, 1);
         move_data.eval
     }
 
     pub fn choose_move(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) {
         let mut s = Searcher::new(tt, info);
-        let move_data = s.start_search(&mut self.position, 0, 0, 0, 10, 8192, 1);
+
+        let limits = Limits::time_and_nodes(10, 8192);
+
+        let move_data = s.start_search(&mut self.position, 0, 0, 0, &limits, 1);
 
         self.choice = Some(move_data.m);
         self.value = move_data.eval;
@@ -135,7 +143,7 @@ impl Node {
 
         let mut t = Thread::new(Instant::now() + Duration::from_millis(10), 8192, tt, info, &stop);
         t.info.excluded[0] = Some(m);
-        let move_data = iterative_deepening::<false>(&mut self.position, 10, 10, &mut t);
+        let move_data = iterative_deepening::<false>(&mut self.position, 10, 10, MAX_DEPTH as u8, &mut t);
         self.choice = Some(move_data.m);
     }
 }
@@ -183,6 +191,7 @@ impl Game {
         }
 
         pos.play_unchecked(leaf.choice.unwrap(), Some(&mut info.stck));
+        info.stck.bring_to_front();
         let child = Node::from_position(&pos);
 
         self.positions.push(child);
@@ -264,7 +273,7 @@ impl Game {
                         let mut n = Node::from_position(&pos);
                         let s = -n.value(tt, info);
 
-                        p.value = std::cmp::max(v_b, s);
+                        p.value = v_b.max(s);
                     }
                 }
             }

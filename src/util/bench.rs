@@ -2,9 +2,11 @@ use std::io::Write;
 
 use crate::{
     board::{Board, Colour},
-    search::INFINITY,
-    search::thread::{SearchInfo, Searcher},
-    search::transposition::TranspositionTable,
+    search::{
+        Limits,
+        thread::{SearchInfo, Searcher},
+        transposition::TranspositionTable,
+    },
 };
 
 /// Play some games from kinda unbalanced exits and record to a file for bench.
@@ -31,7 +33,9 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
 
     while !b.is_drawn() {
         let mut s = Searcher::new(&tt, &mut info);
-        let r = s.start_search(&mut b, 0, 0, 0, 1000, INFINITY as usize, 1);
+
+        let limits = Limits::time_only(1000);
+        let r = s.start_search(&mut b, 0, 0, 0, &limits, 1);
 
         if r.m.is_null() {
             // checkmate/stalemate
@@ -44,6 +48,7 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
         }
 
         b.play_unchecked(r.m, Some(&mut info.stck));
+        info.stck.bring_to_front();
         b.pretty_print_board();
     }
 
@@ -57,7 +62,9 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
 
     while !b.is_drawn() {
         let mut s = Searcher::new(&tt, &mut info);
-        let r = s.start_search(&mut b, 0, 0, 0, 1000, INFINITY as usize, 1);
+
+        let limits = Limits::time_only(1000);
+        let r = s.start_search(&mut b, 0, 0, 0, &limits, 1);
 
         if r.m.is_null() {
             // checkmate/stalemate
@@ -70,6 +77,7 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
         }
 
         b.play_unchecked(r.m, Some(&mut info.stck));
+        info.stck.bring_to_front();
         b.pretty_print_board();
     }
 

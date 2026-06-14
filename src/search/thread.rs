@@ -1,12 +1,11 @@
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::time::{Duration, Instant};
-use crate::util::types::Square;
 
-use crate::eval::nnue::Accumulator;
+use crate::eval::Accumulator;
 use crate::read_param;
 use crate::search::params;
 use crate::search::transposition::{TTRef, TranspositionTable};
-use crate::util::types::Piece;
+use crate::util::types::{Piece, Square};
 use crate::{Board, INFINITY, MAX_DEPTH, Move, MoveData, NULL_MOVE, iterative_deepening};
 
 const MIN_MOVE_TIME: usize = 1; //make sure move time is never 0
@@ -97,6 +96,23 @@ impl AccumulatorStack {
     pub fn current(&self) -> Accumulator {
         self.accs[self.idx]
     }
+
+    /// This function is a bit hacky. Sometimes (often in the uci file), we need to successively
+    /// update the root accumulator. The easiest way to do this is just to make the move on the
+    /// board normally (which puts it at index 1) and then call this function, which gives the
+    /// desired behaviour.
+    ///
+    /// This should generally be called for any move that gets made on the board
+    /// and won't be undone (i.e. not in some type of search).
+    pub fn bring_to_front(&mut self) {
+        self.accs[0] = self.accs[1];
+        self.idx = 0;
+    }
+
+    pub fn set_to(&mut self, b: &Board) {
+        self.accs[0] = Accumulator::from_board(b);
+        self.idx = 0;
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -163,10 +179,10 @@ impl Default for SearchInfo {
             history_table: [[0; 64]; 12],
             caphist_table: [[[0; 5]; 64]; 12],
 
-            stck: AccumulatorStack::default(),
-
             counter_correlation: [[[0; 64]; 64]; 2],
             followup_correlation: [[[0; 64]; 64]; 2],
+
+            stck: AccumulatorStack::default(),
 
             corrhist: [[0; CORRHIST_SIZE]; 2],
 
@@ -236,6 +252,36 @@ pub struct Searcher<'a> {
     info: &'a mut SearchInfo,
 }
 
+pub struct Limits {
+    pub max_nodes: Option<usize>,
+    pub max_time: Option<usize>,
+    pub max_depth: Option<u8>,
+}
+
+impl Limits {
+    pub fn depth_only(d: u8) -> Self {
+        Self { max_nodes: None, max_time: Some(INFINITY as usize), max_depth: Some(d) }
+    }
+
+    pub fn time_only(time: usize) -> Self {
+        Self { max_nodes: None, max_time: Some(time), max_depth: None }
+    }
+
+    pub fn nodes_only(nodes: usize) -> Self {
+        Self { max_nodes: Some(nodes), max_time: Some(INFINITY as usize), max_depth: None }
+    }
+
+    pub fn time_and_nodes(time: usize, nodes: usize) -> Self {
+        Self { max_nodes: Some(nodes), max_time: Some(time), max_depth: None }
+    }
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self { max_nodes: None, max_time: None, max_depth: None }
+    }
+}
+
 impl<'a> Searcher<'a> {
     #[must_use]
     pub fn new(tt: &'a TranspositionTable, info: &'a mut SearchInfo) -> Self {
@@ -249,8 +295,7 @@ impl<'a> Searcher<'a> {
         time_left: usize,
         inc: usize,
         moves_to_go: usize,
-        movetime: usize,
-        max_nodes: usize,
+        limits: &Limits,
         threads: usize,
     ) -> MoveData {
         // Soft-limit vs Hard-limit is an idea explained to me by the author of Sirius
@@ -258,18 +303,19 @@ impl<'a> Searcher<'a> {
         // Hard limit: if you are currently searching (i.e. in the middle of the tree) and
         //             time taken > this, then exit search
         // in practice you should mostly exit at the soft-limit
-        let (soft_limit, hard_limit) = match movetime {
-            0 => move_time(time_left, inc, moves_to_go),
-
-            k => {
-                if k <= MOVE_OVERHEAD {
-                    (k, k)
-                } else {
-                    let t = MIN_MOVE_TIME.max(k - MOVE_OVERHEAD);
-                    (t, t)
-                }
+        let (soft_limit, hard_limit) = if let Some(k) = limits.max_time {
+            if k <= MOVE_OVERHEAD {
+                (k, k)
+            } else {
+                let t = MIN_MOVE_TIME.max(k - MOVE_OVERHEAD);
+                (t, t)
             }
+        } else {
+            move_time(time_left, inc, moves_to_go)
         };
+
+        let max_nodes = if let Some(l) = limits.max_nodes { l } else { i32::MAX as usize };
+        let max_depth = if let Some(l) = limits.max_depth { l } else { MAX_DEPTH as u8 };
 
         let start = Instant::now();
         let end_time = start + Duration::from_millis(hard_limit as u64);
@@ -288,14 +334,15 @@ impl<'a> Searcher<'a> {
 
         #[cfg(not(feature = "datagen"))]
         std::thread::scope(|s| {
-            let main_handle = s
-                .spawn(|| iterative_deepening::<true>(&mut position.clone(), soft_limit, hard_limit, &mut main_thread));
+            let main_handle = s.spawn(|| {
+                iterative_deepening::<true>(&mut position.clone(), soft_limit, hard_limit, max_depth, &mut main_thread)
+            });
 
             for info in infos.iter_mut() {
                 let mut pos = *position;
                 let mut worker = Thread::new(end_time, max_nodes, self.tt, info, &stop);
 
-                s.spawn(move || iterative_deepening::<false>(&mut pos, soft_limit, hard_limit, &mut worker));
+                s.spawn(move || iterative_deepening::<false>(&mut pos, soft_limit, hard_limit, max_depth, &mut worker));
             }
 
             main_handle.join().expect("error in main thread")

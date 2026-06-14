@@ -1,7 +1,7 @@
 use std::mem;
 
 use crate::eval::MIRROR;
-use crate::util::uci::STARTPOS;
+use crate::util::STARTPOS;
 use crate::{Board, Colour, lsfb, pop_bit};
 
 use crate::util::types::{OccupancyIndex, PIECES, Piece, Square};

@@ -3,8 +3,8 @@ pub mod nnue;
 pub use nnue::*;
 
 use crate::board::{Board, Colour};
-use crate::util::helper::rank;
 use crate::search::MATE;
+use crate::util::helper::rank;
 
 use crate::util::types::{Piece, Square};
 

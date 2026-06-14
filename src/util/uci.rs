@@ -1,6 +1,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
+use crate::eval::Accumulator;
+use crate::search::Limits;
 #[cfg(feature = "tuning")]
 use crate::set_param;
 
@@ -146,8 +148,9 @@ pub fn parse_isready(words: &[&str]) {
     }
 }
 
-pub fn reset(b: &mut Board) {
+pub fn reset(b: &mut Board, info: &mut SearchInfo) {
     *b = Board::from(STARTPOS);
+    info.stck.set_to(b);
 }
 
 fn apply_uci_move(b: &mut Board, info: &mut SearchInfo, w: &str) {
@@ -155,6 +158,8 @@ fn apply_uci_move(b: &mut Board, info: &mut SearchInfo, w: &str) {
     let Ok(_) = b.try_move(m, Some(&mut info.stck)) else {
         panic!("invalid move {}", m.uci());
     };
+
+    info.stck.bring_to_front();
 }
 
 fn parse_position_words(words: &[&str], b: &mut Board, info: &mut SearchInfo, end: usize) {
@@ -171,6 +176,7 @@ fn parse_position_words(words: &[&str], b: &mut Board, info: &mut SearchInfo, en
         "fen" => {
             let fen_string = words.iter().skip(2).take(6).copied().collect::<Vec<_>>().join(" ");
             *b = Board::from(&fen_string);
+            info.stck.set_to(b);
 
             if end != 8 {
                 for &w in words.iter().take(end).skip(9) {
@@ -185,10 +191,12 @@ fn parse_position_words(words: &[&str], b: &mut Board, info: &mut SearchInfo, en
         }
         _ => {}
     }
+
+    assert_eq!(Accumulator::from_board(b), info.stck.current(), "accumulator isn't synced :/");
 }
 
 pub fn parse_position(words: &[&str], b: &mut Board, info: &mut SearchInfo) {
-    reset(b);
+    reset(b, info);
     parse_position_words(words, b, info, words.len());
 }
 
@@ -206,7 +214,7 @@ pub fn parse_special_go(
     info: &mut SearchInfo,
     opts: &UciOptions,
 ) -> MoveData {
-    reset(b);
+    reset(b, info);
     assert!((words.len() >= 2), "invalid position command");
 
     let end_of_moves = words.iter().position(|x| x.starts_with('w')).expect("invalid go command");
@@ -226,18 +234,38 @@ pub fn parse_go(
     info: &mut SearchInfo,
     opts: &UciOptions,
 ) -> MoveData {
-    let max_nodes = INFINITY as usize;
-    let mut movetime = 0;
-
     let (mut w_inc, mut b_inc, mut moves_to_go) = (0, 0, 0);
 
-    if words[1] == "moves" {
-        return parse_special_go(words, position, tt, info, opts);
-    } else if words[1] == "movetime" {
-        movetime = words[2].parse().expect("failed to convert movetime to int");
-        let mut s = Searcher::new(tt, info);
-        return s.start_search(position, 0, 0, 0, movetime, max_nodes, opts.threads);
-    }
+    match words[1] {
+        // handle special cases here
+        "moves" => return parse_special_go(words, position, tt, info, opts),
+        "movetime" => {
+            let movetime = words[2].parse().expect("failed to convert movetime to int");
+            let mut s = Searcher::new(tt, info);
+
+            let limits = Limits::time_only(movetime);
+
+            return s.start_search(position, 0, 0, 0, &limits, opts.threads);
+        }
+        "nodes" => {
+            let nodes = words[2].parse().expect("failed to convert nodes to int");
+            let mut s = Searcher::new(tt, info);
+            let limits = Limits::nodes_only(nodes);
+
+            return s.start_search(position, 0, 0, 0, &limits, opts.threads);
+        }
+        "depth" => {
+            let depth = words[2].parse().expect("failed to convert depth to int");
+            let mut s = Searcher::new(tt, info);
+            let limits = Limits::depth_only(depth);
+
+            return s.start_search(position, 0, 0, 0, &limits, opts.threads);
+        }
+        // otherwise we're in the regular case which looks something like
+        // go wtime x btime x winc x binc x movestogo x
+        // which we handle below
+        _ => {}
+    };
 
     let w_time = words[2].parse().expect("failed to convert wtime to int");
     let b_time = words[4].parse().expect("failed to convert btime to int");
@@ -262,8 +290,10 @@ pub fn parse_go(
         Colour::Black => (b_time, b_inc),
     };
 
+    let limits = Limits::default();
+
     let mut s = Searcher::new(tt, info);
-    s.start_search(position, engine_time, engine_inc, moves_to_go, movetime, max_nodes, opts.threads)
+    s.start_search(position, engine_time, engine_inc, moves_to_go, &limits, opts.threads)
 }
 
 fn parse_perft(words: &[&str], position: &mut Board) {
@@ -487,6 +517,8 @@ pub fn uci_loop() {
                             m.uci()
                         );
                     };
+
+                    info.stck.bring_to_front();
 
                     board.pretty_print_board();
                 }

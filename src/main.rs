@@ -5,14 +5,16 @@ pub mod util;
 
 use std::error::Error;
 
-use crate::util::bench::prepare_bench;
+use crate::board::magic::{get_bishop_attacks, get_rook_attacks, init_slider_attacks};
+use crate::board::r#move::{
+    CASTLING_FLAG, EN_PASSANT_FLAG, Move, MoveList, NO_FLAG, NULL_MOVE, PROMOTION_FLAG, encode_move,
+};
+use crate::board::perft::{full_perft, perft};
 use crate::board::{BitBoard, Board, Colour};
+use crate::search::{INFINITY, MAX_DEPTH, MoveData, iterative_deepening};
+use crate::util::bench::prepare_bench;
 use crate::util::datagen::gen_data;
 use crate::util::helper::{MAX_MOVES, coordinate, lsfb, piece_type, pop_bit, set_bit, square};
-use crate::board::magic::{get_bishop_attacks, get_rook_attacks, init_slider_attacks};
-use crate::board::r#move::{CASTLING_FLAG, EN_PASSANT_FLAG, Move, MoveList, NO_FLAG, NULL_MOVE, PROMOTION_FLAG, encode_move};
-use crate::board::perft::{full_perft, perft};
-use crate::search::{INFINITY, MAX_DEPTH, MoveData, iterative_deepening};
 use crate::util::uci::{STARTPOS, uci_loop};
 
 fn init_all() {
@@ -35,6 +37,31 @@ const ONE_HOUR: u64 = 3600;
 const DATAGEN_PATH: &str = "/Users/seba/rs/Panda/set-backtracking-003.txt";
 
 fn main() -> Result<(), Box<dyn Error>> {
+    //let mut b = Board::from(STARTPOS);
+    //
+    //let m = parse_move("g1f3", &b);
+    //b.play_unchecked(m);
+    //
+    //println!("{:?}", b.history);
+    //
+    //let m = parse_move("g8f6", &b);
+    //let c = b.play_unchecked(m);
+    //
+    //println!("{:?}", b.history);
+    //
+    //b.undo_move(m, &c);
+    //
+    //println!("{:?}", b.history);
+    //
+    //let m = parse_move("e2e4", &b);
+    //let c = b.play_unchecked(m);
+    //
+    //println!("{:?}", b.history);
+    //
+    //b.undo_move(m, &c);
+    //
+    //println!("{:?}", b.history);
+
     unsafe {
         std::env::set_var("RUST_BACKTRACE", "1");
     }

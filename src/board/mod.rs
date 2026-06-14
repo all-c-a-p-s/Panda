@@ -10,8 +10,8 @@ pub use movegen::*;
 pub use perft::*;
 pub use zobrist::*;
 
-use crate::util::helper::{coordinate, count, lsfb, pop_bit, set_bit, square};
 use crate::search::REPETITION_TABLE_SIZE;
+use crate::util::helper::{coordinate, count, lsfb, pop_bit, set_bit, square};
 use crate::util::types::OccupancyIndex;
 use crate::util::types::{Piece, Square};
 use crate::util::uci::pretty_piece;
