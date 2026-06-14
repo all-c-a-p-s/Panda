@@ -5,7 +5,7 @@ use arrayvec::ArrayVec;
 use crate::board::Board;
 use crate::eval::evaluate;
 use crate::helper::{read_param, tuneable_params};
-use crate::r#move::{Commit, Move, MoveList, NULL_MOVE};
+use crate::r#move::{Move, MoveList, NULL_MOVE};
 use crate::ordering::{MovePicker, SEE_VALUES};
 use crate::search_macros::*;
 use crate::thread::{SearchStackEntry, Thread};
@@ -107,7 +107,6 @@ impl Thread<'_> {
         &mut self,
         position: &mut Board,
         best_move: Move,
-        commit: &Commit,
         tt_score: i32,
         depth: u8,
         pv_node: bool,
@@ -115,8 +114,6 @@ impl Thread<'_> {
         beta: i32,
         cutnode: bool,
     ) -> Option<i32> {
-        position.undo_move(best_move, commit, Some(&mut self.info.stck));
-        self.ply -= 1;
         // undo move already made on board
         let threshold = (tt_score - (depth as i32 * 2 + 20)).max(-INFINITY);
 
@@ -394,9 +391,6 @@ impl Thread<'_> {
                 }
             }
 
-            // checked to be legal above
-            let commit = position.play_unchecked(m, Some(&mut self.info.stck));
-
             if self.ply < MAX_DEPTH {
                 self.info.ss[self.ply].square_moved_to = Some(m.square_to());
                 self.info.ss[self.ply].piece_moved = Some(piece_moved);
@@ -409,7 +403,6 @@ impl Thread<'_> {
             let nodes_before = self.nodes;
 
             played += 1;
-            self.ply += 1;
             // update after pruning above
 
             // A singular move is a move which seems to be forced or at least much stronger than
@@ -417,7 +410,7 @@ impl Thread<'_> {
             let maybe_singular = maybe_singular!(root, depth, singular, m, best_move, tt_depth, tt_bound);
 
             let ext = if maybe_singular {
-                self.singularity(position, best_move, &commit, tt_score, depth, pv_node, alpha, beta, cutnode)
+                self.singularity(position, best_move, tt_score, depth, pv_node, alpha, beta, cutnode)
             } else {
                 Some((in_check && !root) as i32)
             };
@@ -427,15 +420,13 @@ impl Thread<'_> {
                 return tt_score - (depth as i32 * 2);
             };
 
-            if maybe_singular {
-                position.play_unchecked(best_move, Some(&mut self.info.stck));
-                self.ply += 1;
-                // we unmade the move while calling the singularity function
-            }
-
             if extension == 2 {
                 self.double_extensions += 1;
             }
+
+            // checked to be legal above
+            let commit = position.play_unchecked(m, Some(&mut self.info.stck));
+            self.ply += 1;
 
             let new_depth = (depth as i32 - 1 + extension).clamp(0, MAX_DEPTH as i32) as u8;
 
