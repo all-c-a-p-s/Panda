@@ -2,11 +2,12 @@ use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::time::{Duration, Instant};
 use types::Square;
 
+use crate::nnue::Accumulator;
 use crate::read_param;
 use crate::search::params;
 use crate::transposition::{TTRef, TranspositionTable};
 use crate::types::Piece;
-use crate::{Board, INFINITY, MAX_PLY, Move, MoveData, NULL_MOVE, iterative_deepening, types};
+use crate::{Board, INFINITY, MAX_DEPTH, Move, MoveData, NULL_MOVE, iterative_deepening, types};
 
 const MIN_MOVE_TIME: usize = 1; //make sure move time is never 0
 const MOVE_OVERHEAD: usize = 50;
@@ -50,7 +51,7 @@ pub struct SearchStackEntry {
 
 #[derive(Copy, Clone)]
 pub struct SearchInfo {
-    pub ss: [SearchStackEntry; MAX_PLY],
+    pub ss: [SearchStackEntry; MAX_DEPTH],
     pub lmr_table: LMRTable,
     pub nodetable: NodeTable,
     pub history_table: [[i32; 64]; 12],
@@ -59,11 +60,43 @@ pub struct SearchInfo {
     pub counter_correlation: [[[i32; 64]; 64]; 2],
     pub followup_correlation: [[[i32; 64]; 64]; 2],
 
+    pub stck: AccumulatorStack,
+
     pub corrhist: [[i32; CORRHIST_SIZE]; 2],
 
-    pub killer_moves: [Option<Move>; MAX_PLY],
+    pub killer_moves: [Option<Move>; MAX_DEPTH],
     pub counter_moves: [[Option<Move>; 64]; 12],
-    pub excluded: [Option<Move>; MAX_PLY],
+    pub excluded: [Option<Move>; MAX_DEPTH],
+}
+
+#[derive(Clone, Copy)]
+pub struct AccumulatorStack {
+    pub accs: [Accumulator; MAX_DEPTH + 1],
+    pub idx: usize,
+}
+
+impl Default for AccumulatorStack {
+    fn default() -> Self {
+        let mut accs = [Accumulator::default(); MAX_DEPTH + 1];
+        accs[0] = Accumulator::from_startpos();
+
+        Self { accs, idx: 0 }
+    }
+}
+
+impl AccumulatorStack {
+    pub fn partial_push(&mut self) {
+        self.accs[self.idx + 1] = self.accs[self.idx];
+        self.idx += 1;
+    }
+
+    pub fn pop(&mut self) {
+        self.idx -= 1;
+    }
+
+    pub fn current(&self) -> Accumulator {
+        self.accs[self.idx]
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -124,11 +157,13 @@ impl Default for LMRTable {
 impl Default for SearchInfo {
     fn default() -> Self {
         Self {
-            ss: [SearchStackEntry::default(); MAX_PLY],
+            ss: [SearchStackEntry::default(); MAX_DEPTH],
             lmr_table: LMRTable::default(),
             nodetable: NodeTable::default(),
             history_table: [[0; 64]; 12],
             caphist_table: [[[0; 5]; 64]; 12],
+
+            stck: AccumulatorStack::default(),
 
             counter_correlation: [[[0; 64]; 64]; 2],
             followup_correlation: [[[0; 64]; 64]; 2],
@@ -144,7 +179,7 @@ impl Default for SearchInfo {
 
 pub struct Thread<'a> {
     pub pv_length: [usize; 64],
-    pub pv: [[Move; MAX_PLY]; MAX_PLY],
+    pub pv: [[Move; MAX_DEPTH]; MAX_DEPTH],
     pub tt: TTRef<'a>,
     pub ply: usize,
     pub nodes: usize,
@@ -179,8 +214,8 @@ impl<'a> Thread<'a> {
         let timer = Timer { max_nodes, end_time };
 
         Thread {
-            pv_length: [0; MAX_PLY],
-            pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
+            pv_length: [0; MAX_DEPTH],
+            pv: [[NULL_MOVE; MAX_DEPTH]; MAX_DEPTH],
             tt: TTRef::new(tt),
             ply: 0,
             nodes: 0,

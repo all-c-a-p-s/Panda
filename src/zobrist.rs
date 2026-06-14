@@ -182,7 +182,7 @@ mod tests {
             }
             if depth != 1 {
                 //must be done before making move
-                let Ok(commit) = b.try_move(moves.moves[i]) else {
+                let Ok(commit) = b.try_move(moves.moves[i], None) else {
                     panic!("invalid move {}", moves.moves[i].uci());
                 };
 
@@ -202,7 +202,7 @@ mod tests {
                 }
 
                 added = hash_update_test(depth - 1, b);
-                b.undo_move(moves.moves[i], &commit);
+                b.undo_move(moves.moves[i], &commit, None);
             }
             total += added;
         }

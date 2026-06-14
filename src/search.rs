@@ -18,8 +18,8 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
 
 pub const INFINITY: i32 = 1_000_000_000;
-pub const MAX_PLY: usize = 64;
-pub const MATE: i32 = INFINITY - MAX_PLY as i32;
+pub const MAX_DEPTH: usize = 64;
+pub const MATE: i32 = INFINITY - MAX_DEPTH as i32;
 
 pub const REDUCTION_LIMIT: u8 = 2;
 
@@ -115,7 +115,7 @@ impl Thread<'_> {
         beta: i32,
         cutnode: bool,
     ) -> Option<i32> {
-        position.undo_move(best_move, commit);
+        position.undo_move(best_move, commit, Some(&mut self.info.stck));
         self.ply -= 1;
         // undo move already made on board
         let threshold = (tt_score - (depth as i32 * 2 + 20)).max(-INFINITY);
@@ -157,8 +157,8 @@ impl Thread<'_> {
         self.seldepth = self.seldepth.max(self.ply as u8);
         self.nodes += 1;
 
-        if self.ply == MAX_PLY - 1 {
-            return evaluate(position);
+        if self.ply == MAX_DEPTH - 1 {
+            return evaluate(position, &self.info.stck.current());
         }
 
         let pv_node = beta - alpha != 1;
@@ -214,7 +214,7 @@ impl Thread<'_> {
         // reset killers for child nodes
         self.info.killer_moves[self.ply + 1] = None;
 
-        let mut static_eval = evaluate(position);
+        let mut static_eval = evaluate(position, &self.info.stck.current());
         if !singular {
             let corrected = self.eval_with_corrhist(position, static_eval);
             static_eval = corrected;
@@ -226,7 +226,7 @@ impl Thread<'_> {
             static_eval = tt_score;
         }
 
-        if self.ply < MAX_PLY {
+        if self.ply < MAX_DEPTH {
             self.info.ss[self.ply] =
                 SearchStackEntry { eval: static_eval, square_moved_to: None, piece_moved: None, made_capture: false };
         }
@@ -395,9 +395,9 @@ impl Thread<'_> {
             }
 
             // checked to be legal above
-            let commit = position.play_unchecked(m);
+            let commit = position.play_unchecked(m, Some(&mut self.info.stck));
 
-            if self.ply < MAX_PLY {
+            if self.ply < MAX_DEPTH {
                 self.info.ss[self.ply].square_moved_to = Some(m.square_to());
                 self.info.ss[self.ply].piece_moved = Some(piece_moved);
 
@@ -428,7 +428,7 @@ impl Thread<'_> {
             };
 
             if maybe_singular {
-                position.play_unchecked(best_move);
+                position.play_unchecked(best_move, Some(&mut self.info.stck));
                 self.ply += 1;
                 // we unmade the move while calling the singularity function
             }
@@ -437,7 +437,7 @@ impl Thread<'_> {
                 self.double_extensions += 1;
             }
 
-            let new_depth = (depth as i32 - 1 + extension).clamp(0, MAX_PLY as i32) as u8;
+            let new_depth = (depth as i32 - 1 + extension).clamp(0, MAX_DEPTH as i32) as u8;
 
             let eval = if played == 1 {
                 // Internal Aspiration Window:
@@ -537,7 +537,7 @@ impl Thread<'_> {
                 r_eval
             };
 
-            position.undo_move(m, &commit);
+            position.undo_move(m, &commit, Some(&mut self.info.stck));
             self.ply -= 1;
 
             if extension == 2 {
@@ -607,8 +607,8 @@ impl Thread<'_> {
             return 0;
         }
 
-        if self.ply == MAX_PLY - 1 {
-            return evaluate(position);
+        if self.ply == MAX_DEPTH - 1 {
+            return evaluate(position, &self.info.stck.current());
         }
 
         let mut hash_flag = EntryFlag::UpperBound;
@@ -628,7 +628,7 @@ impl Thread<'_> {
 
         let in_check = position.checkers != 0;
 
-        let mut static_eval = evaluate(position);
+        let mut static_eval = evaluate(position, &self.info.stck.current());
         static_eval = self.eval_with_corrhist(position, static_eval);
 
         let mut best_score = if in_check { -INFINITY + 1 } else { static_eval };
@@ -689,12 +689,12 @@ impl Thread<'_> {
             }
 
             //checked to be legal above
-            let commit = position.play_unchecked(m);
+            let commit = position.play_unchecked(m, Some(&mut self.info.stck));
 
             self.ply += 1;
 
             let eval = -self.qsearch(position, -beta, -alpha);
-            position.undo_move(m, &commit);
+            position.undo_move(m, &commit, Some(&mut self.info.stck));
             self.ply -= 1;
 
             if self.is_stopped() {
@@ -731,8 +731,8 @@ pub struct MoveData {
 
 struct IterDeepData {
     eval: i32,
-    pv: [[Move; MAX_PLY]; MAX_PLY],
-    pv_length: [usize; MAX_PLY],
+    pv: [[Move; MAX_DEPTH]; MAX_DEPTH],
+    pv_length: [usize; MAX_DEPTH],
 
     delta: i32,
     alpha: i32,
@@ -747,8 +747,8 @@ impl IterDeepData {
     fn new<const SHOW_THINKING: bool>(start_time: Instant) -> Self {
         Self {
             eval: 0,
-            pv: [[NULL_MOVE; MAX_PLY]; MAX_PLY],
-            pv_length: [0; MAX_PLY],
+            pv: [[NULL_MOVE; MAX_DEPTH]; MAX_DEPTH],
+            pv_length: [0; MAX_DEPTH],
             delta: read_param!(ASPIRATION_WINDOW),
             alpha: -INFINITY,
             beta: INFINITY,
@@ -833,7 +833,7 @@ pub fn iterative_deepening<const SHOW_THINKING: bool>(
 
     let mut id = IterDeepData::new::<SHOW_THINKING>(start);
 
-    while (id.depth as usize) < MAX_PLY {
+    while (id.depth as usize) < MAX_DEPTH {
         let eval = aspiration_window(position, s, &mut id);
 
         if s.is_stopped() {

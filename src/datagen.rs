@@ -97,7 +97,7 @@ impl Node {
         let mut scores = vec![];
 
         for &m in movelist.moves.iter().take(movelist.used) {
-            let Ok(commit) = self.position.try_move(m) else {
+            let Ok(commit) = self.position.try_move(m, Some(&mut info.stck)) else {
                 continue;
             };
 
@@ -111,7 +111,7 @@ impl Node {
             scores.push((score, m));
             best_score = best_score.max(score);
 
-            self.position.undo_move(m, &commit);
+            self.position.undo_move(m, &commit, Some(&mut info.stck));
         }
 
         let (s, chosen_move) = {
@@ -182,7 +182,7 @@ impl Game {
             return Err(());
         }
 
-        pos.play_unchecked(leaf.choice.unwrap());
+        pos.play_unchecked(leaf.choice.unwrap(), Some(&mut info.stck));
         let child = Node::from_position(&pos);
 
         self.positions.push(child);
@@ -259,7 +259,7 @@ impl Game {
                     p.choose_second(tt, info);
 
                     if !p.choice.unwrap().is_null() {
-                        pos.play_unchecked(p.choice.unwrap());
+                        pos.play_unchecked(p.choice.unwrap(), Some(&mut info.stck));
 
                         let mut n = Node::from_position(&pos);
                         let s = -n.value(tt, info);

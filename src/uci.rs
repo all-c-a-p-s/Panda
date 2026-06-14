@@ -150,21 +150,21 @@ pub fn reset(b: &mut Board) {
     *b = Board::from(STARTPOS);
 }
 
-fn apply_uci_move(b: &mut Board, w: &str) {
+fn apply_uci_move(b: &mut Board, info: &mut SearchInfo, w: &str) {
     let m = parse_move(w, b);
-    let Ok(_) = b.try_move(m) else {
+    let Ok(_) = b.try_move(m, Some(&mut info.stck)) else {
         panic!("invalid move {}", m.uci());
     };
 }
 
-fn parse_position_words(words: &[&str], b: &mut Board, end: usize) {
+fn parse_position_words(words: &[&str], b: &mut Board, info: &mut SearchInfo, end: usize) {
     assert!((words.len() >= 2), "invalid position command");
 
     match words[1] {
         "startpos" => {
             if end != 2 {
                 for &w in words.iter().take(end).skip(3) {
-                    apply_uci_move(b, w);
+                    apply_uci_move(b, info, w);
                 }
             }
         }
@@ -174,27 +174,27 @@ fn parse_position_words(words: &[&str], b: &mut Board, end: usize) {
 
             if end != 8 {
                 for &w in words.iter().take(end).skip(9) {
-                    apply_uci_move(b, w);
+                    apply_uci_move(b, info, w);
                 }
             }
         }
         "moves" => {
             for &w in words.iter().take(end).skip(2) {
-                apply_uci_move(b, w);
+                apply_uci_move(b, info, w);
             }
         }
         _ => {}
     }
 }
 
-pub fn parse_position(words: &[&str], b: &mut Board) {
+pub fn parse_position(words: &[&str], b: &mut Board, info: &mut SearchInfo) {
     reset(b);
-    parse_position_words(words, b, words.len());
+    parse_position_words(words, b, info, words.len());
 }
 
-fn parse_play(words: &[&str], b: &mut Board) {
+fn parse_play(words: &[&str], b: &mut Board, info: &mut SearchInfo) {
     match words[..] {
-        ["play", m] => apply_uci_move(b, m),
+        ["play", m] => apply_uci_move(b, info, m),
         _ => panic!("expected command in the following format: play <move>"),
     }
 }
@@ -211,7 +211,7 @@ pub fn parse_special_go(
 
     let end_of_moves = words.iter().position(|x| x.starts_with('w')).expect("invalid go command");
 
-    parse_position_words(words, b, end_of_moves);
+    parse_position_words(words, b, info, end_of_moves);
 
     let mut go_words = vec!["go"];
     go_words.extend_from_slice(&words[end_of_moves..]);
@@ -463,8 +463,8 @@ pub fn uci_loop() {
                 parse_uci(&words);
             }
             CommandType::IsReady => parse_isready(&words),
-            CommandType::Position => parse_position(&words, &mut board),
-            CommandType::Play => parse_play(&words, &mut board),
+            CommandType::Position => parse_position(&words, &mut board, &mut info),
+            CommandType::Play => parse_play(&words, &mut board, &mut info),
             CommandType::Go => {
                 let move_data = parse_go(&words, &mut board, &tt, &mut info, &opts);
                 if move_data.m.is_null() {
@@ -478,7 +478,7 @@ pub fn uci_loop() {
                     let m = move_data.m;
                     println!("played {}", m.uci());
 
-                    let Ok(_) = board.try_move(m) else {
+                    let Ok(_) = board.try_move(m, Some(&mut info.stck)) else {
                         panic!(
                             concat!(
                                 "Panda tried to play an illegal move {}.\n",

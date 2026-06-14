@@ -1,6 +1,7 @@
 use std::mem;
 
 use crate::eval::MIRROR;
+use crate::uci::STARTPOS;
 use crate::{Board, Colour, lsfb, pop_bit};
 
 use crate::types::{OccupancyIndex, PIECES, Piece, Square};
@@ -69,6 +70,10 @@ impl Accumulator {
         }
 
         a
+    }
+
+    pub fn from_startpos() -> Self {
+        Self::from_board(&Board::from(STARTPOS))
     }
 
     // update values of hidden layer nodes depending after a bit is changed

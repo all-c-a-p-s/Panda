@@ -2,7 +2,7 @@ use crate::Colour;
 use crate::board::Board;
 use crate::helper::piece_type;
 use crate::r#move::{Move, NULL_MOVE};
-use crate::search::{INFINITY, MAX_PLY};
+use crate::search::{INFINITY, MAX_DEPTH};
 use crate::thread::{CORRHIST_SIZE, NodeTable, Thread};
 
 const HISTORY_MAX: i32 = 16_384;
@@ -12,7 +12,7 @@ const CORRHIST_GRAIN: i32 = 256;
 const CORRHIST_SCALE: i32 = 256;
 const CORRHIST_MAX: i32 = 256 * 32;
 
-const MATE: i32 = INFINITY - MAX_PLY as i32;
+const MATE: i32 = INFINITY - MAX_DEPTH as i32;
 
 impl Thread<'_> {
     pub fn update_pv(&mut self, m: Move) {
@@ -240,7 +240,7 @@ impl Thread<'_> {
         self.nodes = 0;
         self.info.nodetable = NodeTable::default();
         self.pv_length = [0; 64];
-        self.pv = [[NULL_MOVE; MAX_PLY]; MAX_PLY];
+        self.pv = [[NULL_MOVE; MAX_DEPTH]; MAX_DEPTH];
         self.ply = 0;
         self.moves_fully_searched = 0;
 
