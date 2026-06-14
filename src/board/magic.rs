@@ -1,9 +1,9 @@
 #![allow(clippy::no_effect)]
 
 use crate::board::{BitBoard, Colour};
-use crate::helper::{A_FILE, B_FILE, G_FILE, H_FILE, coordinate, count, get_bit, lsfb, pop_bit, set_bit};
-use crate::rng::magic_candidate;
-use crate::types::Square;
+use crate::util::helper::{A_FILE, B_FILE, G_FILE, H_FILE, coordinate, count, get_bit, lsfb, pop_bit, set_bit};
+use crate::util::rng::magic_candidate;
+use crate::util::types::Square;
 
 pub enum SliderType {
     Bishop,
@@ -422,7 +422,7 @@ pub fn gen_magic(square: usize, relevant_bits: usize, slider: SliderType) -> Bit
             return magic;
         }
     }
-    eprintln!("failed to generate magic for {}", coordinate(unsafe { crate::types::Square::from(square as u8) }));
+    eprintln!("failed to generate magic for {}", coordinate(unsafe { crate::util::types::Square::from(square as u8) }));
     0
 }
 

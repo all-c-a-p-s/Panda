@@ -1,10 +1,10 @@
 use std::mem;
 
 use crate::eval::MIRROR;
-use crate::uci::STARTPOS;
+use crate::util::uci::STARTPOS;
 use crate::{Board, Colour, lsfb, pop_bit};
 
-use crate::types::{OccupancyIndex, PIECES, Piece, Square};
+use crate::util::types::{OccupancyIndex, PIECES, Piece, Square};
 
 // ON or OFF for each piece / colour / square
 const NUM_FEATURES: usize = 6 * 2 * 64;
@@ -29,7 +29,7 @@ struct Network {
     output_bias: i16,
 }
 
-static MODEL: Network = unsafe { mem::transmute(*include_bytes!("./nets/hl_384.bin")) };
+static MODEL: Network = unsafe { mem::transmute(*include_bytes!("../nets/hl_384.bin")) };
 
 type SideAccumulator = [i16; HL_SIZE];
 

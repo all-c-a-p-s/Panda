@@ -1,6 +1,6 @@
 use crate::cfor;
-use crate::rng::XorShiftU64;
-use crate::types::{Piece, Square};
+use crate::util::rng::XorShiftU64;
+use crate::util::types::{Piece, Square};
 use crate::{Board, Colour, Move};
 
 const fn init_hash_keys() -> ([[u64; 12]; 64], [u64; 64], [u64; 16], u64) {

@@ -1,13 +1,13 @@
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::time::{Duration, Instant};
-use types::Square;
+use crate::util::types::Square;
 
-use crate::nnue::Accumulator;
+use crate::eval::nnue::Accumulator;
 use crate::read_param;
 use crate::search::params;
-use crate::transposition::{TTRef, TranspositionTable};
-use crate::types::Piece;
-use crate::{Board, INFINITY, MAX_DEPTH, Move, MoveData, NULL_MOVE, iterative_deepening, types};
+use crate::search::transposition::{TTRef, TranspositionTable};
+use crate::util::types::Piece;
+use crate::{Board, INFINITY, MAX_DEPTH, Move, MoveData, NULL_MOVE, iterative_deepening};
 
 const MIN_MOVE_TIME: usize = 1; //make sure move time is never 0
 const MOVE_OVERHEAD: usize = 50;

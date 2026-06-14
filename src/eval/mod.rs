@@ -1,9 +1,12 @@
+pub mod nnue;
+
+pub use nnue::*;
+
 use crate::board::{Board, Colour};
-use crate::helper::rank;
-use crate::nnue::Accumulator;
+use crate::util::helper::rank;
 use crate::search::MATE;
 
-use crate::types::{Piece, Square};
+use crate::util::types::{Piece, Square};
 
 pub const MIRROR: [usize; 64] = {
     const fn relative_psqt_square(square: usize, c: Colour) -> usize {

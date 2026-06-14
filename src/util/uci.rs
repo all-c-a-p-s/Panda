@@ -7,9 +7,9 @@ use crate::set_param;
 #[cfg(feature = "tuning")]
 use crate::search::{list_params, params};
 
-use crate::thread::{SearchInfo, Searcher, Thread};
-use crate::transposition::TranspositionTable;
-use crate::types::{Piece, PieceType, Square};
+use crate::search::thread::{SearchInfo, Searcher, Thread};
+use crate::search::transposition::TranspositionTable;
+use crate::util::types::{Piece, PieceType, Square};
 use crate::{
     Board, CASTLING_FLAG, Colour, EN_PASSANT_FLAG, INFINITY, Move, MoveData, NO_FLAG, PROMOTION_FLAG, coordinate,
     encode_move, perft, piece_type, square,

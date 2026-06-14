@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use crate::{Board, MoveList, STARTPOS, movegen::MovegenMode};
+use crate::{Board, MoveList, STARTPOS, board::movegen::MovegenMode};
 
 pub fn perft<const BULK: bool, const TEST_PSEUDOLEGAL: bool, const MODES: bool>(
     depth: usize,

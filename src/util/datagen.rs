@@ -7,11 +7,11 @@ use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::movegen::MovegenMode;
-use crate::thread::SearchInfo;
-use crate::thread::{Searcher, Thread};
-use crate::transposition::TranspositionTable;
-use crate::types::OccupancyIndex;
+use crate::board::movegen::MovegenMode;
+use crate::search::thread::SearchInfo;
+use crate::search::thread::{Searcher, Thread};
+use crate::search::transposition::TranspositionTable;
+use crate::util::types::OccupancyIndex;
 use crate::{Board, Colour, INFINITY, Move, MoveList, STARTPOS, iterative_deepening};
 
 // I think it makes sense to have to variation in how weird the positions will be.

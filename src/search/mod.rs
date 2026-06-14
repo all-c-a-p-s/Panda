@@ -1,17 +1,24 @@
 #![cfg_attr(feature = "datagen", allow(dead_code, unused))]
 
+pub(crate) mod macros;
+pub mod ordering;
+pub mod tables;
+pub mod thread;
+pub mod transposition;
+
+pub use ordering::*;
+pub use thread::*;
+pub use transposition::*;
+
 use arrayvec::ArrayVec;
 
 use crate::board::Board;
 use crate::eval::evaluate;
-use crate::helper::{read_param, tuneable_params};
-use crate::r#move::{Move, MoveList, NULL_MOVE};
-use crate::ordering::{MovePicker, SEE_VALUES};
-use crate::search_macros::*;
-use crate::thread::{SearchStackEntry, Thread};
-use crate::transposition::{EntryFlag, TT, TTEntry};
-use crate::types::PieceType;
-use crate::uci::print_thinking;
+use crate::util::helper::{read_param, tuneable_params};
+use crate::board::r#move::{Move, MoveList, NULL_MOVE};
+use crate::search::macros::*;
+use crate::util::types::PieceType;
+use crate::util::uci::print_thinking;
 
 use core::option::Option::Some;
 use std::sync::atomic::Ordering::Relaxed;
@@ -145,7 +152,7 @@ impl Thread<'_> {
     /// - PV-node: a node in which the value returned is between alpha and beta (exact)
     /// - Cutnode: a node in which a beta cutoff occurred, value returned >= beta (lower bound)
     /// - All-node: a node in which all moves were searched and value returned <= alpha (upper bound)
-    /// If we can predict the type of a node, we can make better decisions about pruning.
+    ///   If we can predict the type of a node, we can make better decisions about pruning.
     pub fn negamax(&mut self, position: &mut Board, mut depth: u8, mut alpha: i32, beta: i32, cutnode: bool) -> i32 {
         if self.should_exit() {
             return 0;
@@ -177,7 +184,7 @@ impl Thread<'_> {
 
         if !root && !singular {
             if position.is_drawn() {
-                return 1 * if self.ply % 2 == 0 { 1 } else { -1 };
+                return if self.ply.is_multiple_of(2) { 1 } else { -1 };
             }
 
             // Mate Distance Pruning:
@@ -591,7 +598,7 @@ impl Thread<'_> {
         self.seldepth = self.seldepth.max(self.ply as u8);
 
         if position.is_drawn() {
-            return 1 * if self.ply % 2 == 0 { 1 } else { -1 };
+            return if self.ply.is_multiple_of(2) { 1 } else { -1 };
         }
 
         if self.should_exit() {

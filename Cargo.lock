@@ -3,6 +3,29 @@
 version = 4
 
 [[package]]
+name = "Panda"
+version = "1.2.0"
+dependencies = [
+ "arrayvec",
+ "colored",
+ "indicatif",
+ "lazy_static",
+ "mindtree_utils",
+ "num_cpus",
+ "rand 0.8.5",
+ "rand_chacha",
+ "rand_xoshiro",
+ "rayon",
+ "rusqlite",
+]
+
+[[package]]
+name = "arrayvec"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
+
+[[package]]
 name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -307,22 +330,6 @@ name = "once_cell"
 version = "1.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "945462a4b81e43c4e3ba96bd7b49d834c6f61198356aa858733bc4acf3cbe62e"
-
-[[package]]
-name = "panda"
-version = "0.1.0"
-dependencies = [
- "colored",
- "indicatif",
- "lazy_static",
- "mindtree_utils",
- "num_cpus",
- "rand 0.8.5",
- "rand_chacha",
- "rand_xoshiro",
- "rayon",
- "rusqlite",
-]
 
 [[package]]
 name = "pkg-config"

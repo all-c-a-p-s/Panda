@@ -1,11 +1,20 @@
-use crate::helper::{coordinate, count, lsfb, pop_bit, set_bit, square};
-use crate::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS};
-use crate::movegen::RAY_BETWEEN;
+pub mod magic;
+pub mod r#move;
+pub mod movegen;
+pub mod perft;
+pub mod zobrist;
+
+pub use magic::*;
+pub use r#move::*;
+pub use movegen::*;
+pub use perft::*;
+pub use zobrist::*;
+
+use crate::util::helper::{coordinate, count, lsfb, pop_bit, set_bit, square};
 use crate::search::REPETITION_TABLE_SIZE;
-use crate::types::OccupancyIndex;
-use crate::types::{Piece, Square};
-use crate::uci::pretty_piece;
-use crate::zobrist::{BLACK_TO_MOVE, EP_KEYS};
+use crate::util::types::OccupancyIndex;
+use crate::util::types::{Piece, Square};
+use crate::util::uci::pretty_piece;
 
 pub(crate) type BitBoard = u64;
 pub(crate) const EMPTY: BitBoard = 0;

@@ -3,8 +3,8 @@ use std::io::Write;
 use crate::{
     board::{Board, Colour},
     search::INFINITY,
-    thread::{SearchInfo, Searcher},
-    transposition::TranspositionTable,
+    search::thread::{SearchInfo, Searcher},
+    search::transposition::TranspositionTable,
 };
 
 /// Play some games from kinda unbalanced exits and record to a file for bench.

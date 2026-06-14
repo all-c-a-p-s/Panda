@@ -180,7 +180,7 @@ mod tests {
         ($fen: expr, $eval: expr, $mv: expr, $depth: expr, $flag: expr, $idx: expr) => {
             let b = crate::Board::from($fen);
             let h = b.hash_key;
-            let m = crate::uci::parse_move($mv, &b);
+            let m = crate::util::uci::parse_move($mv, &b);
             let entry = TTEntry::new($depth, $eval, $flag, m, h);
 
             let internal = TTEntryInternal::default();

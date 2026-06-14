@@ -1,4 +1,4 @@
-use crate::types::{Piece, PieceType, Square};
+use crate::util::types::{Piece, PieceType, Square};
 use std::collections::HashMap;
 
 use crate::BitBoard;

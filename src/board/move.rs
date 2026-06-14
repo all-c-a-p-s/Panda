@@ -6,15 +6,15 @@
 /// 1000 0000 0000 0000 castling flag      0x8000
 /// 1100 0000 0000 0000 promotion flag     0xc000
 use crate::board::{BitBoard, Board, Colour};
-use crate::helper::{MAX_MOVES, coordinate, count, get_bit, lsfb, piece_type, pop_bit, rank, set_bit};
-use crate::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, K_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS};
-use crate::magic::{get_bishop_attacks, get_queen_attacks, get_rook_attacks};
-use crate::movegen::{CASTLING_MASKS, CASTLING_PATHS};
-use crate::movegen::{RAY_BETWEEN, check_en_passant, is_attacked};
-use crate::thread::AccumulatorStack;
-use crate::zobrist::CASTLING_KEYS;
+use crate::util::helper::{MAX_MOVES, coordinate, count, get_bit, lsfb, piece_type, pop_bit, rank, set_bit};
+use crate::board::magic::{BISHOP_EDGE_RAYS, BP_ATTACKS, K_ATTACKS, N_ATTACKS, ROOK_EDGE_RAYS, WP_ATTACKS};
+use crate::board::magic::{get_bishop_attacks, get_queen_attacks, get_rook_attacks};
+use crate::board::movegen::{CASTLING_MASKS, CASTLING_PATHS};
+use crate::board::movegen::{RAY_BETWEEN, check_en_passant, is_attacked};
+use crate::search::thread::AccumulatorStack;
+use crate::board::zobrist::CASTLING_KEYS;
 
-use crate::types::{CastlingType, OccupancyIndex, Piece, PieceType, Square};
+use crate::util::types::{CastlingType, OccupancyIndex, Piece, PieceType, Square};
 
 pub const SQUARE_FROM_MASK: u16 = 0b0000_0000_0011_1111;
 pub const SQUARE_TO_MASK: u16 = 0b0000_1111_1100_0000;

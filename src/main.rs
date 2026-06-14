@@ -1,36 +1,19 @@
-pub mod bench;
 pub mod board;
-pub mod datagen;
 pub mod eval;
-pub mod helper;
-pub mod magic;
-pub mod r#move;
-pub mod movegen;
-pub mod nnue;
-pub mod ordering;
-pub mod perft;
-pub mod rng;
 pub mod search;
-pub mod search_tables;
-pub mod thread;
-pub mod transposition;
-pub mod types;
-pub mod uci;
-pub mod zobrist;
-
-pub(crate) mod search_macros;
+pub mod util;
 
 use std::error::Error;
 
-use crate::bench::prepare_bench;
+use crate::util::bench::prepare_bench;
 use crate::board::{BitBoard, Board, Colour};
-use crate::datagen::gen_data;
-use crate::helper::{MAX_MOVES, coordinate, lsfb, piece_type, pop_bit, set_bit, square};
-use crate::magic::{get_bishop_attacks, get_rook_attacks, init_slider_attacks};
-use crate::r#move::{CASTLING_FLAG, EN_PASSANT_FLAG, Move, MoveList, NO_FLAG, NULL_MOVE, PROMOTION_FLAG, encode_move};
-use crate::perft::{full_perft, perft};
+use crate::util::datagen::gen_data;
+use crate::util::helper::{MAX_MOVES, coordinate, lsfb, piece_type, pop_bit, set_bit, square};
+use crate::board::magic::{get_bishop_attacks, get_rook_attacks, init_slider_attacks};
+use crate::board::r#move::{CASTLING_FLAG, EN_PASSANT_FLAG, Move, MoveList, NO_FLAG, NULL_MOVE, PROMOTION_FLAG, encode_move};
+use crate::board::perft::{full_perft, perft};
 use crate::search::{INFINITY, MAX_DEPTH, MoveData, iterative_deepening};
-use crate::uci::{STARTPOS, uci_loop};
+use crate::util::uci::{STARTPOS, uci_loop};
 
 fn init_all() {
     // initialise all constants

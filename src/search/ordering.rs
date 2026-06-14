@@ -1,9 +1,9 @@
-use crate::r#move::{Move, MoveList};
-use crate::movegen::MovegenMode;
-use crate::movegen::get_attackers;
+use crate::board::r#move::{Move, MoveList};
+use crate::board::movegen::MovegenMode;
+use crate::board::movegen::get_attackers;
 use crate::search::{INFINITY, params};
-use crate::thread::Thread;
-use crate::types::{BLACK_PIECES, OccupancyIndex, Piece, PieceType, WHITE_PIECES};
+use crate::search::thread::Thread;
+use crate::util::types::{BLACK_PIECES, OccupancyIndex, Piece, PieceType, WHITE_PIECES};
 use crate::{Board, Colour, MAX_MOVES, get_bishop_attacks, get_rook_attacks, lsfb, piece_type, read_param, set_bit};
 
 const MVV: [i32; 6] = [0, 2400, 2400, 4800, 9600, 0];

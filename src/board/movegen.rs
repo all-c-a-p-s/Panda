@@ -1,11 +1,11 @@
 use crate::board::{BitBoard, Board, Colour};
-use crate::helper::{MAX_MOVES, RANK_1, RANK_8, file, get_bit, lsfb, pop_bit, rank, set_bit};
-use crate::magic::{
+use crate::util::helper::{MAX_MOVES, RANK_1, RANK_8, file, get_bit, lsfb, pop_bit, rank, set_bit};
+use crate::board::magic::{
     BP_ATTACKS, K_ATTACKS, N_ATTACKS, WP_ATTACKS, get_bishop_attacks, get_queen_attacks, get_rook_attacks,
 };
-use crate::r#move::{CASTLING_FLAG, EN_PASSANT_FLAG, Move, MoveList, NO_FLAG, NULL_MOVE, PROMOTION_FLAG, encode_move};
+use crate::board::r#move::{CASTLING_FLAG, EN_PASSANT_FLAG, Move, MoveList, NO_FLAG, NULL_MOVE, PROMOTION_FLAG, encode_move};
 
-use crate::types::{CastlingType, OccupancyIndex, Piece, PieceType, Square};
+use crate::util::types::{CastlingType, OccupancyIndex, Piece, PieceType, Square};
 
 pub struct MoveListEntry {
     pub m: Move,
