@@ -37,31 +37,6 @@ const ONE_HOUR: u64 = 3600;
 const DATAGEN_PATH: &str = "/Users/seba/rs/Panda/set-backtracking-003.txt";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    //let mut b = Board::from(STARTPOS);
-    //
-    //let m = parse_move("g1f3", &b);
-    //b.play_unchecked(m);
-    //
-    //println!("{:?}", b.history);
-    //
-    //let m = parse_move("g8f6", &b);
-    //let c = b.play_unchecked(m);
-    //
-    //println!("{:?}", b.history);
-    //
-    //b.undo_move(m, &c);
-    //
-    //println!("{:?}", b.history);
-    //
-    //let m = parse_move("e2e4", &b);
-    //let c = b.play_unchecked(m);
-    //
-    //println!("{:?}", b.history);
-    //
-    //b.undo_move(m, &c);
-    //
-    //println!("{:?}", b.history);
-
     unsafe {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
@@ -81,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     match mode {
         Mode::Uci => uci_loop(),
         Mode::Profile => full_perft(),
-        Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(ONE_HOUR * 100))?,
+        Mode::Datagen => gen_data(DATAGEN_PATH, std::time::Duration::from_secs(ONE_HOUR * 1000))?,
         Mode::Prep => prepare_bench()?,
         Mode::Debug => {}
     }
