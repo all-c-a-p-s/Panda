@@ -57,6 +57,8 @@ You can clone the repo for dev build, or get the latest published version from [
 > rustup component add llvm-tools-preview
 > cargo install cargo-binutils
 > ```
+> (You probably already have LLVM installed, but if not you will also need to run a command similar to `sudo apt install llvm` to install it.)
+> 
 > You can then build the project using `make` or `make pgo`.
 > The pgo compilation itself will take a few minutes. Thanks for you patience :)
 
