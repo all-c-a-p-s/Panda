@@ -75,6 +75,10 @@ impl Node {
 
     // this function merely needs to determine the value of the node, not of its moves
     fn value(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) -> i32 {
+        if self.board.is_drawn() {
+            return 0;
+        }
+
         let mut s = Searcher::new(tt, info);
 
         let limits = Limits::time_and_nodes(10, 8192);
