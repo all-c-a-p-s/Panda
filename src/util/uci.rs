@@ -14,7 +14,7 @@ use crate::search::transposition::TranspositionTable;
 use crate::util::types::{Piece, PieceType, Square};
 use crate::{
     Board, CASTLING_FLAG, Colour, EN_PASSANT_FLAG, INFINITY, Move, MoveData, NO_FLAG, PROMOTION_FLAG, coordinate,
-    encode_move, perft, piece_type, square,
+    encode_move, perft, piece_type, square, top,
 };
 
 static UCI_MODE: AtomicBool = AtomicBool::new(false);
@@ -192,7 +192,7 @@ fn parse_position_words(words: &[&str], b: &mut Board, info: &mut SearchInfo, en
         _ => {}
     }
 
-    assert_eq!(Accumulator::from_board(b), info.stck.current(), "accumulator isn't synced :/");
+    assert_eq!(Accumulator::from_board(b), top!(info.stck), "accumulator isn't synced :/");
 }
 
 pub fn parse_position(words: &[&str], b: &mut Board, info: &mut SearchInfo) {
@@ -525,7 +525,11 @@ pub fn uci_loop() {
             }
             CommandType::Perft => parse_perft(&words, &mut board),
             CommandType::SetOption => set_options(&words, &mut opts, &mut tt),
-            CommandType::UciNewGame => board = Board::from(STARTPOS),
+            CommandType::UciNewGame => {
+                board = Board::from(STARTPOS);
+                info = SearchInfo::default();
+                tt.clear();
+            }
             _ => {}
         }
     }

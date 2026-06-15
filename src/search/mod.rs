@@ -165,7 +165,7 @@ impl Thread<'_> {
         self.nodes += 1;
 
         if self.ply == MAX_DEPTH - 1 {
-            return evaluate(position, &self.info.stck.current());
+            return evaluate(position, &top!(self.info.stck));
         }
 
         let pv_node = beta - alpha != 1;
@@ -221,7 +221,7 @@ impl Thread<'_> {
         // reset killers for child nodes
         self.info.killer_moves[self.ply + 1] = None;
 
-        let mut static_eval = evaluate(position, &self.info.stck.current());
+        let mut static_eval = evaluate(position, &top!(self.info.stck));
         if !singular {
             let corrected = self.eval_with_corrhist(position, static_eval);
             static_eval = corrected;
@@ -615,7 +615,7 @@ impl Thread<'_> {
         }
 
         if self.ply == MAX_DEPTH - 1 {
-            return evaluate(position, &self.info.stck.current());
+            return evaluate(position, &top!(self.info.stck));
         }
 
         let mut hash_flag = EntryFlag::UpperBound;
@@ -635,7 +635,7 @@ impl Thread<'_> {
 
         let in_check = position.checkers != 0;
 
-        let mut static_eval = evaluate(position, &self.info.stck.current());
+        let mut static_eval = evaluate(position, &top!(self.info.stck));
         static_eval = self.eval_with_corrhist(position, static_eval);
 
         let mut best_score = if in_check { -INFINITY + 1 } else { static_eval };

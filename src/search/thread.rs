@@ -93,10 +93,6 @@ impl AccumulatorStack {
         self.idx -= 1;
     }
 
-    pub fn current(&self) -> Accumulator {
-        self.accs[self.idx]
-    }
-
     /// This function is a bit hacky. Sometimes (often in the uci file), we need to successively
     /// update the root accumulator. The easiest way to do this is just to make the move on the
     /// board normally (which puts it at index 1) and then call this function, which gives the
@@ -252,6 +248,7 @@ pub struct Searcher<'a> {
     info: &'a mut SearchInfo,
 }
 
+#[derive(Default)]
 pub struct Limits {
     pub max_nodes: Option<usize>,
     pub max_time: Option<usize>,
@@ -273,12 +270,6 @@ impl Limits {
 
     pub fn time_and_nodes(time: usize, nodes: usize) -> Self {
         Self { max_nodes: Some(nodes), max_time: Some(time), max_depth: None }
-    }
-}
-
-impl Default for Limits {
-    fn default() -> Self {
-        Self { max_nodes: None, max_time: None, max_depth: None }
     }
 }
 

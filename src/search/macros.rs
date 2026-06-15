@@ -1,6 +1,13 @@
 #![cfg_attr(feature = "datagen", allow(dead_code, unused))]
 
 #[macro_export]
+macro_rules! top {
+    ($self_:expr) => {
+        $self_.accs[$self_.idx]
+    };
+}
+
+#[macro_export]
 macro_rules! singularity_de {
     ($self_:expr, $pv_node:expr, $excluded_eval:expr, $threshold:expr) => {
         DO_SINGULARITY_DE
@@ -162,4 +169,5 @@ pub(crate) use maybe_singular;
 pub(crate) use should_correct_with_tt;
 pub(crate) use should_reduce;
 pub(crate) use singularity_de;
+pub(crate) use top;
 pub(crate) use tt_cutoff;
