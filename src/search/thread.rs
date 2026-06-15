@@ -318,7 +318,13 @@ impl<'a> Searcher<'a> {
         //datagen is already multi-threaded so only search on one thread
         #[cfg(feature = "datagen")]
         {
-            return iterative_deepening::<false>(&mut position.clone(), soft_limit, hard_limit, &mut main_thread);
+            return iterative_deepening::<false>(
+                &mut position.clone(),
+                soft_limit,
+                hard_limit,
+                max_depth,
+                &mut main_thread,
+            );
         }
 
         let mut infos = (0..threads - 1).map(|_| SearchInfo::default()).collect::<Vec<_>>();

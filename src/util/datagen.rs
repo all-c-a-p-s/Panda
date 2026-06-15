@@ -61,7 +61,7 @@ pub struct Game {
 
 #[derive(Clone, Copy)]
 pub struct Node {
-    position: Board,
+    board: Board,
     value: i32, //note these are from perspective of STM
     choice: Option<Move>,
     result: Option<f32>,
@@ -70,7 +70,7 @@ pub struct Node {
 impl Node {
     #[must_use]
     pub fn from_position(pos: &Board) -> Self {
-        Self { position: *pos, value: 0, choice: None, result: None }
+        Self { board: *pos, value: 0, choice: None, result: None }
     }
 
     // this function merely needs to determine the value of the node, not of its moves
@@ -79,7 +79,7 @@ impl Node {
 
         let limits = Limits::time_and_nodes(10, 8192);
 
-        let move_data = s.start_search(&mut self.position, 0, 0, 0, &limits, 1);
+        let move_data = s.start_search(&mut self.board, 0, 0, 0, &limits, 1);
         move_data.eval
     }
 
@@ -88,7 +88,7 @@ impl Node {
 
         let limits = Limits::time_and_nodes(10, 8192);
 
-        let move_data = s.start_search(&mut self.position, 0, 0, 0, &limits, 1);
+        let move_data = s.start_search(&mut self.board, 0, 0, 0, &limits, 1);
 
         self.choice = Some(move_data.m);
         self.value = move_data.eval;
@@ -96,7 +96,7 @@ impl Node {
 
     pub fn choose_opening_move(&mut self, tt: &TranspositionTable, info: &mut SearchInfo, margin: i32) {
         let mut movelist = MoveList::empty();
-        movelist.gen_moves(&self.position, MovegenMode::All);
+        movelist.gen_moves(&self.board, MovegenMode::All);
 
         let mut best_score = -INFINITY;
 
@@ -105,7 +105,7 @@ impl Node {
         let mut scores = vec![];
 
         for &m in movelist.moves.iter().take(movelist.used) {
-            let Ok(commit) = self.position.try_move(m, Some(&mut info.stck)) else {
+            let Ok(commit) = self.board.try_move(m, Some(&mut info.stck)) else {
                 continue;
             };
 
@@ -114,12 +114,12 @@ impl Node {
             // because we don't want to just hit them and return zero
             let mut t = Thread::new(Instant::now() + Duration::from_millis(10), INFINITY as usize, tt, info, &stop);
 
-            let score = -t.negamax(&mut self.position, 4, -INFINITY, INFINITY, false);
+            let score = -t.negamax(&mut self.board, 4, -INFINITY, INFINITY, false);
 
             scores.push((score, m));
             best_score = best_score.max(score);
 
-            self.position.undo_move(m, &commit, Some(&mut info.stck));
+            self.board.undo_move(m, &commit, Some(&mut info.stck));
         }
 
         let (s, chosen_move) = {
@@ -138,12 +138,14 @@ impl Node {
     // must be called when choice is not None and when choice is not the only legal move
     pub fn choose_second(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) {
         let m = self.choice.unwrap();
+        info.stck.set_to(&self.board);
 
         let stop = AtomicBool::new(false);
 
         let mut t = Thread::new(Instant::now() + Duration::from_millis(10), 8192, tt, info, &stop);
+
         t.info.excluded[0] = Some(m);
-        let move_data = iterative_deepening::<false>(&mut self.position, 10, 10, MAX_DEPTH as u8, &mut t);
+        let move_data = iterative_deepening::<false>(&mut self.board, 10, 10, MAX_DEPTH as u8, &mut t);
         self.choice = Some(move_data.m);
     }
 }
@@ -164,7 +166,7 @@ impl Game {
         opening_cp_margin: i32,
         opening: bool,
     ) -> Result<bool, ()> {
-        let mut pos = self.positions.last().unwrap().position;
+        let mut pos = self.positions.last().unwrap().board;
         let movelist = MoveList::gen_legal(&mut pos);
 
         let found_move = movelist.used > 0;
@@ -260,13 +262,12 @@ impl Game {
             if misevaluated {
                 let p = self.positions.get_mut(ply).unwrap();
 
-                let mut pos = p.position;
+                let mut pos = p.board;
 
                 let movelist = MoveList::gen_legal(&mut pos);
 
                 if movelist.used > 1 {
                     p.choose_second(tt, info);
-
                     if !p.choice.unwrap().is_null() {
                         pos.play_unchecked(p.choice.unwrap(), Some(&mut info.stck));
 
@@ -283,7 +284,7 @@ impl Game {
 
 impl Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.position.print_board();
+        self.board.print_board();
         let mut s = format!("value: {}", self.value);
         s += format!("\nchoice: {}", { if let Some(m) = self.choice { m.uci() } else { "None".to_string() } }).as_str();
         s +=
@@ -336,17 +337,17 @@ pub fn play_one_game() -> Vec<(String, i32, f32)> {
     let mut filtered = vec![];
 
     for n in g.positions.iter().take(g.positions.len() - 1).skip(opening_length) {
-        let quiet = n.position.checkers == 0 && !n.choice.unwrap().is_capture(&n.position);
+        let quiet = n.board.checkers == 0 && !n.choice.unwrap().is_capture(&n.board);
         let within_bounds = n.value.abs() < i16::MAX as i32;
-        let enough_pieces = n.position.occupancies[OccupancyIndex::BothOccupancies].count_ones() > 3;
+        let enough_pieces = n.board.occupancies[OccupancyIndex::BothOccupancies].count_ones() > 3;
 
-        let value = match n.position.side_to_move {
+        let value = match n.board.side_to_move {
             Colour::White => n.value,
             Colour::Black => -n.value,
         };
 
         if quiet && within_bounds && enough_pieces {
-            filtered.push((n.position.fen(), value, n.result.unwrap()));
+            filtered.push((n.board.fen(), value, n.result.unwrap()));
         }
     }
 
