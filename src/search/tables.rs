@@ -1,9 +1,9 @@
 use crate::Colour;
 use crate::board::Board;
-use crate::util::helper::piece_type;
 use crate::board::r#move::{Move, NULL_MOVE};
-use crate::search::{INFINITY, MAX_DEPTH};
 use crate::search::thread::{CORRHIST_SIZE, NodeTable, Thread};
+use crate::search::{INFINITY, MAX_DEPTH};
+use crate::util::helper::piece_type;
 
 const HISTORY_MAX: i32 = 16_384;
 const CORRELATION_MAX: i32 = 4_096;

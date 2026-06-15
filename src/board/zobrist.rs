@@ -172,39 +172,33 @@ mod tests {
     pub fn hash_update_test(depth: usize, b: &mut Board) -> usize {
         let mut total = 0;
         let moves = MoveList::gen_legal(b);
-        let mut added = 0;
-        for i in 0..MAX_MOVES {
-            if moves.moves[i].is_null() {
-                if depth == 1 {
-                    return i;
-                }
-                break;
+
+        if depth == 1 {
+            return moves.used;
+        }
+
+        for &m in moves.moves.iter().take(moves.used) {
+            let Ok(commit) = b.try_move(m, None) else {
+                panic!("invalid move {}", m.uci());
+            };
+
+            let correct_hash = b.compute_hash();
+            let correct_pawn_hash = b.compute_pawn_hash();
+
+            if b.hash_key != correct_hash {
+                b.print_board();
+                m.print_move();
+                panic!("hash update failed");
             }
-            if depth != 1 {
-                //must be done before making move
-                let Ok(commit) = b.try_move(moves.moves[i], None) else {
-                    panic!("invalid move {}", moves.moves[i].uci());
-                };
 
-                let correct_hash = b.compute_hash();
-                let correct_pawn_hash = b.compute_pawn_hash();
-
-                if b.hash_key != correct_hash {
-                    b.print_board();
-                    moves.moves[i].print_move();
-                    panic!("hash update failed");
-                }
-
-                if b.pawn_hash != correct_pawn_hash {
-                    b.print_board();
-                    moves.moves[i].print_move();
-                    panic!("pawn hash update failed");
-                }
-
-                added = hash_update_test(depth - 1, b);
-                b.undo_move(moves.moves[i], &commit, None);
+            if b.pawn_hash != correct_pawn_hash {
+                b.print_board();
+                m.print_move();
+                panic!("pawn hash update failed");
             }
-            total += added;
+
+            total += hash_update_test(depth - 1, b);
+            b.undo_move(m, &commit, None);
         }
 
         total

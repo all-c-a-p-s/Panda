@@ -6,7 +6,13 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.release]
-debug = true
+opt-level = 3
+debug = false
+rpath = false
+debug-assertions = false
+codegen-units = 1
+lto = true
+panic = "abort"
 
 [dependencies]
 arrayvec = "0.7.6"
