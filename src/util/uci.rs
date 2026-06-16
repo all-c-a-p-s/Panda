@@ -357,6 +357,10 @@ fn set_options(words: &[&str], opts: &mut UciOptions, tt: &mut TranspositionTabl
                     RFP_BETA_WEIGHT,
                     NMP_BETA_WEIGHT,
                     STAND_PAT_BETA_WEIGHT,
+                    TMAN_NODE_MULT_A,
+                    TMAN_NODE_MULT_B,
+                    TMAN_DEFAULT_MTG,
+                    TMAN_IDEAL_MULT
                 );
             }
         }

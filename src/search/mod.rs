@@ -74,6 +74,12 @@ tuneable_params! {
     RFP_BETA_WEIGHT, i32, 22, 0, 1024;
     NMP_BETA_WEIGHT, i32, 327, 0, 1024;
     STAND_PAT_BETA_WEIGHT, i32, 170, 0, 1024;
+
+    // time managament stuff
+    TMAN_NODE_MULT_A, i32, 2252, 512, 8192;
+    TMAN_NODE_MULT_B, i32, 1331, 512, 8192;
+    TMAN_DEFAULT_MTG, usize, 20, 10, 40;
+    TMAN_IDEAL_MULT, usize, 717, 256, 1024;
 }
 
 const DO_SINGULARITY_EXTENSION: bool = true;
@@ -83,6 +89,10 @@ pub const REPETITION_TABLE_SIZE: usize = 100 + 1;
 
 fn lerp(u: i32, v: i32, w1: i32) -> i32 {
     ((u as i64 * w1 as i64 + v as i64 * (1024 - w1) as i64) / 1024) as i32
+}
+
+fn is_terminal(x: i32) -> bool {
+    x.abs() > INFINITY / 2
 }
 
 impl Thread<'_> {
@@ -303,17 +313,73 @@ impl Thread<'_> {
             depth -= 1;
         }
 
-        let (mut quiets, mut caps) = (ArrayVec::<Move, 64>::new(), ArrayVec::<Move, 64>::new());
-
         let mut movelist = MoveList::empty();
         let mut movepicker = MovePicker::new();
 
         let (mut good_caps, mut bad_caps) = (MoveList::empty(), MoveList::empty());
 
+        // Probcut Pruning:
+        // We can run some shallower searches on promising moves (promotions/good caps) to check if they
+        // can cause a cutoff with an adjusted value of beta. If so, then we skip doing a full search.
+        //
+        // It's also nice to note that if our probcut search fails, we can re-use our movegen work later on in the search,
+        // though this will be quite minor.
+        //
+        // TODO - experiment with using information from the fact that probcut failed later.
+        // AND/OR use probcut results for move ordering
+        let probcut_beta = beta + 250;
+        if try_probcut!(cutnode, depth, beta, tt_hit, tt_depth, tt_score, tt_move_exists, tt_move_capture) {
+            movepicker.doing_probcut = true;
+
+            while let Some(m) = movepicker.get_next(
+                NULL_MOVE,
+                None,
+                None,
+                position,
+                &mut movelist,
+                &mut good_caps,
+                &mut bad_caps,
+                self,
+                depth,
+                pv_node,
+                cutnode,
+            ) {
+                let Ok(commit) = position.try_move(m, Some(&mut self.info.stck)) else {
+                    continue;
+                };
+
+                let mut v = -self.qsearch(position, -probcut_beta, -probcut_beta + 1);
+
+                if v >= probcut_beta {
+                    v = -self.negamax(position, depth - 4, -probcut_beta, -probcut_beta + 1, !cutnode);
+                }
+
+                position.undo_move(m, &commit, Some(&mut self.info.stck));
+
+                if v >= probcut_beta {
+                    let hash_entry = TTEntry::new(depth - 3, v, EntryFlag::LowerBound, best_move, position.hash_key);
+                    self.tt.write(position.hash_key, hash_entry);
+                    return v;
+                }
+
+                if movepicker.done_probcut || tt_move_exists {
+                    // if there's a move which seemed best at a lower depth, and it failed to cause
+                    // a cutoff, then any other moves probably won't either
+                    break;
+                }
+            }
+
+            movepicker.stage = MovePickerStage::HashMove;
+            movepicker.generated = true;
+            movepicker.idx = 0;
+        }
+
         let (mut played, mut considered) = (0, 0);
         let mut best_score = -INFINITY;
 
         let (mut done_killer, mut done_counter) = (false, false);
+
+        let (mut quiets, mut caps) = (ArrayVec::<Move, 64>::new(), ArrayVec::<Move, 64>::new());
 
         let counter = if self.ply > 0
             && let Some(pc) = self.info.ss[self.ply - 1].piece_moved
@@ -712,6 +778,8 @@ impl Thread<'_> {
             if eval > alpha {
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
+
+                // TODO - try not updating this in qsearch?
                 best_move = m;
 
                 if eval >= beta {
@@ -853,7 +921,10 @@ pub fn iterative_deepening<const SHOW_THINKING: bool>(
 
         let fraction = s.info.nodetable.get(id.pv[0][0]) as f64 / s.nodes as f64;
 
-        let multiplier = 2.2 * (1.3 * fraction).cos(); //guessed with some desmos eyeballing
+        let a = read_param!(TMAN_NODE_MULT_A) as f64 / 1024.0;
+        let b = read_param!(TMAN_NODE_MULT_B) as f64 / 1024.0;
+
+        let multiplier = a * (b * fraction).cos();
 
         let soft_end = id.start_time + Duration::from_millis((soft_limit as f64 * multiplier) as u64);
         let mut end = s.timer.end_time;

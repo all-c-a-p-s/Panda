@@ -238,6 +238,7 @@ impl Thread<'_> {
 
     pub fn reset_thread(&mut self) {
         self.nodes = 0;
+        self.seldepth = 0;
         self.info.nodetable = NodeTable::default();
         self.pv_length = [0; 64];
         self.pv = [[NULL_MOVE; MAX_DEPTH]; MAX_DEPTH];

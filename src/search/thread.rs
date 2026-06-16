@@ -22,16 +22,12 @@ pub fn move_time(time: usize, increment: usize, moves_to_go: usize) -> (usize, u
 
     let time_until_flag = time - MOVE_OVERHEAD;
 
-    let m = if moves_to_go == 0 {
-        20 //very low compared to what I've seen but fsr this works best for Panda
-    } else {
-        moves_to_go.clamp(2, 40)
-    };
+    let m = if moves_to_go == 0 { read_param!(TMAN_DEFAULT_MTG) } else { moves_to_go.clamp(2, 40) };
 
     //note time - increment must be +ve since we got increment last turn
     let average_move_time = time_until_flag / m; // I guess this ignores increment so variable
     // name is a lie
-    let ideal_time = (average_move_time * 7) / 10 + increment / 2;
+    let ideal_time = average_move_time * read_param!(TMAN_IDEAL_MULT) / 1024 + increment / 2;
 
     let t = ideal_time.min(time_until_flag);
 

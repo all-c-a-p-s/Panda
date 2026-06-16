@@ -77,6 +77,17 @@ macro_rules! can_nmp {
 }
 
 #[macro_export]
+macro_rules! try_probcut {
+    ($cutnode: expr, $depth: expr, $beta: expr, $tt_hit: expr, $tt_depth: expr, $tt_score: expr, $tt_move_exists: expr, $tt_move_capture: expr) => {
+        $cutnode
+            && $depth >= 5
+            && !is_terminal($beta)
+            && !($tt_hit && $tt_depth + 6 >= $depth && $tt_score < $beta + 200)
+            && (!$tt_move_exists || $tt_move_capture)
+    };
+}
+
+#[macro_export]
 macro_rules! do_iir {
     ($pv_node:expr, $cutnode:expr, $depth:expr, $tt_move:expr) => {
         ($pv_node || $cutnode) && $depth >= read_param!(IIR_DEPTH_MINIMUM) && !$tt_move
@@ -170,4 +181,5 @@ pub(crate) use should_correct_with_tt;
 pub(crate) use should_reduce;
 pub(crate) use singularity_de;
 pub(crate) use top;
+pub(crate) use try_probcut;
 pub(crate) use tt_cutoff;

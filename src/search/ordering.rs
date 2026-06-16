@@ -1,8 +1,8 @@
 use crate::board::r#move::{Move, MoveList};
 use crate::board::movegen::MovegenMode;
 use crate::board::movegen::get_attackers;
-use crate::search::{INFINITY, params};
 use crate::search::thread::Thread;
+use crate::search::{INFINITY, params};
 use crate::util::types::{BLACK_PIECES, OccupancyIndex, Piece, PieceType, WHITE_PIECES};
 use crate::{Board, Colour, MAX_MOVES, get_bishop_attacks, get_rook_attacks, lsfb, piece_type, read_param, set_bit};
 
@@ -331,7 +331,7 @@ impl Move {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MovePickerStage {
     HashMove,
     NoisyQueenPromotions,
@@ -345,21 +345,42 @@ pub enum MovePickerStage {
 }
 
 pub struct MovePicker {
-    stage: MovePickerStage,
-    generated: bool,
-    idx: usize,
-    scores: [i32; MAX_MOVES],
+    pub stage: MovePickerStage,
+    pub done_probcut: bool,
+    pub doing_probcut: bool,
+    pub generated: bool,
+    pub idx: usize,
     pub skip_quiets: bool,
+    pub adjusted_down: bool,
+    scores: [i32; MAX_MOVES],
 }
 
 impl MovePicker {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        Self { stage: MovePickerStage::HashMove, generated: false, idx: 0, scores: [0; MAX_MOVES], skip_quiets: false }
+        Self {
+            stage: MovePickerStage::HashMove,
+            done_probcut: false,
+            doing_probcut: false,
+            generated: false,
+            idx: 0,
+            scores: [0; MAX_MOVES],
+            adjusted_down: false,
+            skip_quiets: false,
+        }
     }
 
     pub fn for_qsearch() -> Self {
-        Self { stage: MovePickerStage::HashMove, generated: false, idx: 0, scores: [0; MAX_MOVES], skip_quiets: true }
+        Self {
+            stage: MovePickerStage::HashMove,
+            done_probcut: false,
+            doing_probcut: false,
+            generated: false,
+            idx: 0,
+            skip_quiets: true,
+            adjusted_down: false,
+            scores: [0; MAX_MOVES],
+        }
     }
 
     pub fn skip_quiets(&mut self, movelist: &MoveList) {
@@ -417,13 +438,23 @@ impl MovePicker {
                 self.generated = true;
             }
 
+            // This is a bit hacky: if we've done probcut, then the "used" count will be too high
+            // for the promotion stage since it will also include good captures. Let's temporarily
+            // decrease it for now so we don't have to worry about considering those yet.
+            // Technically, this means noisy promotions will get mixed with quiet promotions after
+            // probcut, but I don't think that should matter too much.
+            if self.done_probcut && !self.adjusted_down {
+                movelist.used -= good_caps.used;
+                self.adjusted_down = true;
+            }
+
             if self.idx < movelist.used {
                 let m = self.get_next_between(self.idx, movelist.used - 1, movelist);
                 self.idx += 1;
                 return Some(m);
             } else {
                 self.stage = MovePickerStage::QuietQueenPromotions;
-                self.generated = false;
+                self.generated = self.done_probcut;
             }
         }
 
@@ -449,10 +480,11 @@ impl MovePicker {
             if self.idx < movelist.used {
                 let m = self.get_next_between(self.idx, movelist.used - 1, movelist);
                 self.idx += 1;
+
                 return Some(m);
             } else {
                 self.stage = MovePickerStage::GoodCaps;
-                self.generated = false;
+                self.generated = self.done_probcut;
             }
         }
 
@@ -478,10 +510,22 @@ impl MovePicker {
                 self.generated = true;
             }
 
+            // Rectifying after the above "hacky" comment.
+            if self.done_probcut && self.adjusted_down {
+                movelist.used += good_caps.used;
+                self.adjusted_down = false;
+            }
+
             if self.idx < movelist.used {
                 let m = self.get_next_between(self.idx, movelist.used - 1, movelist);
                 self.idx += 1;
+
                 return Some(m);
+            } else if self.doing_probcut {
+                // signal to break the probcut loop
+                self.doing_probcut = false;
+                self.done_probcut = true;
+                return None;
             } else {
                 self.stage = MovePickerStage::Killers;
                 self.generated = false;
@@ -531,6 +575,8 @@ impl MovePicker {
                 return Some(m);
             } else {
                 self.stage = MovePickerStage::BadCaps;
+                // don't set to true for probcut because we have generated the moves
+                // but we haven't actually put them into the movelist and scored them
                 self.generated = false;
             }
         }

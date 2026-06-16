@@ -31,7 +31,7 @@ pub const MIRROR: [usize; 64] = {
 
 // technically misses some edge cases like 2 bishops of the same colour from promotions
 // or 2 knights vs pawn, in the cases that it's winning
-fn side_has_sufficient_material(b: &Board, side: Colour) -> bool {
+pub fn side_has_sufficient_material(b: &Board, side: Colour) -> bool {
     let (pawns, knights, bishops, rooks, queens) = match side {
         Colour::White => (
             b.bitboards[Piece::WP],
