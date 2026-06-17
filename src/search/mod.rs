@@ -95,6 +95,12 @@ fn is_terminal(x: i32) -> bool {
     x.abs() > INFINITY / 2
 }
 
+enum SingularityResult {
+    Extension(i32),
+    NoChange,
+    MultiCut,
+}
+
 impl Thread<'_> {
     fn should_check_exit(&self) -> bool {
         const CHECK_INTERVAL: usize = 4095;
@@ -130,7 +136,7 @@ impl Thread<'_> {
         _alpha: i32,
         beta: i32,
         cutnode: bool,
-    ) -> Option<i32> {
+    ) -> SingularityResult {
         // undo move already made on board
         let threshold = (tt_score - (depth as i32 * 2 + 20)).max(-INFINITY);
 
@@ -141,18 +147,18 @@ impl Thread<'_> {
         self.info.excluded[self.ply] = None;
 
         if singularity_de!(self, pv_node, excluded_eval, threshold) {
-            Some(2)
+            SingularityResult::Extension(2)
         } else if excluded_eval < threshold {
-            Some(1)
+            SingularityResult::Extension(1)
         } else if threshold >= beta {
             // MultiCut: more than one move will be able to beat beta
             // here we return None to indicate that the search should terminate
             // and return beta
-            None
+            SingularityResult::MultiCut
         } else if tt_score >= beta {
-            Some(-1)
+            SingularityResult::Extension(-1)
         } else {
-            Some(0)
+            SingularityResult::NoChange
         }
     }
 
@@ -359,9 +365,15 @@ impl Thread<'_> {
                     return v;
                 }
 
-                if movepicker.done_probcut || tt_move_exists {
+                if movepicker.done_probcut {
+                    break;
+                }
+
+                if tt_move_exists {
                     // if there's a move which seemed best at a lower depth, and it failed to cause
                     // a cutoff, then any other moves probably won't either
+                    movepicker.doing_probcut = false;
+                    movepicker.done_probcut = true;
                     break;
                 }
             }
@@ -468,15 +480,14 @@ impl Thread<'_> {
             // others. We should therefore extend to investigate it further.
             let maybe_singular = maybe_singular!(root, depth, singular, m, best_move, tt_depth, tt_bound);
 
-            let ext = if maybe_singular {
-                self.singularity(position, best_move, tt_score, depth, pv_node, alpha, beta, cutnode)
+            let extension = if maybe_singular {
+                match self.singularity(position, best_move, tt_score, depth, pv_node, alpha, beta, cutnode) {
+                    SingularityResult::Extension(ext) => ext,
+                    SingularityResult::MultiCut => return tt_score - depth as i32 * 2,
+                    SingularityResult::NoChange => (in_check && !root) as i32,
+                }
             } else {
-                Some((in_check && !root) as i32)
-            };
-
-            let Some(extension) = ext else {
-                // MultiCut case from singularity function
-                return tt_score - (depth as i32 * 2);
+                (in_check && !root) as i32
             };
 
             if extension == 2 {
