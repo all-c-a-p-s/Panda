@@ -297,7 +297,7 @@ impl Thread<'_> {
                 // null window used because all that matters is whether the search result is better than beta
                 position.undo_null_move(&undo);
                 self.ply -= 1;
-                if null_move_eval >= beta {
+                if null_move_eval >= beta && !is_terminal(null_move_eval) {
                     return lerp(beta, null_move_eval, read_param!(NMP_BETA_WEIGHT));
                 }
             }
