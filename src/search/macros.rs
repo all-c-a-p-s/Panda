@@ -51,6 +51,7 @@ macro_rules! can_rfp {
     ($depth:expr, $static_eval:expr, $improving:expr, $beta:expr) => {
         $depth <= read_param!(RFP_DEPTH)
             && $static_eval - (read_param!(RFP_MARGIN) * ($depth - $improving as u8)) as i32 >= $beta
+            && !is_terminal($static_eval)
     };
 }
 
