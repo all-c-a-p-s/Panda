@@ -20,7 +20,6 @@ use crate::util::helper::{read_param, tuneable_params};
 use crate::util::types::PieceType;
 use crate::util::uci::print_thinking;
 
-use core::option::Option::Some;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
 
@@ -330,6 +329,12 @@ impl Thread<'_> {
         //
         // TODO - experiment with using information from the fact that probcut failed later.
         // AND/OR use probcut results for move ordering
+
+        // NOTE - condition to attempt probcut is that tt_score > beta + 200 rather than 250 as
+        // used above for probcut_beta. The depth condition is also slightly different.
+        // The idea is to account for possible differences in the search result due to
+        // instability/different depth/tt bounds, and still attempt probcut if there's a good
+        // chance it can work.
         let probcut_beta = beta + 250;
         if try_probcut!(cutnode, depth, beta, tt_hit, tt_depth, tt_score, tt_move_exists, tt_move_capture) {
             movepicker.doing_probcut = true;
@@ -360,7 +365,7 @@ impl Thread<'_> {
                 position.undo_move(m, &commit, Some(&mut self.info.stck));
 
                 if v >= probcut_beta {
-                    let hash_entry = TTEntry::new(depth - 3, v, EntryFlag::LowerBound, best_move, position.hash_key);
+                    let hash_entry = TTEntry::new(depth - 3, v, EntryFlag::LowerBound, m, position.hash_key);
                     self.tt.write(position.hash_key, hash_entry);
                     return v;
                 }
@@ -627,7 +632,7 @@ impl Thread<'_> {
 
             if quiet && !quiets.is_full() {
                 quiets.push(m);
-            } else if !caps.is_full() {
+            } else if tactical && !caps.is_full() {
                 caps.push(m);
             }
 
