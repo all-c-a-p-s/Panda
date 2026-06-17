@@ -330,6 +330,12 @@ impl Thread<'_> {
         // TODO - experiment with using information from the fact that probcut failed later.
         // AND/OR use probcut results for move ordering
         let probcut_beta = beta + 250;
+
+        // NOTE - condition to attempt probcut is that tt_score > beta + 200 rather than 250 as
+        // used above for probcut_beta. The depth condition is also slightly different.
+        // The idea is to account for possible differences in the search result due to
+        // instability/different depth/tt bounds, and still attempt probcut if there's a good
+        // chance it can work.
         if try_probcut!(cutnode, depth, beta, tt_hit, tt_depth, tt_score, tt_move_exists, tt_move_capture) {
             movepicker.doing_probcut = true;
 
