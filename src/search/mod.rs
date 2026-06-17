@@ -464,15 +464,6 @@ impl Thread<'_> {
                 }
             }
 
-            if self.ply < MAX_DEPTH {
-                self.info.ss[self.ply].square_moved_to = Some(m.square_to());
-                self.info.ss[self.ply].piece_moved = Some(piece_moved);
-
-                if tactical {
-                    self.info.ss[self.ply].made_capture = true;
-                }
-            }
-
             // A singular move is a move which seems to be forced or at least much stronger than
             // others. We should therefore extend to investigate it further.
             let maybe_singular = maybe_singular!(root, depth, singular, m, best_move, tt_depth, tt_bound);
@@ -494,6 +485,12 @@ impl Thread<'_> {
 
             // checked to be legal above
             let commit = position.play_unchecked(m, Some(&mut self.info.stck));
+
+            if self.ply < MAX_DEPTH {
+                self.info.ss[self.ply].square_moved_to = Some(m.square_to());
+                self.info.ss[self.ply].piece_moved = Some(piece_moved);
+                self.info.ss[self.ply].made_capture = tactical;
+            }
 
             let nodes_before = self.nodes;
 
