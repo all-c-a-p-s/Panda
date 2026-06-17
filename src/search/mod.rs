@@ -128,7 +128,7 @@ impl Thread<'_> {
         tt_score: i32,
         depth: u8,
         pv_node: bool,
-        _alpha: i32,
+        alpha: i32,
         beta: i32,
         cutnode: bool,
     ) -> Option<i32> {
@@ -153,6 +153,8 @@ impl Thread<'_> {
             // and return beta
             None
         } else if tt_score >= beta {
+            Some(-2)
+        } else if tt_score <= alpha {
             Some(-1)
         } else {
             Some(0)
