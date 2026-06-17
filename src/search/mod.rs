@@ -128,7 +128,7 @@ impl Thread<'_> {
         tt_score: i32,
         depth: u8,
         pv_node: bool,
-        alpha: i32,
+        _alpha: i32,
         beta: i32,
         cutnode: bool,
     ) -> Option<i32> {
@@ -153,8 +153,6 @@ impl Thread<'_> {
             // and return beta
             None
         } else if tt_score >= beta {
-            Some(-2)
-        } else if tt_score <= alpha {
             Some(-1)
         } else {
             Some(0)
@@ -489,7 +487,8 @@ impl Thread<'_> {
 
             // A singular move is a move which seems to be forced or at least much stronger than
             // others. We should therefore extend to investigate it further.
-            let maybe_singular = maybe_singular!(root, depth, singular, m, best_move, tt_depth, tt_bound);
+            let maybe_singular =
+                maybe_singular!(root, depth, singular, m, best_move, tt_depth, tt_bound, tt_correction);
 
             let ext = if maybe_singular {
                 self.singularity(position, best_move, &commit, tt_score, depth, pv_node, alpha, beta, cutnode)

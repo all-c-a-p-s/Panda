@@ -97,7 +97,7 @@ macro_rules! do_iir {
 #[macro_export]
 macro_rules! maybe_singular {
     ($root:expr, $depth:expr, $singular:expr, $m:expr, $best_move:expr,
-     $tt_depth:expr, $tt_bound:expr) => {
+     $tt_depth:expr, $tt_bound:expr, $tt_correction: expr) => {
         DO_SINGULARITY_EXTENSION
             && !$root
             && $depth >= 8
@@ -105,6 +105,7 @@ macro_rules! maybe_singular {
             && $m == $best_move
             && $tt_depth >= $depth - 3
             && $tt_bound != EntryFlag::UpperBound
+            && $tt_correction.abs() >= 15
     };
 }
 
