@@ -20,7 +20,6 @@ use crate::util::helper::{read_param, tuneable_params};
 use crate::util::types::PieceType;
 use crate::util::uci::print_thinking;
 
-use core::option::Option::Some;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
 
@@ -360,7 +359,7 @@ impl Thread<'_> {
                 position.undo_move(m, &commit, Some(&mut self.info.stck));
 
                 if v >= probcut_beta {
-                    let hash_entry = TTEntry::new(depth - 3, v, EntryFlag::LowerBound, best_move, position.hash_key);
+                    let hash_entry = TTEntry::new(depth - 3, v, EntryFlag::LowerBound, m, position.hash_key);
                     self.tt.write(position.hash_key, hash_entry);
                     return v;
                 }
@@ -627,7 +626,7 @@ impl Thread<'_> {
 
             if quiet && !quiets.is_full() {
                 quiets.push(m);
-            } else if !caps.is_full() {
+            } else if tactical && !caps.is_full() {
                 caps.push(m);
             }
 
