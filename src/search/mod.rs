@@ -472,7 +472,7 @@ impl Thread<'_> {
 
                 // SEE Pruning:
                 // skip moves that fail SEE by a depth-dependent threshold
-                if do_see_pruning!(lmr_depth, considered, pv_node) {
+                if do_see_pruning!(lmr_depth, considered, pv_node, movepicker.stage) {
                     let margin = if tactical { read_param!(SEE_NOISY_MARGIN) } else { read_param!(SEE_QUIET_MARGIN) };
                     let threshold = margin * depth as i32;
                     if !m.see(position, threshold) {

@@ -331,7 +331,7 @@ impl Move {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord)]
 pub enum MovePickerStage {
     HashMove,
     NoisyQueenPromotions,
