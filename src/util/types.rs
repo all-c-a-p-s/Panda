@@ -76,6 +76,23 @@ pub const PIECES: [Piece; 12] = [
 pub const WHITE_PIECES: [Piece; 6] = [Piece::WP, Piece::WB, Piece::WN, Piece::WR, Piece::WQ, Piece::WK];
 
 pub const BLACK_PIECES: [Piece; 6] = [Piece::BP, Piece::BB, Piece::BN, Piece::BR, Piece::BQ, Piece::BK];
+
+impl<T> Index<Colour> for [T; 2] {
+    type Output = T;
+
+    fn index(&self, index: Colour) -> &Self::Output {
+        // SAFETY: the legal values for this type are all in bounds.
+        unsafe { self.get_unchecked(index as usize) }
+    }
+}
+
+impl<T> IndexMut<Colour> for [T; 2] {
+    fn index_mut(&mut self, index: Colour) -> &mut Self::Output {
+        // SAFETY: the legal values for this type are all in bounds.
+        unsafe { self.get_unchecked_mut(index as usize) }
+    }
+}
+
 impl<T> Index<Square> for [T; 64] {
     type Output = T;
 

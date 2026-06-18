@@ -49,8 +49,9 @@ pub struct SearchInfo {
     pub ss: [SearchStackEntry; MAX_DEPTH],
     pub lmr_table: LMRTable,
     pub nodetable: NodeTable,
-    pub history_table: [[i32; 64]; 12],
-    pub caphist_table: [[[i32; 5]; 64]; 12],
+    pub piece_history: [[i32; 64]; 12],
+    pub square_history: [[[i32; 64]; 64]; 2],
+    pub caphist: [[[i32; 5]; 64]; 12],
 
     pub counter_correlation: [[[i32; 64]; 64]; 2],
     pub followup_correlation: [[[i32; 64]; 64]; 2],
@@ -168,8 +169,9 @@ impl Default for SearchInfo {
             ss: [SearchStackEntry::default(); MAX_DEPTH],
             lmr_table: LMRTable::default(),
             nodetable: NodeTable::default(),
-            history_table: [[0; 64]; 12],
-            caphist_table: [[[0; 5]; 64]; 12],
+            piece_history: [[0; 64]; 12],
+            square_history: [[[0; 64]; 64]; 2],
+            caphist: [[[0; 5]; 64]; 12],
 
             counter_correlation: [[[0; 64]; 64]; 2],
             followup_correlation: [[[0; 64]; 64]; 2],
