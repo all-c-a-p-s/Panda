@@ -38,6 +38,8 @@ impl Move {
 
         if self.is_promotion() {
             balance += SEE_VALUES[PieceType::Queen] - SEE_VALUES[PieceType::Pawn];
+        } else if self.is_en_passant() {
+            balance += SEE_VALUES[PieceType::Pawn];
         }
 
         if balance < 0 {
@@ -157,6 +159,8 @@ impl Move {
 
         if self.is_promotion() {
             balance += SEE_VALUES[PieceType::Queen] - SEE_VALUES[PieceType::Pawn];
+        } else if self.is_en_passant() {
+            balance += SEE_VALUES[PieceType::Pawn];
         }
 
         let bishop_attackers =
@@ -250,9 +254,6 @@ impl Move {
     /// - Quiets      |----- these are also subject to continuation bonuses
     /// - Losing Captures
     /// - Underpromotion
-    ///
-    /// To me it seems intuitive that en passant should be considered a "good capture", but doing
-    /// this loses elo. At the moment, en passant just gets the MVV bonus for capturing a pawn.
     pub fn score_move(
         self,
         b: &mut Board,
@@ -270,25 +271,22 @@ impl Move {
             //otherwise null move can get given hash move score
         } else if self == *hash_move {
             read_param!(HASH_MOVE_SCORE)
-        } else if self.is_capture(b) {
+        } else if self.is_capture(b) || self.is_en_passant() {
             //we are already in the segment of good/bad captures
             //and we only care about scores relative to the rest of the segment
             //so no need to add good/bad capture bonus
+
+            let victim_type = if self.is_en_passant() { PieceType::Pawn } else { piece_type(self.piece_captured(b)) };
+            let pc = self.piece_moved(b);
+            let hist = s.info.caphist_table[pc][sq][victim_type];
 
             //at high depths we can put more effort into our move ordering because there's a
             //greater reward for optimal order
             if depth >= 16 && (pv_node || cutnode) {
                 let v = self.exact_see(b);
-                let victim_type = piece_type(self.piece_captured(b));
-                let pc = self.piece_moved(b);
-                let hist = s.info.caphist_table[pc][sq][victim_type];
 
                 v * 10 + hist
             } else {
-                let victim_type = piece_type(self.piece_captured(b));
-                let pc = self.piece_moved(b);
-                let hist = s.info.caphist_table[pc][sq][victim_type];
-
                 hist + MVV[victim_type]
             }
         } else if self.is_promotion() {
@@ -300,8 +298,6 @@ impl Move {
                 PieceType::Bishop => read_param!(UNDER_PROMOTION),
                 _ => unreachable!(),
             }
-        } else if self.is_en_passant() {
-            MVV[PieceType::Pawn]
         } else {
             let mut cont_bonus = if s.ply > 0
                 && let Some(prev) = s.info.ss[s.ply - 1].square_moved_to

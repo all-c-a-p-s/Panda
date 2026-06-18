@@ -773,7 +773,6 @@ impl Thread<'_> {
 
             //checked to be legal above
             let commit = position.play_unchecked(m, Some(&mut self.info.stck));
-
             self.ply += 1;
 
             let eval = -self.qsearch(position, -beta, -alpha);
@@ -788,8 +787,6 @@ impl Thread<'_> {
             if eval > alpha {
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
-
-                // TODO - try not updating this in qsearch?
                 best_move = m;
 
                 if eval >= beta {
