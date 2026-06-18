@@ -336,6 +336,12 @@ impl Thread<'_> {
         // instability/different depth/tt bounds, and still attempt probcut if there's a good
         // chance it can work.
         let probcut_beta = beta + 250;
+
+        // NOTE - condition to attempt probcut is that tt_score > beta + 200 rather than 250 as
+        // used above for probcut_beta. The depth condition is also slightly different.
+        // The idea is to account for possible differences in the search result due to
+        // instability/different depth/tt bounds, and still attempt probcut if there's a good
+        // chance it can work.
         if try_probcut!(cutnode, depth, beta, tt_hit, tt_depth, tt_score, tt_move_exists, tt_move_capture) {
             movepicker.doing_probcut = true;
 
@@ -472,7 +478,7 @@ impl Thread<'_> {
 
                 // SEE Pruning:
                 // skip moves that fail SEE by a depth-dependent threshold
-                if do_see_pruning!(lmr_depth, considered, pv_node) {
+                if do_see_pruning!(lmr_depth, considered, pv_node, movepicker.stage) {
                     let margin = if tactical { read_param!(SEE_NOISY_MARGIN) } else { read_param!(SEE_QUIET_MARGIN) };
                     let threshold = margin * depth as i32;
                     if !m.see(position, threshold) {

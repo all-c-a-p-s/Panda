@@ -163,8 +163,11 @@ macro_rules! do_lmp {
 
 #[macro_export]
 macro_rules! do_see_pruning {
-    ($lmr_depth:expr, $considered:expr, $pv_node:expr) => {
-        $lmr_depth <= read_param!(SEE_PRUNING_DEPTH) && $considered > 1 && !$pv_node
+    ($lmr_depth:expr, $considered:expr, $pv_node:expr, $stage: expr) => {
+        $lmr_depth <= read_param!(SEE_PRUNING_DEPTH)
+            && $considered > 1
+            && !$pv_node
+            && $stage > MovePickerStage::GoodCaps
     };
 }
 
