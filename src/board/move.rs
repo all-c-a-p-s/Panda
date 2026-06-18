@@ -21,7 +21,7 @@ pub const SQUARE_TO_MASK: u16 = 0b0000_1111_1100_0000;
 pub const PROMOTION_MASK: u16 = 0b0011_0000_0000_0000; // != PROMOTION_FLAG
 
 pub const NO_FLAG: u16 = 0;
-pub const SPECIAL_FLAG: u16 = 0b1100_0000_0000_0000;
+pub const SPECIAL_MASK: u16 = 0b1100_0000_0000_0000;
 pub const EN_PASSANT_FLAG: u16 = 0b0100_0000_0000_0000;
 pub const CASTLING_FLAG: u16 = 0b1000_0000_0000_0000;
 pub const PROMOTION_FLAG: u16 = 0b1100_0000_0000_0000;
@@ -84,17 +84,17 @@ impl Move {
 
     #[must_use]
     pub fn is_promotion(self) -> bool {
-        self.data & SPECIAL_FLAG == PROMOTION_FLAG
+        self.data & SPECIAL_MASK == PROMOTION_FLAG
     }
 
     #[must_use]
     pub fn is_castling(self) -> bool {
-        self.data & SPECIAL_FLAG == CASTLING_FLAG
+        self.data & SPECIAL_MASK == CASTLING_FLAG
     }
 
     #[must_use]
     pub fn is_en_passant(self) -> bool {
-        self.data & SPECIAL_FLAG == EN_PASSANT_FLAG
+        self.data & SPECIAL_MASK == EN_PASSANT_FLAG
     }
 
     #[must_use]
@@ -160,7 +160,7 @@ impl Move {
 
 #[must_use]
 pub fn encode_move(from: Square, to: Square, promoted_piece: Option<PieceType>, flag: u16) -> Move {
-    if flag & SPECIAL_FLAG == PROMOTION_FLAG {
+    if flag & SPECIAL_MASK == PROMOTION_FLAG {
         Move::from_promotion(from, to, unsafe { promoted_piece.unwrap_unchecked() })
     } else {
         Move::from_flags(from, to, flag)
