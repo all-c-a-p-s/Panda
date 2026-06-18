@@ -40,12 +40,6 @@ Inspired by other engines (Viridithas in particular), I created a TUI for Panda,
 
 <img width="1354" height="911" alt="Screenshot 2026-06-10 at 14 54 24" src="https://github.com/user-attachments/assets/46f1c2a8-a33b-4029-9cd4-3048a7b9f594" />
 
-## Lichess Bot
-
-I used the repo https://github.com/lichess-bot-devs/lichess-bot to create a lichess bot for Panda (it's called PandaBot2 because I forgot the login details for the original account lol). If it's online, feel free to challenge it!
-
-[Panda Lichess Bot](https://lichess.org/@/PandaBot2)
-
 ## Usage
 
 You can clone the repo for dev build, or get the latest published version from [Releases](https://github.com/all-c-a-p-s/Panda/releases). To build/run any version of Panda, you will need to [Download Rust](https://www.rust-lang.org/).
