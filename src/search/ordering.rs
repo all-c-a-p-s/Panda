@@ -278,7 +278,7 @@ impl Move {
 
             let victim_type = if self.is_en_passant() { PieceType::Pawn } else { piece_type(self.piece_captured(b)) };
             let pc = self.piece_moved(b);
-            let hist = s.info.caphist_table[pc][sq][victim_type];
+            let hist = s.info.caphist[pc][sq][victim_type];
 
             //at high depths we can put more effort into our move ordering because there's a
             //greater reward for optimal order
@@ -302,7 +302,7 @@ impl Move {
             let mut cont_bonus = if s.ply > 0
                 && let Some(prev) = s.info.ss[s.ply - 1].square_moved_to
             {
-                let side = (b.side_to_move == Colour::White) as usize;
+                let side = b.side_to_move;
                 s.info.counter_correlation[side][prev][sq]
             } else {
                 0
@@ -311,7 +311,7 @@ impl Move {
             cont_bonus += if s.ply > 1
                 && let Some(prev) = s.info.ss[s.ply - 2].square_moved_to
             {
-                let side = (b.side_to_move == Colour::White) as usize;
+                let side = b.side_to_move;
                 s.info.followup_correlation[side][prev][sq]
             } else {
                 0
@@ -321,7 +321,8 @@ impl Move {
                 + if s.info.killer_moves[s.ply] == Some(self) {
                     read_param!(FIRST_KILLER_MOVE)
                 } else {
-                    s.info.history_table[self.piece_moved(b)][self.square_to()]
+                    let pc = self.piece_moved(b);
+                    s.get_history(self, pc)
                 }
         }
     }

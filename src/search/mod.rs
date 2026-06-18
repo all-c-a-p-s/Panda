@@ -16,6 +16,7 @@ use crate::board::Board;
 use crate::board::r#move::{Move, MoveList, NULL_MOVE};
 use crate::eval::evaluate;
 use crate::search::macros::*;
+use crate::search::tables::HISTORY_MAX;
 use crate::util::helper::{read_param, tuneable_params};
 use crate::util::types::PieceType;
 use crate::util::uci::print_thinking;
@@ -596,7 +597,7 @@ impl Thread<'_> {
                             r -= (is_killer || is_counter) as i32;
 
                             // either increase or decrease reduction depending on history score
-                            r -= self.info.history_table[piece_moved][m.square_to()] / 8192;
+                            r -= self.get_history(m, piece_moved) / (HISTORY_MAX / 2);
                         }
 
                         let reduced_depth = (new_depth as i32 - r).clamp(1, new_depth as i32) as u8;
