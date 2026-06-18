@@ -753,20 +753,19 @@ impl Thread<'_> {
 
             let check_futility = best_score + read_param!(QSEARCH_FP_MARGIN) <= alpha;
 
-            if m != q_hash {
-                //if we're far behind, only consider moves which win significant material
-                if check_futility {
-                    if !m.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1) {
-                        continue;
-                    }
-                } else if movepicker.stage > MovePickerStage::GoodCaps
-                    && !m.see(position, read_param!(SEE_QSEARCH_MARGIN))
-                {
-                    // alternatively just skip any move which fails SEE by this margin
-                    // note anything that passes the futility check will pass this so there's no need
-                    // to do SEE check twice on such moves
+            //if we're far behind, only consider moves which win significant material
+            if check_futility {
+                if !m.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1) {
                     continue;
                 }
+            } else if movepicker.stage > MovePickerStage::GoodCaps
+                && m != q_hash
+                && !m.see(position, read_param!(SEE_QSEARCH_MARGIN))
+            {
+                // alternatively just skip any move which fails SEE by this margin
+                // note anything that passes the futility check will pass this so there's no need
+                // to do SEE check twice on such moves
+                continue;
             }
 
             //checked to be legal above
