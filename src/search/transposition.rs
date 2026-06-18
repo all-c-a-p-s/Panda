@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 
-use crate::Move;
+use crate::{Move, search::MATE};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
@@ -171,6 +171,29 @@ impl TT for TranspositionTable {
 
         self.tt[index].data.store(d, Relaxed);
         self.tt[index].key.store(k, Relaxed);
+    }
+}
+
+/// Mate scores are relative to the distance from the root.
+/// However, in the tt, we want to find the distance to mate relative to the position in question.
+/// Hence, we need to convert mate scores.
+pub fn score_to_tt(score: i32, ply: usize) -> i32 {
+    if score >= MATE {
+        score + ply as i32
+    } else if score <= -MATE {
+        score - ply as i32
+    } else {
+        score
+    }
+}
+
+pub fn score_from_tt(score: i32, ply: usize) -> i32 {
+    if score >= MATE {
+        score - ply as i32
+    } else if score <= -MATE {
+        score + ply as i32
+    } else {
+        score
     }
 }
 

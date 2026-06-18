@@ -216,14 +216,14 @@ impl Thread<'_> {
         if let Some(entry) = self.tt.lookup(position.hash_key) {
             best_move = entry.best_move;
             tt_hit = true;
-            tt_score = entry.eval;
+            tt_score = score_from_tt(entry.eval, self.ply);
             tt_depth = entry.depth;
             tt_bound = entry.flag;
 
             // We accept values from the TT if:
             //      (1) the depth of the entry >= our depth, with the correct bound
             // OR   (2) we are in an expected cutnode, and the eval is well above beta
-            if tt_cutoff!(singular, root, pv_node, depth, entry, beta, alpha, cutnode, in_check) {
+            if tt_cutoff!(singular, root, pv_node, depth, entry, tt_score, beta, alpha, cutnode, in_check) {
                 return entry.eval;
             }
         }
@@ -366,7 +366,8 @@ impl Thread<'_> {
                 position.undo_move(m, &commit, Some(&mut self.info.stck));
 
                 if v >= probcut_beta {
-                    let hash_entry = TTEntry::new(depth - 3, v, EntryFlag::LowerBound, m, position.hash_key);
+                    let hash_entry =
+                        TTEntry::new(depth - 3, score_to_tt(v, self.ply), EntryFlag::LowerBound, m, position.hash_key);
                     self.tt.write(position.hash_key, hash_entry);
                     return v;
                 }
@@ -658,7 +659,8 @@ impl Thread<'_> {
         }
 
         if !self.is_stopped() && !singular {
-            let hash_entry = TTEntry::new(depth, best_score, hash_flag, best_move, position.hash_key);
+            let hash_entry =
+                TTEntry::new(depth, score_to_tt(best_score, self.ply), hash_flag, best_move, position.hash_key);
 
             self.tt.write(position.hash_key, hash_entry);
 
@@ -694,13 +696,14 @@ impl Thread<'_> {
 
         if let Some(entry) = self.tt.lookup(position.hash_key) {
             best_move = entry.best_move;
+            let tt_score = score_from_tt(entry.eval, self.ply);
             if match entry.flag {
                 EntryFlag::Exact => true,
-                EntryFlag::LowerBound => entry.eval >= beta,
-                EntryFlag::UpperBound => entry.eval <= alpha,
+                EntryFlag::LowerBound => tt_score >= beta,
+                EntryFlag::UpperBound => tt_score <= alpha,
                 EntryFlag::Missing => false,
             } {
-                return entry.eval;
+                return tt_score;
             }
         }
 
@@ -792,7 +795,8 @@ impl Thread<'_> {
         }
 
         if !self.is_stopped() {
-            let hash_entry = TTEntry::new(0, best_score, hash_flag, best_move, position.hash_key);
+            let hash_entry =
+                TTEntry::new(0, score_to_tt(best_score, self.ply), hash_flag, best_move, position.hash_key);
             self.tt.write(position.hash_key, hash_entry);
         }
         best_score

@@ -20,19 +20,19 @@ macro_rules! singularity_de {
 #[macro_export]
 macro_rules! tt_cutoff {
     ($singular:expr, $root:expr, $pv_node:expr, $depth:expr, $entry:expr,
-     $beta:expr, $alpha:expr, $cutnode:expr, $in_check:expr) => {
+     $tt_score: expr, $beta:expr, $alpha:expr, $cutnode:expr, $in_check:expr) => {
         !$singular
             && !$root
             && (!$pv_node
                 && $depth <= $entry.depth
                 && match $entry.flag {
                     EntryFlag::Exact => true,
-                    EntryFlag::LowerBound => $entry.eval >= $beta,
-                    EntryFlag::UpperBound => $entry.eval <= $alpha,
+                    EntryFlag::LowerBound => $tt_score >= $beta,
+                    EntryFlag::UpperBound => $tt_score <= $alpha,
                     EntryFlag::Missing => false,
                 }
                 || ($cutnode
-                    && $entry.eval - read_param!(TT_FUTILITY_MARGIN) * ($depth as i32 - $entry.depth as i32).max(1)
+                    && $tt_score - read_param!(TT_FUTILITY_MARGIN) * ($depth as i32 - $entry.depth as i32).max(1)
                         >= $beta
                     && $entry.flag != EntryFlag::UpperBound
                     && !$in_check))
