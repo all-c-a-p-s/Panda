@@ -758,9 +758,7 @@ impl Thread<'_> {
                 if !m.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1) {
                     continue;
                 }
-            } else if movepicker.stage > MovePickerStage::GoodCaps
-                && m != q_hash
-                && !m.see(position, read_param!(SEE_QSEARCH_MARGIN))
+            } else if movepicker.stage > MovePickerStage::GoodCaps && !m.see(position, read_param!(SEE_QSEARCH_MARGIN))
             {
                 // alternatively just skip any move which fails SEE by this margin
                 // note anything that passes the futility check will pass this so there's no need
