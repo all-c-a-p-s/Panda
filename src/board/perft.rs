@@ -29,26 +29,26 @@ pub fn perft<const BULK: bool, const TEST_PSEUDOLEGAL: bool, const MODES: bool>(
         moves.gen_moves(b, MovegenMode::All);
     }
 
-    for &m in moves.moves.iter().take(moves.used) {
-        if TEST_PSEUDOLEGAL && !b.is_pseudo_legal(m) {
-            m.print_move();
+    for &mv in moves.moves.iter().take(moves.used) {
+        if TEST_PSEUDOLEGAL && !b.is_pseudo_legal(mv) {
+            mv.print_move();
             b.print_board();
             panic!("pseudo-legal move wasn't pseudo-legal :(");
         }
 
-        let Ok(commit) = b.try_move(m, None) else {
+        let Ok(commit) = b.try_move(mv, None) else {
             continue;
         };
 
         let added = perft::<BULK, TEST_PSEUDOLEGAL, MODES>(depth - 1, b, reporting_depth);
         total += added;
 
-        b.undo_move(m, &commit, None);
+        b.undo_move(mv, &commit, None);
 
         if let Some(d) = reporting_depth
             && depth == d
         {
-            println!("{}: {}", m.uci(), added);
+            println!("{}: {}", mv.uci(), added);
         }
     }
 

@@ -8,7 +8,7 @@ use crate::board::r#move::{CASTLING_FLAG, EN_PASSANT_FLAG, Move, MoveList, NO_FL
 use crate::util::types::{CastlingType, OccupancyIndex, Piece, PieceType, Square};
 
 pub struct MoveListEntry {
-    pub m: Move,
+    pub mv: Move,
     pub score: i32,
 }
 
@@ -25,8 +25,8 @@ pub enum MovegenMode {
 
 impl MoveListEntry {
     #[must_use]
-    pub fn from(m: Move) -> Self {
-        MoveListEntry { m, score: 0 }
+    pub fn from(mv: Move) -> Self {
+        MoveListEntry { mv, score: 0 }
     }
 }
 
@@ -610,22 +610,22 @@ pub static RAY_BETWEEN: [[BitBoard; 64]; 64] = {
 };
 
 #[must_use]
-pub fn check_en_passant(m: Move, b: &Board) -> bool {
+pub fn check_en_passant(mv: Move, b: &Board) -> bool {
     //checks en passant edge case where en passant reveals check on the king
-    match m.piece_moved(b) {
+    match mv.piece_moved(b) {
         Piece::WP => {
-            let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[OccupancyIndex::BothOccupancies]);
-            relevant_blockers = pop_bit(unsafe { m.square_to().sub_unchecked(8) }, relevant_blockers);
-            relevant_blockers = set_bit(m.square_to(), relevant_blockers);
+            let mut relevant_blockers = pop_bit(mv.square_from(), b.occupancies[OccupancyIndex::BothOccupancies]);
+            relevant_blockers = pop_bit(unsafe { mv.square_to().sub_unchecked(8) }, relevant_blockers);
+            relevant_blockers = set_bit(mv.square_to(), relevant_blockers);
             //SAFETY: there MUST be a king on the board
             get_rook_attacks(unsafe { lsfb(b.bitboards[Piece::WK]).unwrap_unchecked() } as usize, relevant_blockers)
                 & (b.bitboards[Piece::BR] | b.bitboards[Piece::BQ])
                 == 0
         }
         Piece::BP => {
-            let mut relevant_blockers = pop_bit(m.square_from(), b.occupancies[OccupancyIndex::BothOccupancies]);
-            relevant_blockers = pop_bit(unsafe { m.square_to().add_unchecked(8) }, relevant_blockers);
-            relevant_blockers = set_bit(m.square_to(), relevant_blockers);
+            let mut relevant_blockers = pop_bit(mv.square_from(), b.occupancies[OccupancyIndex::BothOccupancies]);
+            relevant_blockers = pop_bit(unsafe { mv.square_to().add_unchecked(8) }, relevant_blockers);
+            relevant_blockers = set_bit(mv.square_to(), relevant_blockers);
 
             //SAFETY: there MUST be a king on the board
             get_rook_attacks(unsafe { lsfb(b.bitboards[Piece::BK]).unwrap_unchecked() } as usize, relevant_blockers)

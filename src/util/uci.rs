@@ -154,9 +154,9 @@ pub fn reset(b: &mut Board, info: &mut SearchInfo) {
 }
 
 fn apply_uci_move(b: &mut Board, info: &mut SearchInfo, w: &str) {
-    let m = parse_move(w, b);
-    let Ok(_) = b.try_move(m, Some(&mut info.stck)) else {
-        panic!("invalid move {}", m.uci());
+    let mv = parse_move(w, b);
+    let Ok(_) = b.try_move(mv, Some(&mut info.stck)) else {
+        panic!("invalid move {}", mv.uci());
     };
 
     info.stck.bring_to_front();
@@ -335,10 +335,18 @@ fn set_options(words: &[&str], opts: &mut UciOptions, tt: &mut TranspositionTabl
                     x,
                     SINGULARITY_DE_MARGIN,
                     ASPIRATION_WINDOW,
+                    RAZORING_MARGIN,
+                    MAX_RAZOR_DEPTH,
+                    RFP_DEPTH,
+                    RFP_MARGIN,
+                    TT_FUTILITY_MARGIN,
+                    HISTORY_PRUNING_DEPTH,
+                    HISTORY_PRUNING_MARGIN,
                     SEE_PRUNING_DEPTH,
                     SEE_QUIET_MARGIN,
                     SEE_NOISY_MARGIN,
                     SEE_QSEARCH_MARGIN,
+                    QSEARCH_FP_MARGIN,
                     LMP_DEPTH,
                     IIR_DEPTH_MINIMUM,
                     HASH_MOVE_SCORE,
@@ -347,9 +355,8 @@ fn set_options(words: &[&str], opts: &mut UciOptions, tt: &mut TranspositionTabl
                     FIRST_KILLER_MOVE,
                     LOSING_CAPTURE,
                     UNDER_PROMOTION,
-                    QSEARCH_FP_MARGIN,
-                    NMP_BASE,
                     NMP_FACTOR,
+                    NMP_BASE,
                     LMR_TACTICAL_BASE,
                     LMR_TACTICAL_DIVISOR,
                     LMR_QUIET_BASE,
@@ -450,7 +457,7 @@ impl Board {
 }
 
 pub fn print_thinking(depth: u8, eval: i32, s: &Thread, start: Instant) {
-    let pv = s.pv[0].iter().take(s.pv_length[0]).map(|m| m.uci()).collect::<Vec<_>>().join(" ");
+    let pv = s.pv[0].iter().take(s.pv_length[0]).map(|mv| mv.uci()).collect::<Vec<_>>().join(" ");
 
     if UCI_MODE.load(Ordering::Relaxed) {
         let time = start.elapsed().as_millis();
@@ -501,24 +508,24 @@ pub fn uci_loop() {
             CommandType::Play => parse_play(&words, &mut board, &mut info),
             CommandType::Go => {
                 let move_data = parse_go(&words, &mut board, &tt, &mut info, &opts);
-                if move_data.m.is_null() {
+                if move_data.mv.is_null() {
                     break;
                 }
 
                 if UCI_MODE.load(Ordering::Relaxed) {
                     print!("bestmove ");
-                    println!("{}", move_data.m.uci());
+                    println!("{}", move_data.mv.uci());
                 } else {
-                    let m = move_data.m;
-                    println!("played {}", m.uci());
+                    let mv = move_data.mv;
+                    println!("played {}", mv.uci());
 
-                    let Ok(_) = board.try_move(m, Some(&mut info.stck)) else {
+                    let Ok(_) = board.try_move(mv, Some(&mut info.stck)) else {
                         panic!(
                             concat!(
                                 "Panda tried to play an illegal move {}.\n",
                                 "Most likely, this means you made an incorrect input somewhere which confused it."
                             ),
-                            m.uci()
+                            mv.uci()
                         );
                     };
 

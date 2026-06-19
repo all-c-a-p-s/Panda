@@ -38,12 +38,12 @@ pub const BLACK_TO_MOVE: u64 = init_hash_keys().3;
 impl Board {
     /// This updates everything about the hash key EXCEPT castling rights,
     /// which it is more efficient to simply do after making the move
-    pub fn hash_update(&mut self, m: &Move) {
+    pub fn hash_update(&mut self, mv: &Move) {
         //call with board state before move was made
 
-        let sq_to = m.square_to();
-        let sq_from = m.square_from();
-        let piece = m.piece_moved(self);
+        let sq_to = mv.square_to();
+        let sq_from = mv.square_from();
+        let piece = mv.piece_moved(self);
 
         self.hash_key ^= PIECE_KEYS[sq_from][piece];
         self.hash_key ^= PIECE_KEYS[sq_to][piece];
@@ -57,7 +57,7 @@ impl Board {
             self.hash_key ^= EP_KEYS[sq];
         }
 
-        if m.is_capture(self) {
+        if mv.is_capture(self) {
             //not including en passant
             let captured_piece = self.get_piece_at(sq_to);
             self.hash_key ^= PIECE_KEYS[sq_to][captured_piece];
@@ -67,7 +67,7 @@ impl Board {
             }
         }
 
-        if m.is_castling() {
+        if mv.is_castling() {
             match sq_to {
                 Square::C1 => {
                     self.hash_key ^= PIECE_KEYS[Square::A1][Piece::WR];
@@ -89,7 +89,7 @@ impl Board {
             }
         }
 
-        if m.is_en_passant() {
+        if mv.is_en_passant() {
             match piece {
                 Piece::WP => {
                     self.hash_key ^= PIECE_KEYS[unsafe { sq_to.sub_unchecked(8) }][Piece::BP];
@@ -103,19 +103,19 @@ impl Board {
             }
         }
 
-        if m.is_promotion() {
+        if mv.is_promotion() {
             self.hash_key ^= PIECE_KEYS[sq_to][piece];
             self.pawn_hash ^= PIECE_KEYS[sq_to][piece];
             //undo operation from before
             let promoted_piece = match piece {
-                Piece::WP => m.promoted_piece().to_white_piece(),
-                Piece::BP => m.promoted_piece().to_white_piece().opposite(), //only type is encoded in the move
+                Piece::WP => mv.promoted_piece().to_white_piece(),
+                Piece::BP => mv.promoted_piece().to_white_piece().opposite(), //only type is encoded in the move
                 _ => unreachable!(),
             };
             self.hash_key ^= PIECE_KEYS[sq_to][promoted_piece];
         }
 
-        if m.is_double_push(self) {
+        if mv.is_double_push(self) {
             match piece {
                 Piece::WP => self.hash_key ^= EP_KEYS[unsafe { sq_to.sub_unchecked(8) }],
                 Piece::BP => self.hash_key ^= EP_KEYS[unsafe { sq_to.add_unchecked(8) }],
@@ -177,9 +177,9 @@ mod tests {
             return moves.used;
         }
 
-        for &m in moves.moves.iter().take(moves.used) {
-            let Ok(commit) = b.try_move(m, None) else {
-                panic!("invalid move {}", m.uci());
+        for &mv in moves.moves.iter().take(moves.used) {
+            let Ok(commit) = b.try_move(mv, None) else {
+                panic!("invalid move {}", mv.uci());
             };
 
             let correct_hash = b.compute_hash();
@@ -187,18 +187,18 @@ mod tests {
 
             if b.hash_key != correct_hash {
                 b.print_board();
-                m.print_move();
+                mv.print_move();
                 panic!("hash update failed");
             }
 
             if b.pawn_hash != correct_pawn_hash {
                 b.print_board();
-                m.print_move();
+                mv.print_move();
                 panic!("pawn hash update failed");
             }
 
             total += hash_update_test(depth - 1, b);
-            b.undo_move(m, &commit, None);
+            b.undo_move(mv, &commit, None);
         }
 
         total
