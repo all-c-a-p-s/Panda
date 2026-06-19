@@ -240,8 +240,10 @@ impl Thread<'_> {
         }
 
         let mut tt_correction = 0;
+        let mut eval_is_from_tt = false;
         if should_correct_with_tt!(tt_hit, static_eval, tt_score, tt_bound) {
             tt_correction = (tt_score - static_eval).abs();
+            eval_is_from_tt = true;
             static_eval = tt_score;
         }
 
@@ -255,16 +257,8 @@ impl Thread<'_> {
         // - if improving then we should expect to fail high more
         // - and to fail low less
         // same goes for opponent_worsening
-        let improving = match self.ply {
-            2.. => self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval,
-            _ => false,
-        } && !in_check;
-
-        let opponent_worsening = match self.ply {
-            3.. => self.info.ss[self.ply - 1].eval < self.info.ss[self.ply - 3].eval,
-            _ => false,
-        };
-
+        let improving = self.ply >= 2 && self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval && !in_check;
+        let opponent_worsening = self.ply >= 3 && self.info.ss[self.ply - 1].eval < self.info.ss[self.ply - 3].eval;
         let opponent_captured = self.ply > 0 && self.info.ss[self.ply - 1].made_capture;
 
         // Static pruning: here we attempt to show that the position does not require any further
@@ -281,7 +275,11 @@ impl Thread<'_> {
             // that only captures can raise alpha. Hence, we just run a qsearch.
             if can_razor!(depth, static_eval, improving, opponent_captured, opponent_worsening, alpha) {
                 let qeval = self.qsearch(position, alpha, beta);
-                if qeval < alpha {
+                if qeval <= alpha {
+                    return qeval;
+                }
+
+                if !eval_is_from_tt {
                     return qeval;
                 }
             }
@@ -767,8 +765,7 @@ impl Thread<'_> {
                 if !mv.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1) {
                     continue;
                 }
-            } else if movepicker.stage > MovePickerStage::GoodCaps && !mv.see(position, read_param!(SEE_QSEARCH_MARGIN))
-            {
+            } else if !mv.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
                 // alternatively just skip any move which fails SEE by this margin
                 // note anything that passes the futility check will pass this so there's no need
                 // to do SEE check twice on such moves
