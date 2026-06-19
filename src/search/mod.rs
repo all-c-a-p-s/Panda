@@ -391,7 +391,7 @@ impl Thread<'_> {
         }
 
         let (mut played, mut considered) = (0, 0);
-        let mut best_score = -INFINITY;
+        let mut best_score = -INFINITY + self.ply as i32;
 
         let (mut done_killer, mut done_counter) = (false, false);
 
@@ -712,7 +712,7 @@ impl Thread<'_> {
         let mut static_eval = evaluate(position, &top!(self.info.stck));
         static_eval = self.eval_with_corrhist(position, static_eval);
 
-        let mut best_score = if in_check { -INFINITY + 1 } else { static_eval };
+        let mut best_score = if in_check { -INFINITY + self.ply as i32 } else { static_eval };
 
         if best_score >= beta {
             return lerp(beta, best_score, read_param!(STAND_PAT_BETA_WEIGHT));
