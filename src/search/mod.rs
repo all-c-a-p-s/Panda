@@ -233,8 +233,8 @@ impl Thread<'_> {
         // reset killers for child nodes
         self.info.killer_moves[self.ply + 1] = None;
 
-        let mut static_eval = if in_check { -INFINITY } else { evaluate(position, &top!(self.info.stck)) };
-        if !singular && !in_check {
+        let mut static_eval = evaluate(position, &top!(self.info.stck));
+        if !singular {
             let corrected = self.eval_with_corrhist(position, static_eval);
             static_eval = corrected;
         }
