@@ -233,8 +233,8 @@ impl Thread<'_> {
         // reset killers for child nodes
         self.info.killer_moves[self.ply + 1] = None;
 
-        let mut static_eval = evaluate(position, &top!(self.info.stck));
-        if !singular {
+        let mut static_eval = if in_check { -INFINITY } else { evaluate(position, &top!(self.info.stck)) };
+        if !singular && !in_check {
             let corrected = self.eval_with_corrhist(position, static_eval);
             static_eval = corrected;
         }
@@ -767,7 +767,8 @@ impl Thread<'_> {
                 if !mv.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1) {
                     continue;
                 }
-            } else if !mv.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
+            } else if movepicker.stage > MovePickerStage::GoodCaps && !mv.see(position, read_param!(SEE_QSEARCH_MARGIN))
+            {
                 // alternatively just skip any move which fails SEE by this margin
                 // note anything that passes the futility check will pass this so there's no need
                 // to do SEE check twice on such moves
