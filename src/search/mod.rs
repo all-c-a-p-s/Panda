@@ -16,7 +16,7 @@ use crate::board::Board;
 use crate::board::r#move::{Move, MoveList, NULL_MOVE};
 use crate::eval::evaluate;
 use crate::search::macros::*;
-use crate::search::tables::HISTORY_MAX;
+use crate::search::tables::OVERALL_HISTORY_MAX;
 use crate::util::helper::{read_param, tuneable_params};
 use crate::util::types::PieceType;
 use crate::util::uci::print_thinking;
@@ -43,7 +43,8 @@ tuneable_params! {
     RFP_DEPTH, u8, 6, 1, 12;
     RFP_MARGIN, u8, 26, 20, 200;
     TT_FUTILITY_MARGIN, i32, 154, 40, 400;
-    HISTORY_PRUNING_DEPTH, i32, 3, 1, 12;
+    HISTORY_PRUNING_DEPTH, u8, 5, 1, 12;
+    HISTORY_PRUNING_MARGIN, i32, -3200, -8192, -1024;
     SEE_PRUNING_DEPTH, i32, 8, 1, 12;
     SEE_QUIET_MARGIN, i32, 47, 20, 300;
     SEE_NOISY_MARGIN, i32, 41, 20, 250;
@@ -63,8 +64,6 @@ tuneable_params! {
     // factors affecting reductions etc
     NMP_FACTOR, i32, 22, 1, 100;
     NMP_BASE, i32, 200, 50, 500;
-    HISTORY_NODE_DIVISOR, usize, 655, 256, 8192;
-    HISTORY_MIN_THRESHOLD, i32, 7870, 1024, 32768;
     LMR_TACTICAL_BASE, i32, 38, 0, 500;
     LMR_TACTICAL_DIVISOR, i32, 319, 100, 500;
     LMR_QUIET_BASE, i32, 144, 0, 500;
@@ -346,7 +345,7 @@ impl Thread<'_> {
         if try_probcut!(cutnode, depth, beta, tt_hit, tt_depth, tt_score, tt_move_exists, tt_move_capture) {
             movepicker.doing_probcut = true;
 
-            while let Some(m) = movepicker.get_next(
+            while let Some(mv) = movepicker.get_next(
                 NULL_MOVE,
                 None,
                 None,
@@ -359,7 +358,7 @@ impl Thread<'_> {
                 pv_node,
                 cutnode,
             ) {
-                let Ok(commit) = position.try_move(m, Some(&mut self.info.stck)) else {
+                let Ok(commit) = position.try_move(mv, Some(&mut self.info.stck)) else {
                     continue;
                 };
 
@@ -369,10 +368,10 @@ impl Thread<'_> {
                     v = -self.negamax(position, depth - 4, -probcut_beta, -probcut_beta + 1, !cutnode);
                 }
 
-                position.undo_move(m, &commit, Some(&mut self.info.stck));
+                position.undo_move(mv, &commit, Some(&mut self.info.stck));
 
                 if v >= probcut_beta {
-                    let hash_entry = TTEntry::new(depth - 3, v, EntryFlag::LowerBound, m, position.hash_key);
+                    let hash_entry = TTEntry::new(depth - 3, v, EntryFlag::LowerBound, mv, position.hash_key);
                     self.tt.write(position.hash_key, hash_entry);
                     return v;
                 }
@@ -411,7 +410,7 @@ impl Thread<'_> {
             None
         };
 
-        while let Some(m) = movepicker.get_next(
+        while let Some(mv) = movepicker.get_next(
             best_move,
             self.info.killer_moves[self.ply],
             counter,
@@ -424,25 +423,23 @@ impl Thread<'_> {
             pv_node,
             cutnode,
         ) {
-            if m == best_move && considered > 0 {
+            if mv == best_move && considered > 0 {
                 // hash move being generated in a later stage, but we've considered it already
                 continue;
             }
 
             considered += 1;
 
-            if let Some(n) = self.info.excluded[self.ply]
-                && n == m
-            {
+            if Some(mv) == self.info.excluded[self.ply] {
                 continue;
             }
 
-            let tactical = m.is_tactical(position);
+            let tactical = mv.is_tactical(position);
             let quiet = !tactical;
             let not_mated = best_score > -MATE;
 
-            let is_killer = self.info.killer_moves[self.ply] == Some(m);
-            let is_counter = Some(m) == counter;
+            let is_killer = self.info.killer_moves[self.ply] == Some(mv);
+            let is_counter = Some(mv) == counter;
 
             if is_killer && done_killer || is_counter && done_counter {
                 // killer/counter generated in later stage by movepicker
@@ -452,11 +449,12 @@ impl Thread<'_> {
             done_killer |= is_killer;
             done_counter |= is_counter;
 
-            if !position.is_legal(m) {
+            if !position.is_legal(mv) {
                 continue;
             }
 
-            let piece_moved = m.piece_moved(position);
+            let piece_moved = mv.piece_moved(position);
+            let hist = self.get_overall_history(mv, position, piece_moved);
 
             // Early Pruning: try to prune moves before we search them properly
             // by showing that they're not worth investigating
@@ -470,6 +468,12 @@ impl Thread<'_> {
                 let lmp_threshold = if improving { 2 + d_sq } else { d_sq / 2 };
                 if do_lmp!(depth, played, lmp_threshold, in_check) {
                     movepicker.skip_quiets(&movelist);
+                    continue;
+                }
+
+                if do_history_pruning!(depth, hist, quiet, in_check) {
+                    movepicker.skip_quiets(&movelist);
+                    continue;
                 }
 
                 let r = self.info.lmr_table.reduction_table[quiet as usize][depth.min(31) as usize]
@@ -482,7 +486,7 @@ impl Thread<'_> {
                 if do_see_pruning!(lmr_depth, considered, pv_node, movepicker.stage) {
                     let margin = if tactical { read_param!(SEE_NOISY_MARGIN) } else { read_param!(SEE_QUIET_MARGIN) };
                     let threshold = margin * depth as i32;
-                    if !m.see(position, threshold) {
+                    if !mv.see(position, threshold) {
                         continue;
                     }
                 }
@@ -490,7 +494,7 @@ impl Thread<'_> {
 
             // A singular move is a move which seems to be forced or at least much stronger than
             // others. We should therefore extend to investigate it further.
-            let maybe_singular = maybe_singular!(root, depth, singular, m, best_move, tt_depth, tt_bound);
+            let maybe_singular = maybe_singular!(root, depth, singular, mv, best_move, tt_depth, tt_bound);
 
             let extension = if maybe_singular {
                 match self.singularity(position, best_move, tt_score, depth, pv_node, alpha, beta, cutnode) {
@@ -507,10 +511,10 @@ impl Thread<'_> {
             }
 
             // checked to be legal above
-            let commit = position.play_unchecked(m, Some(&mut self.info.stck));
+            let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
 
             if self.ply < MAX_DEPTH {
-                self.info.ss[self.ply].square_moved_to = Some(m.square_to());
+                self.info.ss[self.ply].square_moved_to = Some(mv.square_to());
                 self.info.ss[self.ply].piece_moved = Some(piece_moved);
                 self.info.ss[self.ply].made_capture = tactical;
             }
@@ -597,7 +601,7 @@ impl Thread<'_> {
                             r -= (is_killer || is_counter) as i32;
 
                             // either increase or decrease reduction depending on history score
-                            r -= self.get_history(m, piece_moved) / (HISTORY_MAX / 2);
+                            r -= hist / (OVERALL_HISTORY_MAX / 2);
                         }
 
                         let reduced_depth = (new_depth as i32 - r).clamp(1, new_depth as i32) as u8;
@@ -621,7 +625,7 @@ impl Thread<'_> {
                 r_eval
             };
 
-            position.undo_move(m, &commit, Some(&mut self.info.stck));
+            position.undo_move(mv, &commit, Some(&mut self.info.stck));
             self.ply -= 1;
 
             if extension == 2 {
@@ -633,26 +637,26 @@ impl Thread<'_> {
             }
 
             if root {
-                self.info.nodetable.add(m, self.nodes - nodes_before);
+                self.info.nodetable.add(mv, self.nodes - nodes_before);
                 self.moves_fully_searched += 1;
             }
 
             if quiet && !quiets.is_full() {
-                quiets.push(m);
+                quiets.push(mv);
             } else if tactical && !caps.is_full() {
-                caps.push(m);
+                caps.push(mv);
             }
 
             best_score = best_score.max(eval);
 
             if eval > alpha {
                 alpha = eval;
-                self.update_pv(m);
+                self.update_pv(mv);
                 hash_flag = EntryFlag::Exact;
-                best_move = m;
+                best_move = mv;
 
                 if eval >= beta {
-                    self.update_search_tables(position, &quiets, &caps, m, tactical, depth);
+                    self.update_search_tables(position, &quiets, &caps, mv, tactical, depth);
                     hash_flag = EntryFlag::LowerBound;
                     break;
                 }
@@ -732,7 +736,7 @@ impl Thread<'_> {
 
         let mut could_be_mated = in_check;
 
-        while let Some(m) = movepicker.get_next(
+        while let Some(mv) = movepicker.get_next(
             q_hash,
             if in_check && could_be_mated { self.info.killer_moves[self.ply] } else { None },
             None,
@@ -745,7 +749,7 @@ impl Thread<'_> {
             false,
             false,
         ) {
-            if !position.is_legal(m) {
+            if !position.is_legal(mv) {
                 continue;
             }
 
@@ -762,10 +766,10 @@ impl Thread<'_> {
 
             //if we're far behind, only consider moves which win significant material
             if check_futility {
-                if !m.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1) {
+                if !mv.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1) {
                     continue;
                 }
-            } else if !m.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
+            } else if !mv.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
                 // alternatively just skip any move which fails SEE by this margin
                 // note anything that passes the futility check will pass this so there's no need
                 // to do SEE check twice on such moves
@@ -773,11 +777,11 @@ impl Thread<'_> {
             }
 
             //checked to be legal above
-            let commit = position.play_unchecked(m, Some(&mut self.info.stck));
+            let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
             self.ply += 1;
 
             let eval = -self.qsearch(position, -beta, -alpha);
-            position.undo_move(m, &commit, Some(&mut self.info.stck));
+            position.undo_move(mv, &commit, Some(&mut self.info.stck));
             self.ply -= 1;
 
             if self.is_stopped() {
@@ -788,7 +792,7 @@ impl Thread<'_> {
             if eval > alpha {
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
-                best_move = m;
+                best_move = mv;
 
                 if eval >= beta {
                     hash_flag = EntryFlag::LowerBound;
@@ -806,7 +810,7 @@ impl Thread<'_> {
 }
 
 pub struct MoveData {
-    pub m: Move,
+    pub mv: Move,
     pub nodes: usize,
     pub eval: i32,
     pub pv: String,
@@ -950,7 +954,7 @@ pub fn iterative_deepening<const SHOW_THINKING: bool>(
         }
     }
 
-    let pv = id.pv[0].iter().take(id.pv_length[0]).fold(String::new(), |acc, m| acc + (m.uci() + " ").as_str());
+    let pv = id.pv[0].iter().take(id.pv_length[0]).fold(String::new(), |acc, mv| acc + (mv.uci() + " ").as_str());
 
-    MoveData { m: id.pv[0][0], nodes: s.nodes, eval: id.eval, pv }
+    MoveData { mv: id.pv[0][0], nodes: s.nodes, eval: id.eval, pv }
 }

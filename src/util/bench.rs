@@ -37,7 +37,7 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
         let limits = Limits::time_only(1000);
         let r = s.start_search(&mut b, 0, 0, 0, &limits, 1);
 
-        if r.m.is_null() {
+        if r.mv.is_null() {
             // checkmate/stalemate
             break;
         }
@@ -47,7 +47,7 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
             writeln!(file, "go movetime 1000\n")?;
         }
 
-        b.play_unchecked(r.m, Some(&mut info.stck));
+        b.play_unchecked(r.mv, Some(&mut info.stck));
         info.stck.bring_to_front();
         b.pretty_print_board();
     }
@@ -66,7 +66,7 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
         let limits = Limits::time_only(1000);
         let r = s.start_search(&mut b, 0, 0, 0, &limits, 1);
 
-        if r.m.is_null() {
+        if r.mv.is_null() {
             // checkmate/stalemate
             break;
         }
@@ -76,7 +76,7 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
             writeln!(file, "go movetime 1000\n")?;
         }
 
-        b.play_unchecked(r.m, Some(&mut info.stck));
+        b.play_unchecked(r.mv, Some(&mut info.stck));
         info.stck.bring_to_front();
         b.pretty_print_board();
     }

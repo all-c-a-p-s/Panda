@@ -154,9 +154,9 @@ pub fn reset(b: &mut Board, info: &mut SearchInfo) {
 }
 
 fn apply_uci_move(b: &mut Board, info: &mut SearchInfo, w: &str) {
-    let m = parse_move(w, b);
-    let Ok(_) = b.try_move(m, Some(&mut info.stck)) else {
-        panic!("invalid move {}", m.uci());
+    let mv = parse_move(w, b);
+    let Ok(_) = b.try_move(mv, Some(&mut info.stck)) else {
+        panic!("invalid move {}", mv.uci());
     };
 
     info.stck.bring_to_front();
@@ -450,7 +450,7 @@ impl Board {
 }
 
 pub fn print_thinking(depth: u8, eval: i32, s: &Thread, start: Instant) {
-    let pv = s.pv[0].iter().take(s.pv_length[0]).map(|m| m.uci()).collect::<Vec<_>>().join(" ");
+    let pv = s.pv[0].iter().take(s.pv_length[0]).map(|mv| mv.uci()).collect::<Vec<_>>().join(" ");
 
     if UCI_MODE.load(Ordering::Relaxed) {
         let time = start.elapsed().as_millis();
@@ -501,24 +501,24 @@ pub fn uci_loop() {
             CommandType::Play => parse_play(&words, &mut board, &mut info),
             CommandType::Go => {
                 let move_data = parse_go(&words, &mut board, &tt, &mut info, &opts);
-                if move_data.m.is_null() {
+                if move_data.mv.is_null() {
                     break;
                 }
 
                 if UCI_MODE.load(Ordering::Relaxed) {
                     print!("bestmove ");
-                    println!("{}", move_data.m.uci());
+                    println!("{}", move_data.mv.uci());
                 } else {
-                    let m = move_data.m;
-                    println!("played {}", m.uci());
+                    let mv = move_data.mv;
+                    println!("played {}", mv.uci());
 
-                    let Ok(_) = board.try_move(m, Some(&mut info.stck)) else {
+                    let Ok(_) = board.try_move(mv, Some(&mut info.stck)) else {
                         panic!(
                             concat!(
                                 "Panda tried to play an illegal move {}.\n",
                                 "Most likely, this means you made an incorrect input somewhere which confused it."
                             ),
-                            m.uci()
+                            mv.uci()
                         );
                     };
 

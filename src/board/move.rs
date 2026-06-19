@@ -202,7 +202,7 @@ static LINE_RAYS: [[BitBoard; 64]; 64] = {
 };
 
 impl Board {
-    pub fn undo_move(&mut self, m: Move, c: &Commit, stck: Option<&mut AccumulatorStack>) {
+    pub fn undo_move(&mut self, mv: Move, c: &Commit, stck: Option<&mut AccumulatorStack>) {
         if let Some(stck) = stck {
             stck.pop();
         }
@@ -212,9 +212,9 @@ impl Board {
         self.hash_key = c.hash_before;
         self.pawn_hash = c.pawn_hash;
 
-        let to = m.square_to();
-        let from = m.square_from();
-        let piece = if m.is_promotion() {
+        let to = mv.square_to();
+        let from = mv.square_from();
+        let piece = if mv.is_promotion() {
             match self.pieces_array[to] {
                 Some(Piece::WN | Piece::WB | Piece::WR | Piece::WQ) => Piece::WP,
                 Some(Piece::BN | Piece::BB | Piece::BR | Piece::BQ) => Piece::BP,
@@ -222,9 +222,9 @@ impl Board {
             }
         } else {
             self.get_piece_at(to)
-        }; //not m.piece_moved(&self) because board has been mutated
+        }; //not mv.piece_moved(&self) because board has been mutated
 
-        if m.is_promotion() {
+        if mv.is_promotion() {
             let promoted_piece = self.get_piece_at(to);
             self.bitboards[promoted_piece] = pop_bit(to, self.bitboards[promoted_piece]);
             self.pieces_array[to] = c.piece_captured; //remove promoted piece from pieces_array
@@ -244,7 +244,7 @@ impl Board {
             self.pieces_array[to] = c.piece_captured;
         }
 
-        if m.is_castling() {
+        if mv.is_castling() {
             //reset rooks after castling (king done above)
             match to {
                 Square::C1 => {
@@ -283,7 +283,7 @@ impl Board {
             }
         }
 
-        if m.is_en_passant() {
+        if mv.is_en_passant() {
             match self.side_to_move {
                 Colour::White => {
                     //white to move before move was made
@@ -328,14 +328,14 @@ impl Board {
 
 impl Board {
     #[allow(clippy::result_unit_err)]
-    pub fn try_move(&mut self, m: Move, stck: Option<&mut AccumulatorStack>) -> Result<Commit, ()> {
-        if !self.is_legal(m) {
+    pub fn try_move(&mut self, mv: Move, stck: Option<&mut AccumulatorStack>) -> Result<Commit, ()> {
+        if !self.is_legal(mv) {
             return Err(());
         }
-        Ok(self.play_unchecked(m, stck))
+        Ok(self.play_unchecked(mv, stck))
     }
 
-    pub fn play_unchecked(&mut self, m: Move, mut stck: Option<&mut AccumulatorStack>) -> Commit {
+    pub fn play_unchecked(&mut self, mv: Move, mut stck: Option<&mut AccumulatorStack>) -> Commit {
         let mut commit = Commit {
             castling_reset: self.castling,
             ep_reset: self.en_passant,
@@ -353,13 +353,13 @@ impl Board {
         }
 
         let castling_rights_before = self.castling;
-        self.hash_update(&m);
+        self.hash_update(&mv);
         //MUST be done before any changes made on the board
         //this updates everything EXCEPT castling which is done at the end
 
         (self.checkers, self.pinned) = (0, 0);
 
-        let (from, to) = (m.square_from(), m.square_to());
+        let (from, to) = (mv.square_from(), mv.square_to());
         let piece_moved = self.get_piece_at(from);
         let victim = self.pieces_array[to];
 
@@ -384,12 +384,12 @@ impl Board {
         self.en_passant = None;
 
         if let Some(stck) = stck.as_mut()
-            && !m.is_promotion()
+            && !mv.is_promotion()
         {
             stck.accs[stck.idx].quiet_update(piece_moved, from, to);
         }
 
-        if m.is_castling() {
+        if mv.is_castling() {
             //update king and rook for castling
             match to {
                 Square::C1 => {
@@ -456,7 +456,7 @@ impl Board {
             if let Some(victim) = victim {
                 commit.piece_captured = Some(victim);
                 self.bitboards[victim] ^= set_bit(to, 0);
-                match m.square_to() {
+                match mv.square_to() {
                     //remove castling rights is a1/h1/a8/h8 is captured on
                     Square::A1 => self.castling &= 0b0000_1101,
                     Square::H1 => self.castling &= 0b0000_1110,
@@ -473,13 +473,13 @@ impl Board {
             match piece_moved {
                 Piece::WN | Piece::BN => self.checkers |= N_ATTACKS[enemy_king] & set_bit(to, 0),
                 Piece::WP | Piece::BP => {
-                    if m.is_promotion() {
+                    if mv.is_promotion() {
                         self.bitboards[piece_moved] ^= set_bit(to, 0);
 
                         let promoted_piece = if colour == Colour::White {
-                            m.promoted_piece().to_white_piece()
+                            mv.promoted_piece().to_white_piece()
                         } else {
-                            m.promoted_piece().to_white_piece().opposite()
+                            mv.promoted_piece().to_white_piece().opposite()
                         };
 
                         self.bitboards[promoted_piece] ^= set_bit(to, 0);
@@ -502,7 +502,7 @@ impl Board {
                                     self.en_passant = Some(unsafe { to.add_unchecked(8) });
                                 }
                             }
-                        } else if m.is_en_passant() {
+                        } else if mv.is_en_passant() {
                             match colour {
                                 Colour::White => {
                                     self.bitboards[Piece::BP] ^= set_bit(unsafe { to.sub_unchecked(8) }, 0);
@@ -591,7 +591,7 @@ impl Board {
     }
 
     //NOTE - this assumes that the move is pseudo-legal
-    pub fn is_legal(&mut self, m: Move) -> bool {
+    pub fn is_legal(&mut self, mv: Move) -> bool {
         //SAFETY: there MUST be a king on the board
         let king_sq = unsafe {
             lsfb(
@@ -603,11 +603,11 @@ impl Board {
             .unwrap_unchecked()
         };
 
-        let from = m.square_from();
-        let to = m.square_to();
+        let from = mv.square_from();
+        let to = mv.square_to();
 
-        if m.square_from() == king_sq {
-            return self.legal_king_move(m);
+        if mv.square_from() == king_sq {
+            return self.legal_king_move(mv);
         }
 
         if self.pinned & set_bit(from, 0) > 0 && LINE_RAYS[from][king_sq] & set_bit(to, 0) == 0 {
@@ -624,7 +624,7 @@ impl Board {
 
         match piece_type(piece_moved) {
             PieceType::Pawn => {
-                if m.is_en_passant() {
+                if mv.is_en_passant() {
                     let taken = if piece_moved == Piece::WP {
                         unsafe { to.sub_unchecked(8) }
                     } else {
@@ -632,7 +632,7 @@ impl Board {
                     };
                     //exception here since you can take the pawn giving check en passant
                     (target_squares & set_bit(to, 0) > 0 || lsfb(self.checkers) == Some(taken))
-                        && check_en_passant(m, self)
+                        && check_en_passant(mv, self)
                 } else {
                     target_squares & set_bit(to, 0) > 0
                 }
@@ -644,24 +644,24 @@ impl Board {
     /// Used to verify whether moves which we might have stored in some search tables (such as
     /// killer or counter moves) actually exist on the board (though they might be illegal due to
     /// leaving the king in check).
-    pub fn is_pseudo_legal(&mut self, m: Move) -> bool {
-        if m.is_null() {
+    pub fn is_pseudo_legal(&mut self, mv: Move) -> bool {
+        if mv.is_null() {
             return false;
         }
 
-        let (sq_from, sq_to) = (m.square_from(), m.square_to());
+        let (sq_from, sq_to) = (mv.square_from(), mv.square_to());
 
         if self.pieces_array[sq_from].is_none() {
             return false;
         }
 
-        let pc = m.piece_moved(self);
+        let pc = mv.piece_moved(self);
 
-        if m.is_castling() && piece_type(pc) != PieceType::King {
+        if mv.is_castling() && piece_type(pc) != PieceType::King {
             return false;
         }
 
-        if (m.is_promotion() || m.is_en_passant() || m.is_double_push(self)) && piece_type(pc) != PieceType::Pawn {
+        if (mv.is_promotion() || mv.is_en_passant() || mv.is_double_push(self)) && piece_type(pc) != PieceType::Pawn {
             return false;
         }
 
@@ -766,7 +766,7 @@ impl Board {
         get_bit(sq_to, attacks) == 1
     }
 
-    fn legal_king_move(&mut self, m: Move) -> bool {
+    fn legal_king_move(&mut self, mv: Move) -> bool {
         //SAFETY: there MUST be a king on the board
         let king_sq = unsafe {
             lsfb(
@@ -778,7 +778,7 @@ impl Board {
             .unwrap_unchecked()
         };
         self.occupancies[OccupancyIndex::BothOccupancies] ^= set_bit(king_sq, 0);
-        let ok = !is_attacked(m.square_to(), self.side_to_move.opponent(), self);
+        let ok = !is_attacked(mv.square_to(), self.side_to_move.opponent(), self);
         self.occupancies[OccupancyIndex::BothOccupancies] ^= set_bit(king_sq, 0);
 
         ok

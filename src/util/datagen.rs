@@ -94,7 +94,7 @@ impl Node {
 
         let move_data = s.start_search(&mut self.board, 0, 0, 0, &limits, 1);
 
-        self.choice = Some(move_data.m);
+        self.choice = Some(move_data.mv);
         self.value = move_data.eval;
     }
 
@@ -108,8 +108,8 @@ impl Node {
         // then pick from the moves which are within some margin from the best one
         let mut scores = vec![];
 
-        for &m in movelist.moves.iter().take(movelist.used) {
-            let Ok(commit) = self.board.try_move(m, Some(&mut info.stck)) else {
+        for &mv in movelist.moves.iter().take(movelist.used) {
+            let Ok(commit) = self.board.try_move(mv, Some(&mut info.stck)) else {
                 continue;
             };
 
@@ -120,10 +120,10 @@ impl Node {
 
             let score = -t.negamax(&mut self.board, 4, -INFINITY, INFINITY, false);
 
-            scores.push((score, m));
+            scores.push((score, mv));
             best_score = best_score.max(score);
 
-            self.board.undo_move(m, &commit, Some(&mut info.stck));
+            self.board.undo_move(mv, &commit, Some(&mut info.stck));
         }
 
         let (s, chosen_move) = {
@@ -141,16 +141,16 @@ impl Node {
 
     // must be called when choice is not None and when choice is not the only legal move
     pub fn choose_second(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) {
-        let m = self.choice.unwrap();
+        let mv = self.choice.unwrap();
         info.stck.set_to(&self.board);
 
         let stop = AtomicBool::new(false);
 
         let mut t = Thread::new(Instant::now() + Duration::from_millis(10), 8192, tt, info, &stop);
 
-        t.info.excluded[0] = Some(m);
+        t.info.excluded[0] = Some(mv);
         let move_data = iterative_deepening::<false>(&mut self.board, 10, 10, MAX_DEPTH as u8, &mut t);
-        self.choice = Some(move_data.m);
+        self.choice = Some(move_data.mv);
     }
 }
 
@@ -290,7 +290,7 @@ impl Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.board.print_board();
         let mut s = format!("value: {}", self.value);
-        s += format!("\nchoice: {}", { if let Some(m) = self.choice { m.uci() } else { "None".to_string() } }).as_str();
+        s += format!("\nchoice: {}", { if let Some(mv) = self.choice { mv.uci() } else { "None".to_string() } }).as_str();
         s +=
             format!("\nresult: {}", { if let Some(r) = self.result { format!("{r}") } else { "Unknown".to_string() } })
                 .as_str();

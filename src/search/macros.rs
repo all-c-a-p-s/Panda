@@ -171,11 +171,22 @@ macro_rules! do_see_pruning {
     };
 }
 
+#[macro_export]
+macro_rules! do_history_pruning {
+    ($depth: expr, $hist: expr, $quiet: expr, $in_check: expr) => {
+        $quiet
+            && !$in_check
+            && $depth <= read_param!(HISTORY_PRUNING_DEPTH)
+            && $hist < read_param!(HISTORY_PRUNING_MARGIN) * ($depth as i32)
+    };
+}
+
 pub(crate) use can_nmp;
 pub(crate) use can_razor;
 pub(crate) use can_rfp;
 pub(crate) use can_static_prune;
 pub(crate) use corrhist_update_allowed;
+pub(crate) use do_history_pruning;
 pub(crate) use do_iaw;
 pub(crate) use do_iir;
 pub(crate) use do_lmp;

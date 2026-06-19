@@ -5,8 +5,10 @@ use crate::search::{INFINITY, MAX_DEPTH};
 use crate::util::Piece;
 use crate::util::helper::piece_type;
 
-pub const HISTORY_MAX: i32 = 16_384;
+const HISTORY_MAX: i32 = 16_384;
 const CORRELATION_MAX: i32 = 4_096;
+
+pub const OVERALL_HISTORY_MAX: i32 = HISTORY_MAX + CORRELATION_MAX;
 
 const CORRHIST_GRAIN: i32 = 256;
 const CORRHIST_SCALE: i32 = 256;
@@ -15,9 +17,9 @@ const CORRHIST_MAX: i32 = 256 * 32;
 const MATE: i32 = INFINITY - MAX_DEPTH as i32;
 
 impl Thread<'_> {
-    pub fn update_pv(&mut self, m: Move) {
+    pub fn update_pv(&mut self, mv: Move) {
         let next_ply = self.ply + 1;
-        self.pv[self.ply][self.ply] = m;
+        self.pv[self.ply][self.ply] = mv;
         for i in next_ply..self.pv_length[next_ply] {
             self.pv[self.ply][i] = self.pv[next_ply][i];
             //copy from next row in pv table
@@ -25,12 +27,39 @@ impl Thread<'_> {
         self.pv_length[self.ply] = self.pv_length[next_ply];
     }
 
-    pub fn get_history(&self, m: Move, pc: Piece) -> i32 {
+    pub fn get_history(&self, mv: Move, pc: Piece) -> i32 {
         let side = pc.colour();
-        let from = m.square_from();
-        let to = m.square_to();
+        let from = mv.square_from();
+        let to = mv.square_to();
 
         self.info.piece_history[pc][to] + self.info.square_history[side][from][to]
+    }
+
+    pub fn get_conthist(&self, mv: Move, b: &Board) -> i32 {
+        let sq = mv.square_to();
+        let mut cont_bonus = if self.ply > 0
+            && let Some(prev) = self.info.ss[self.ply - 1].square_moved_to
+        {
+            let side = b.side_to_move;
+            self.info.counter_correlation[side][prev][sq]
+        } else {
+            0
+        };
+
+        cont_bonus += if self.ply > 1
+            && let Some(prev) = self.info.ss[self.ply - 2].square_moved_to
+        {
+            let side = b.side_to_move;
+            self.info.followup_correlation[side][prev][sq]
+        } else {
+            0
+        };
+
+        cont_bonus
+    }
+
+    pub fn get_overall_history(&self, mv: Move, b: &Board, pc: Piece) -> i32 {
+        self.get_history(mv, pc) + self.get_conthist(mv, b)
     }
 
     pub fn update_search_tables(
@@ -68,8 +97,8 @@ impl Thread<'_> {
         }
         let bonus = (30 * depth as i32 - 20).clamp(-CORRELATION_MAX, CORRELATION_MAX);
 
-        let update = |entry: &mut i32, m: Move| {
-            let sign = if m == cutoff_move { 1 } else { -1 };
+        let update = |entry: &mut i32, mv: Move| {
+            let sign = if mv == cutoff_move { 1 } else { -1 };
             let delta = (sign * bonus) - *entry * bonus / CORRELATION_MAX;
             *entry += delta;
         };
@@ -81,25 +110,25 @@ impl Thread<'_> {
         let side = b.side_to_move;
 
         if tactical {
-            for &m in tacticals {
-                let sq = m.square_to();
+            for &mv in tacticals {
+                let sq = mv.square_to();
 
                 let entry = &mut self.info.followup_correlation[side][prev][sq];
-                update(entry, m);
+                update(entry, mv);
             }
         } else {
-            for &m in tacticals {
-                let sq = m.square_to();
+            for &mv in tacticals {
+                let sq = mv.square_to();
 
                 let entry = &mut self.info.followup_correlation[side][prev][sq];
-                update(entry, m);
+                update(entry, mv);
             }
 
-            for &m in quiets {
-                let sq = m.square_to();
+            for &mv in quiets {
+                let sq = mv.square_to();
 
                 let entry = &mut self.info.followup_correlation[side][prev][sq];
-                update(entry, m);
+                update(entry, mv);
             }
         }
     }
@@ -118,8 +147,8 @@ impl Thread<'_> {
         }
         let bonus = (100 * depth as i32 - 50).clamp(-CORRELATION_MAX, CORRELATION_MAX);
 
-        let update = |entry: &mut i32, m: Move| {
-            let sign = if m == cutoff_move { 1 } else { -1 };
+        let update = |entry: &mut i32, mv: Move| {
+            let sign = if mv == cutoff_move { 1 } else { -1 };
             let delta = (sign * bonus) - *entry * bonus / CORRELATION_MAX;
             *entry += delta;
         };
@@ -139,26 +168,26 @@ impl Thread<'_> {
         let side = b.side_to_move;
 
         if tactical {
-            for &m in tacticals {
-                let sq = m.square_to();
+            for &mv in tacticals {
+                let sq = mv.square_to();
 
                 let entry = &mut self.info.counter_correlation[side][prev][sq];
-                update(entry, m);
+                update(entry, mv);
             }
         } else {
-            for &m in tacticals {
-                let sq = m.square_to();
+            for &mv in tacticals {
+                let sq = mv.square_to();
 
                 let entry = &mut self.info.counter_correlation[side][prev][sq];
-                update(entry, m);
+                update(entry, mv);
             }
 
-            for &m in quiets {
-                let sq = m.square_to();
+            for &mv in quiets {
+                let sq = mv.square_to();
 
                 let entry = &mut self.info.counter_correlation[side][prev][sq];
 
-                update(entry, m);
+                update(entry, mv);
             }
         }
     }
@@ -177,50 +206,50 @@ impl Thread<'_> {
         let bonus = (150 * depth as i32 - 125).clamp(-SHM, SHM);
         //penalise all moves that have been checked and have not caused beta cutoff
 
-        let update = |entry: &mut i32, m: Move| {
-            let sign = if m == cutoff_move { 1 } else { -1 };
+        let update = |entry: &mut i32, mv: Move| {
+            let sign = if mv == cutoff_move { 1 } else { -1 };
             let delta = (sign * bonus) - *entry * bonus / SHM;
             *entry += delta;
         };
 
         if tactical {
             // penalise all captures that failed to cause cutoff
-            for &m in tacticals {
-                if !m.is_capture(b) {
+            for &mv in tacticals {
+                if !mv.is_capture(b) {
                     continue;
                 }
-                let piece = m.piece_moved(b);
-                let to = m.square_to();
-                let captured = piece_type(m.piece_captured(b));
+                let piece = mv.piece_moved(b);
+                let to = mv.square_to();
+                let captured = piece_type(mv.piece_captured(b));
 
                 let entry = &mut self.info.caphist[piece][to][captured];
-                update(entry, m);
+                update(entry, mv);
             }
         } else {
             // penalise all moves quiets that failed to cause cutoff
-            for &m in quiets {
-                let piece = m.piece_moved(b);
-                let to = m.square_to();
-                let from = m.square_from();
+            for &mv in quiets {
+                let piece = mv.piece_moved(b);
+                let to = mv.square_to();
+                let from = mv.square_from();
 
                 let entry = &mut self.info.piece_history[piece][to];
-                update(entry, m);
+                update(entry, mv);
 
                 let side = b.side_to_move;
 
                 let entry = &mut self.info.square_history[side][from][to];
-                update(entry, m);
+                update(entry, mv);
             }
 
-            for &m in tacticals {
-                if !m.is_capture(b) {
+            for &mv in tacticals {
+                if !mv.is_capture(b) {
                     continue;
                 }
-                let piece = m.piece_moved(b);
-                let to = m.square_to();
-                let captured = piece_type(m.piece_captured(b));
+                let piece = mv.piece_moved(b);
+                let to = mv.square_to();
+                let captured = piece_type(mv.piece_captured(b));
                 let entry = &mut self.info.caphist[piece][to][captured];
-                update(entry, m);
+                update(entry, mv);
             }
         }
     }
