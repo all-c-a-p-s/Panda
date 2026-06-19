@@ -280,6 +280,11 @@ impl Thread<'_> {
                 }
 
                 if !eval_is_from_tt {
+                    // Our qsearch actually failed high. Since we only razor after the
+                    // opponent's capture, the fact that they made a capture can be used to explain
+                    // our low static eval, not improving etc. Hence, unless there's a search
+                    // result that contradicts this, we'll assume they made an unsound capture and
+                    // prune here.
                     return qeval;
                 }
             }
