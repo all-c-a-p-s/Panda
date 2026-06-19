@@ -43,8 +43,8 @@ tuneable_params! {
     RFP_DEPTH, u8, 6, 1, 12;
     RFP_MARGIN, u8, 26, 20, 200;
     TT_FUTILITY_MARGIN, i32, 154, 40, 400;
-    HISTORY_PRUNING_DEPTH, u8, 5, 1, 12;
-    HISTORY_PRUNING_MARGIN, i32, -3200, -8192, -1024;
+    HISTORY_PRUNING_DEPTH, i32, 3, 1, 12;
+    HISTORY_PRUNING_MARGIN, i32, -5000, -8192, -1024;
     SEE_PRUNING_DEPTH, i32, 8, 1, 12;
     SEE_QUIET_MARGIN, i32, 47, 20, 300;
     SEE_NOISY_MARGIN, i32, 41, 20, 250;
@@ -468,18 +468,16 @@ impl Thread<'_> {
                 let lmp_threshold = if improving { 2 + d_sq } else { d_sq / 2 };
                 if do_lmp!(depth, played, lmp_threshold, in_check) {
                     movepicker.skip_quiets(&movelist);
-                    continue;
-                }
-
-                if do_history_pruning!(depth, hist, quiet, in_check) {
-                    movepicker.skip_quiets(&movelist);
-                    continue;
                 }
 
                 let r = self.info.lmr_table.reduction_table[quiet as usize][depth.min(31) as usize]
                     [considered.min(31) as usize]
                     + !improving as i32;
-                let lmr_depth = depth as i32 - 1 - r.max(0);
+                let lmr_depth = (depth as i32 - 1 - r).max(1);
+
+                if do_history_pruning!(lmr_depth, hist, quiet, in_check) {
+                    movepicker.skip_quiets(&movelist);
+                }
 
                 // SEE Pruning:
                 // skip moves that fail SEE by a depth-dependent threshold
