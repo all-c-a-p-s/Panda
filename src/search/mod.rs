@@ -914,12 +914,16 @@ pub fn iterative_deepening<const SHOW_THINKING: bool>(
 ) -> MoveData {
     let start = Instant::now();
 
+    let wdl = |x: i32| -> f64 { 1.0 / (1.0 + ((-x as f64) * 2.55 / 400.0).exp()) };
+
     s.reset_thread();
     s.timer.end_time = start + Duration::from_millis(hard_limit as u64);
 
     let mut id = IterDeepData::new::<SHOW_THINKING>(start);
 
     let final_depth = (MAX_DEPTH as u8 - 1).min(max_depth);
+
+    let mut old_wdl = None::<f64>;
 
     while id.depth <= final_depth {
         let eval = aspiration_window(position, s, &mut id);
@@ -936,9 +940,14 @@ pub fn iterative_deepening<const SHOW_THINKING: bool>(
         let a = read_param!(TMAN_NODE_MULT_A) as f64 / 1024.0;
         let b = read_param!(TMAN_NODE_MULT_B) as f64 / 1024.0;
 
-        let multiplier = a * (b * fraction).cos();
+        let node_multiplier = a * (b * fraction).cos();
 
-        let soft_end = id.start_time + Duration::from_millis((soft_limit as f64 * multiplier) as u64);
+        let new_wdl = wdl(eval);
+        let wdl_multiplier = if let Some(e) = old_wdl { 0.8 + ((new_wdl - e).abs() * 20.0).atan() / 2.0 } else { 1.0 };
+        old_wdl = Some(new_wdl);
+
+        let soft_end =
+            id.start_time + Duration::from_millis((soft_limit as f64 * node_multiplier * wdl_multiplier) as u64);
         let mut end = s.timer.end_time;
         if soft_limit < hard_limit {
             end = end.min(soft_end);
