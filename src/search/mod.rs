@@ -187,7 +187,7 @@ impl Thread<'_> {
         self.pv_length[self.ply] = self.ply;
 
         if depth == 0 {
-            return self.qsearch(position, alpha, beta, 0);
+            return self.qsearch(position, alpha, beta);
         }
 
         let mut hash_flag = EntryFlag::UpperBound;
@@ -272,7 +272,7 @@ impl Thread<'_> {
             // If our opponent just captured and the static eval is far below alpha, it's likely
             // that only captures can raise alpha. Hence, we just run a qsearch.
             if can_razor!(depth, static_eval, improving, opponent_captured, opponent_worsening, alpha) {
-                let qeval = self.qsearch(position, alpha, beta, 0);
+                let qeval = self.qsearch(position, alpha, beta);
                 if qeval < alpha {
                     return qeval;
                 }
@@ -354,7 +354,7 @@ impl Thread<'_> {
                     continue;
                 };
 
-                let mut v = -self.qsearch(position, -probcut_beta, -probcut_beta + 1, 0);
+                let mut v = -self.qsearch(position, -probcut_beta, -probcut_beta + 1);
 
                 if v >= probcut_beta {
                     v = -self.negamax(position, depth - 4, -probcut_beta, -probcut_beta + 1, !cutnode);
@@ -673,7 +673,7 @@ impl Thread<'_> {
     /// Quiescence Search:
     /// Search all noisy moves, or find an evasion if in check.
     /// This is done to prevent the horizon effect.
-    pub fn qsearch(&mut self, position: &mut Board, mut alpha: i32, beta: i32, height: i32) -> i32 {
+    pub fn qsearch(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
         self.seldepth = self.seldepth.max(self.ply as u8);
 
@@ -724,15 +724,9 @@ impl Thread<'_> {
 
         let q_hash = if in_check || best_move.is_tactical(position) { best_move } else { NULL_MOVE };
 
-        let mut could_be_mated = in_check;
-        let mut considered = 0;
-
-        let pv_node = beta - alpha != 1;
-        let max_moves = 2 - (height >= 2 && !pv_node) as i32;
-
         while let Some(mv) = movepicker.get_next(
             q_hash,
-            if in_check && could_be_mated { self.info.killer_moves[self.ply] } else { None },
+            if best_score <= -MATE { self.info.killer_moves[self.ply] } else { None },
             None,
             position,
             &mut movelist,
@@ -747,38 +741,26 @@ impl Thread<'_> {
                 continue;
             }
 
-            if could_be_mated {
-                best_score = best_score.max(static_eval);
-                if best_score >= beta {
-                    return lerp(beta, best_score, read_param!(STAND_PAT_BETA_WEIGHT));
+            if best_score > -MATE {
+                //if we're far behind, only consider moves which win significant material
+                if best_score + read_param!(QSEARCH_FP_MARGIN) <= alpha
+                    && !mv.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1)
+                {
+                    continue;
+                } else if !mv.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
+                    // alternatively just skip any move which fails SEE by this margin
+                    // note anything that passes the futility check will pass this so there's no need
+                    // to do SEE check twice on such moves
+
+                    continue;
                 }
-                movepicker.skip_quiets(&movelist);
-                could_be_mated = false;
-            }
-
-            considered += 1;
-            if considered > max_moves {
-                break;
-            }
-
-            //if we're far behind, only consider moves which win significant material
-            if best_score + read_param!(QSEARCH_FP_MARGIN) <= alpha
-                && !mv.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1)
-            {
-                continue;
-            } else if !mv.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
-                // alternatively just skip any move which fails SEE by this margin
-                // note anything that passes the futility check will pass this so there's no need
-                // to do SEE check twice on such moves
-
-                continue;
             }
 
             //checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
             self.ply += 1;
 
-            let eval = -self.qsearch(position, -beta, -alpha, height + 1);
+            let eval = -self.qsearch(position, -beta, -alpha);
 
             position.undo_move(mv, &commit, Some(&mut self.info.stck));
             self.ply -= 1;
@@ -788,6 +770,11 @@ impl Thread<'_> {
             }
 
             best_score = best_score.max(eval);
+
+            if best_score > -MATE {
+                movepicker.skip_quiets(&movelist);
+            }
+
             if eval > alpha {
                 alpha = eval;
                 hash_flag = EntryFlag::Exact;
