@@ -240,10 +240,8 @@ impl Thread<'_> {
         }
 
         let mut tt_correction = 0;
-        let mut eval_is_from_tt = false;
         if should_correct_with_tt!(tt_hit, static_eval, tt_score, tt_bound) {
             tt_correction = (tt_score - static_eval).abs();
-            eval_is_from_tt = true;
             static_eval = tt_score;
         }
 
@@ -275,16 +273,7 @@ impl Thread<'_> {
             // that only captures can raise alpha. Hence, we just run a qsearch.
             if can_razor!(depth, static_eval, improving, opponent_captured, opponent_worsening, alpha) {
                 let qeval = self.qsearch(position, alpha, beta);
-                if qeval <= alpha {
-                    return qeval;
-                }
-
-                if !eval_is_from_tt {
-                    // Our qsearch actually failed high. Since we only razor after the
-                    // opponent's capture, the fact that they made a capture can be used to explain
-                    // our low static eval, not improving etc. Hence, unless there's a search
-                    // result that contradicts this, we'll assume they made an unsound capture and
-                    // prune here.
+                if qeval < alpha {
                     return qeval;
                 }
             }
@@ -736,6 +725,8 @@ impl Thread<'_> {
         let q_hash = if in_check || best_move.is_tactical(position) { best_move } else { NULL_MOVE };
 
         let mut could_be_mated = in_check;
+        let mut played = 0;
+        let full_window_moves = 3 - !best_move.is_null() as i32;
 
         while let Some(mv) = movepicker.get_next(
             q_hash,
@@ -755,6 +746,7 @@ impl Thread<'_> {
             }
 
             if could_be_mated {
+                // we found a legal move so now we know we're not mated
                 best_score = best_score.max(static_eval);
                 if best_score >= beta {
                     return lerp(beta, best_score, read_param!(STAND_PAT_BETA_WEIGHT));
@@ -780,8 +772,15 @@ impl Thread<'_> {
             //checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
             self.ply += 1;
+            played += 1;
 
-            let eval = -self.qsearch(position, -beta, -alpha);
+            let eval = if played > full_window_moves {
+                let w_eval = -self.qsearch(position, -alpha - 1, -alpha);
+                if w_eval > alpha { -self.qsearch(position, -beta, -alpha) } else { w_eval }
+            } else {
+                -self.qsearch(position, -beta, -alpha)
+            };
+
             position.undo_move(mv, &commit, Some(&mut self.info.stck));
             self.ply -= 1;
 
