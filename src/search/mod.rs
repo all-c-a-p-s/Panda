@@ -726,6 +726,9 @@ impl Thread<'_> {
 
         let mut could_be_mated = in_check;
 
+        let max_moves = (4 - height - !q_hash.is_null() as i32 + in_check as i32).max(1);
+        let mut played = 0;
+
         while let Some(mv) = movepicker.get_next(
             q_hash,
             if in_check && could_be_mated { self.info.killer_moves[self.ply] } else { None },
@@ -752,10 +755,8 @@ impl Thread<'_> {
                 could_be_mated = false;
             }
 
-            let futility_margin = read_param!(QSEARCH_FP_MARGIN) / (height / 2 + 1);
-
             //if we're far behind, only consider moves which win significant material
-            if best_score + futility_margin <= alpha
+            if best_score + read_param!(QSEARCH_FP_MARGIN) <= alpha
                 && !mv.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1)
             {
                 continue;
@@ -768,6 +769,7 @@ impl Thread<'_> {
 
             //checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
+            played += 1;
             self.ply += 1;
 
             let eval = -self.qsearch(position, -beta, -alpha, height + 1);
@@ -788,6 +790,10 @@ impl Thread<'_> {
                     hash_flag = EntryFlag::LowerBound;
                     break;
                 }
+            }
+
+            if played >= max_moves {
+                break;
             }
         }
 
