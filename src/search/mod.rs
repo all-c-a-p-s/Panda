@@ -187,7 +187,7 @@ impl Thread<'_> {
         self.pv_length[self.ply] = self.ply;
 
         if depth == 0 {
-            return self.qsearch(position, alpha, beta);
+            return self.qsearch(position, alpha, beta, 0);
         }
 
         let mut hash_flag = EntryFlag::UpperBound;
@@ -280,7 +280,7 @@ impl Thread<'_> {
             // If our opponent just captured and the static eval is far below alpha, it's likely
             // that only captures can raise alpha. Hence, we just run a qsearch.
             if can_razor!(depth, static_eval, improving, opponent_captured, opponent_worsening, alpha) {
-                let qeval = self.qsearch(position, alpha, beta);
+                let qeval = self.qsearch(position, alpha, beta, 0);
                 if qeval < alpha {
                     return qeval;
                 }
@@ -362,7 +362,7 @@ impl Thread<'_> {
                     continue;
                 };
 
-                let mut v = -self.qsearch(position, -probcut_beta, -probcut_beta + 1);
+                let mut v = -self.qsearch(position, -probcut_beta, -probcut_beta + 1, 0);
 
                 if v >= probcut_beta {
                     v = -self.negamax(position, depth - 4, -probcut_beta, -probcut_beta + 1, !cutnode);
@@ -681,7 +681,7 @@ impl Thread<'_> {
     /// Quiescence Search:
     /// Search all noisy moves, or find an evasion if in check.
     /// This is done to prevent the horizon effect.
-    pub fn qsearch(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
+    pub fn qsearch(&mut self, position: &mut Board, mut alpha: i32, beta: i32, height: i32) -> i32 {
         self.nodes += 1;
         self.seldepth = self.seldepth.max(self.ply as u8);
 
@@ -760,13 +760,13 @@ impl Thread<'_> {
                 could_be_mated = false;
             }
 
-            let check_futility = best_score + read_param!(QSEARCH_FP_MARGIN) <= alpha;
+            let futility_margin = read_param!(QSEARCH_FP_MARGIN) / (height / 2 + 1);
 
             //if we're far behind, only consider moves which win significant material
-            if check_futility {
-                if !mv.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1) {
-                    continue;
-                }
+            if best_score + futility_margin <= alpha
+                && !mv.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1)
+            {
+                continue;
             } else if !mv.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
                 // alternatively just skip any move which fails SEE by this margin
                 // note anything that passes the futility check will pass this so there's no need
@@ -778,7 +778,7 @@ impl Thread<'_> {
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
             self.ply += 1;
 
-            let eval = -self.qsearch(position, -beta, -alpha);
+            let eval = -self.qsearch(position, -beta, -alpha, height + 1);
             position.undo_move(mv, &commit, Some(&mut self.info.stck));
             self.ply -= 1;
 
