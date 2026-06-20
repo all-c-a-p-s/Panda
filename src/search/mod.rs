@@ -255,16 +255,8 @@ impl Thread<'_> {
         // - if improving then we should expect to fail high more
         // - and to fail low less
         // same goes for opponent_worsening
-        let improving = match self.ply {
-            2.. => self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval,
-            _ => false,
-        } && !in_check;
-
-        let opponent_worsening = match self.ply {
-            3.. => self.info.ss[self.ply - 1].eval < self.info.ss[self.ply - 3].eval,
-            _ => false,
-        };
-
+        let improving = self.ply >= 2 && self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval && !in_check;
+        let opponent_worsening = self.ply >= 3 && self.info.ss[self.ply - 1].eval < self.info.ss[self.ply - 3].eval;
         let opponent_captured = self.ply > 0 && self.info.ss[self.ply - 1].made_capture;
 
         // Static pruning: here we attempt to show that the position does not require any further
