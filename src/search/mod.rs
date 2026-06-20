@@ -725,9 +725,10 @@ impl Thread<'_> {
         let q_hash = if in_check || best_move.is_tactical(position) { best_move } else { NULL_MOVE };
 
         let mut could_be_mated = in_check;
+        let mut considered = 0;
 
-        let max_moves = (4 - height - !q_hash.is_null() as i32 + in_check as i32).max(1);
-        let mut played = 0;
+        let pv_node = beta - alpha != 1;
+        let max_moves = 2 - (height >= 2 && !pv_node) as i32;
 
         while let Some(mv) = movepicker.get_next(
             q_hash,
@@ -755,6 +756,11 @@ impl Thread<'_> {
                 could_be_mated = false;
             }
 
+            considered += 1;
+            if considered > max_moves {
+                break;
+            }
+
             //if we're far behind, only consider moves which win significant material
             if best_score + read_param!(QSEARCH_FP_MARGIN) <= alpha
                 && !mv.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1)
@@ -764,15 +770,16 @@ impl Thread<'_> {
                 // alternatively just skip any move which fails SEE by this margin
                 // note anything that passes the futility check will pass this so there's no need
                 // to do SEE check twice on such moves
+
                 continue;
             }
 
             //checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
-            played += 1;
             self.ply += 1;
 
             let eval = -self.qsearch(position, -beta, -alpha, height + 1);
+
             position.undo_move(mv, &commit, Some(&mut self.info.stck));
             self.ply -= 1;
 
@@ -791,16 +798,13 @@ impl Thread<'_> {
                     break;
                 }
             }
-
-            if played >= max_moves {
-                break;
-            }
         }
 
         if !self.is_stopped() {
             let hash_entry = TTEntry::new(0, best_score, hash_flag, best_move, position.hash_key);
             self.tt.write(position.hash_key, hash_entry);
         }
+
         best_score
     }
 }
