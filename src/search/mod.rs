@@ -233,16 +233,19 @@ impl Thread<'_> {
         // reset killers for child nodes
         self.info.killer_moves[self.ply + 1] = None;
 
-        let mut static_eval = evaluate(position, &top!(self.info.stck));
-        if !singular {
-            let corrected = self.eval_with_corrhist(position, static_eval);
-            static_eval = corrected;
-        }
-
+        let mut static_eval = -INFINITY;
         let mut tt_correction = 0;
-        if should_correct_with_tt!(tt_hit, static_eval, tt_score, tt_bound) {
-            tt_correction = (tt_score - static_eval).abs();
-            static_eval = tt_score;
+
+        if !in_check {
+            static_eval = evaluate(position, &top!(self.info.stck));
+
+            if should_correct_with_tt!(tt_hit, static_eval, tt_score, tt_bound) {
+                tt_correction = (tt_score - static_eval).abs();
+                static_eval = tt_score;
+            } else if !singular {
+                let corrected = self.eval_with_corrhist(position, static_eval);
+                static_eval = corrected;
+            }
         }
 
         if self.ply < MAX_DEPTH {
@@ -250,13 +253,16 @@ impl Thread<'_> {
                 SearchStackEntry { eval: static_eval, square_moved_to: None, piece_moved: None, made_capture: false };
         }
 
+        let better = |a: i32, b: i32| a > b && b > -MATE;
+
         // Improving heuristic:
         // useful for considering whether or not to prune in the search:
         // - if improving then we should expect to fail high more
         // - and to fail low less
         // same goes for opponent_worsening
-        let improving = self.ply >= 2 && self.info.ss[self.ply].eval > self.info.ss[self.ply - 2].eval && !in_check;
-        let opponent_worsening = self.ply >= 3 && self.info.ss[self.ply - 1].eval < self.info.ss[self.ply - 3].eval;
+        let improving = self.ply >= 2 && better(self.info.ss[self.ply].eval, self.info.ss[self.ply - 2].eval);
+        let opponent_worsening =
+            self.ply >= 3 && better(self.info.ss[self.ply - 3].eval, self.info.ss[self.ply - 1].eval);
         let opponent_captured = self.ply > 0 && self.info.ss[self.ply - 1].made_capture;
 
         // Static pruning: here we attempt to show that the position does not require any further
