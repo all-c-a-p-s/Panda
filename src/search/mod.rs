@@ -498,6 +498,11 @@ impl Thread<'_> {
                     SingularityResult::MultiCut => return tt_score - depth as i32 * 2,
                     SingularityResult::NoChange => (in_check && !root) as i32,
                 }
+            } else if do_ldse!(depth, in_check, static_eval, alpha, tt_bound, mv, best_move) {
+                // Low Depth Singularity Extention (LDSE):
+                // If static eval is low, but this node failed high in the past, we assume that's
+                // explained by a (singular) good move we can make here. Hence, extend the TT move.
+                1
             } else {
                 (in_check && !root) as i32
             };
