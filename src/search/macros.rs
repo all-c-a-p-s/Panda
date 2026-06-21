@@ -124,17 +124,6 @@ macro_rules! do_iaw {
 }
 
 #[macro_export]
-macro_rules! do_ldse {
-    ($depth: expr, $in_check: expr, $static_eval: expr, $alpha: expr, $tt_bound: expr, $mv: expr, $best_move: expr) => {
-        $depth <= 7
-            && !$in_check
-            && $static_eval <= $alpha - 25
-            && $tt_bound == EntryFlag::LowerBound
-            && $mv == $best_move
-    };
-}
-
-#[macro_export]
 macro_rules! should_reduce {
     ($played:expr, $pv_node:expr, $tt_move:expr, $root:expr, $tactical:expr,
      $depth:expr, $not_mated:expr) => {
@@ -200,7 +189,6 @@ pub(crate) use corrhist_update_allowed;
 pub(crate) use do_history_pruning;
 pub(crate) use do_iaw;
 pub(crate) use do_iir;
-pub(crate) use do_ldse;
 pub(crate) use do_lmp;
 pub(crate) use do_see_pruning;
 pub(crate) use maybe_singular;

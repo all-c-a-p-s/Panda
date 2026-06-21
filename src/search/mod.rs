@@ -187,7 +187,7 @@ impl Thread<'_> {
         self.pv_length[self.ply] = self.ply;
 
         if depth == 0 {
-            return self.qsearch(position, alpha, beta);
+            return self.qsearch::<true>(position, alpha, beta);
         }
 
         let mut hash_flag = EntryFlag::UpperBound;
@@ -229,6 +229,8 @@ impl Thread<'_> {
 
         let tt_move_exists = !best_move.is_null();
         let tt_move_capture = if tt_move_exists { best_move.is_capture(position) } else { false };
+
+        let mut q_correction = None;
 
         // reset killers for child nodes
         self.info.killer_moves[self.ply + 1] = None;
@@ -278,7 +280,7 @@ impl Thread<'_> {
             // If our opponent just captured and the static eval is far below alpha, it's likely
             // that only captures can raise alpha. Hence, we just run a qsearch.
             if can_razor!(depth, static_eval, improving, opponent_captured, opponent_worsening, alpha) {
-                let qeval = self.qsearch(position, alpha, beta);
+                let qeval = self.qsearch::<true>(position, alpha, beta);
                 if qeval < alpha {
                     return qeval;
                 }
@@ -360,7 +362,7 @@ impl Thread<'_> {
                     continue;
                 };
 
-                let mut v = -self.qsearch(position, -probcut_beta, -probcut_beta + 1);
+                let mut v = -self.qsearch::<true>(position, -probcut_beta, -probcut_beta + 1);
 
                 if v >= probcut_beta {
                     v = -self.negamax(position, depth - 4, -probcut_beta, -probcut_beta + 1, !cutnode);
@@ -407,6 +409,17 @@ impl Thread<'_> {
         } else {
             None
         };
+
+        if depth >= 12
+            && tt_bound == EntryFlag::Exact
+            && tt_depth >= depth - 4
+            && (pv_node || cutnode)
+            && !is_terminal(tt_score)
+            && !root
+        {
+            let q_eval = self.qsearch::<false>(position, alpha, beta);
+            q_correction = Some(tt_score - q_eval);
+        }
 
         while let Some(mv) = movepicker.get_next(
             best_move,
@@ -498,11 +511,15 @@ impl Thread<'_> {
                     SingularityResult::MultiCut => return tt_score - depth as i32 * 2,
                     SingularityResult::NoChange => (in_check && !root) as i32,
                 }
-            } else if do_ldse!(depth, in_check, static_eval, alpha, tt_bound, mv, best_move) {
-                // Low Depth Singularity Extention (LDSE):
-                // If static eval is low, but this node failed high in the past, we assume that's
-                // explained by a (singular) good move we can make here. Hence, extend the TT move.
-                1
+            } else if let Some(x) = q_correction
+                && !in_check
+                && !root
+            {
+                match x {
+                    20.. => 1 + tactical as i32,
+                    ..-35 => -1,
+                    _ => 0,
+                }
             } else {
                 (in_check && !root) as i32
             };
@@ -684,7 +701,7 @@ impl Thread<'_> {
     /// Quiescence Search:
     /// Search all noisy moves, or find an evasion if in check.
     /// This is done to prevent the horizon effect.
-    pub fn qsearch(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
+    pub fn qsearch<const ALLOW_TT: bool>(&mut self, position: &mut Board, mut alpha: i32, beta: i32) -> i32 {
         self.nodes += 1;
         self.seldepth = self.seldepth.max(self.ply as u8);
 
@@ -703,7 +720,7 @@ impl Thread<'_> {
         let mut hash_flag = EntryFlag::UpperBound;
         let mut best_move = NULL_MOVE;
 
-        if let Some(entry) = self.tt.lookup(position.hash_key) {
+        if ALLOW_TT && let Some(entry) = self.tt.lookup(position.hash_key) {
             best_move = entry.best_move;
             if match entry.flag {
                 EntryFlag::Exact => true,
@@ -771,7 +788,7 @@ impl Thread<'_> {
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
             self.ply += 1;
 
-            let eval = -self.qsearch(position, -beta, -alpha);
+            let eval = -self.qsearch::<ALLOW_TT>(position, -beta, -alpha);
 
             position.undo_move(mv, &commit, Some(&mut self.info.stck));
             self.ply -= 1;
