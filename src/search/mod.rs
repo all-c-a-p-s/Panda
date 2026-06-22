@@ -519,6 +519,7 @@ impl Thread<'_> {
 
             // checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
+            self.tt.prefetch(position.hash_key);
 
             if self.ply < MAX_DEPTH {
                 self.info.ss[self.ply].square_moved_to = Some(mv.square_to());
@@ -775,6 +776,7 @@ impl Thread<'_> {
 
             //checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
+            self.tt.prefetch(position.hash_key);
             self.ply += 1;
 
             let eval = -self.qsearch(position, -beta, -alpha);
