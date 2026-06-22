@@ -75,7 +75,7 @@ impl Node {
 
     // this function merely needs to determine the value of the node, not of its moves
     fn value(&mut self, tt: &TranspositionTable, info: &mut SearchInfo) -> i32 {
-        if self.board.soft_drawn() {
+        if self.board.is_drawn() {
             return 0;
         }
 
@@ -313,7 +313,7 @@ fn game_result(found_move: bool, board: &Board) -> Option<f32> {
         }
     }
 
-    if board.soft_drawn() { Some(0.5) } else { None }
+    if board.is_drawn() { Some(0.5) } else { None }
 }
 
 #[must_use]

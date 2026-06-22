@@ -31,7 +31,7 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
     writeln!(file, "isready")?;
     writeln!(file, "ucinewgame\n")?;
 
-    while !b.soft_drawn() {
+    while !b.is_drawn() {
         let mut s = Searcher::new(&tt, &mut info);
 
         let limits = Limits::time_only(1000);
@@ -60,7 +60,7 @@ pub fn prepare_bench() -> Result<(), std::io::Error> {
     tt.clear();
     info = SearchInfo::default();
 
-    while !b.soft_drawn() {
+    while !b.is_drawn() {
         let mut s = Searcher::new(&tt, &mut info);
 
         let limits = Limits::time_only(1000);
