@@ -155,6 +155,11 @@ impl Thread<'_> {
             // and return beta
             SingularityResult::MultiCut
         } else if tt_score >= beta {
+            SingularityResult::Extension(-2)
+        } else if cutnode {
+            // threshold <= excluded_eval < beta and tt_score < beta and expected cutnode
+            // cutoff is expected to happen but not from the tt move, hence reduce in favour of
+            // other moves
             SingularityResult::Extension(-1)
         } else {
             SingularityResult::NoChange
