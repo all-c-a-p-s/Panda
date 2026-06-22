@@ -168,7 +168,14 @@ impl Thread<'_> {
     /// - Cutnode: a node in which a beta cutoff occurred, value returned >= beta (lower bound)
     /// - All-node: a node in which all moves were searched and value returned <= alpha (upper bound)
     ///   If we can predict the type of a node, we can make better decisions about pruning.
-    pub fn negamax(&mut self, position: &mut Board, mut depth: u8, mut alpha: i32, beta: i32, cutnode: bool) -> i32 {
+    pub fn negamax(
+        &mut self,
+        position: &mut Board,
+        mut depth: u8,
+        mut alpha: i32,
+        beta: i32,
+        mut cutnode: bool,
+    ) -> i32 {
         if self.should_exit() {
             return 0;
         }
@@ -656,6 +663,13 @@ impl Thread<'_> {
                     hash_flag = EntryFlag::LowerBound;
                     break;
                 }
+            }
+
+            if played >= 2 {
+                // Based on observation, cutoffs hardly ever occur outside the first 2 moves.
+                // Hence, if we play 2 moves without a cutoff, we'll assume there
+                // won't be a cutoff on this node.
+                cutnode = false;
             }
         }
 
