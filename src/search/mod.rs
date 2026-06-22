@@ -198,8 +198,14 @@ impl Thread<'_> {
         let in_check = position.checkers != 0;
 
         if !root && !singular {
-            if position.is_drawn() {
-                return if self.ply.is_multiple_of(2) { 1 } else { -1 };
+            if pv_node {
+                if position.hard_drawn() {
+                    return if self.ply.is_multiple_of(2) { 1 } else { -1 };
+                }
+            } else {
+                if position.soft_drawn() {
+                    return if self.ply.is_multiple_of(2) { 1 } else { -1 };
+                }
             }
 
             // Mate Distance Pruning:
@@ -683,7 +689,7 @@ impl Thread<'_> {
         self.nodes += 1;
         self.seldepth = self.seldepth.max(self.ply as u8);
 
-        if position.is_drawn() {
+        if position.soft_drawn() {
             return if self.ply.is_multiple_of(2) { 1 } else { -1 };
         }
 

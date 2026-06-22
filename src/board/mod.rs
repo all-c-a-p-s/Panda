@@ -501,7 +501,7 @@ impl Board {
     }
 
     #[must_use]
-    pub fn is_drawn(&self) -> bool {
+    pub fn soft_drawn(&self) -> bool {
         if self.fifty_move < 4 {
             return self.is_insufficient_material();
         }
@@ -516,6 +516,31 @@ impl Board {
                 //return true on two-fold repetition because otherwise the third
                 //repetition will not be reached because the search will stop
                 //after a tt hit on the second repetition
+            }
+        }
+
+        self.is_insufficient_material()
+    }
+
+    #[must_use]
+    /// Different method using threefold repetition rather than twofold, for PV nodes, (where we
+    /// don't do TT cutoffs anyway).
+    pub fn hard_drawn(&self) -> bool {
+        if self.fifty_move < 6 {
+            return self.is_insufficient_material();
+        }
+
+        if self.fifty_move >= 100 {
+            return true;
+        }
+
+        let mut cnt = 0;
+        for &key in self.repetition_table.iter().take(self.fifty_move - 3).rev().step_by(2) {
+            if key == self.hash_key {
+                cnt += 1;
+                if cnt >= 2 {
+                    return true;
+                }
             }
         }
 
