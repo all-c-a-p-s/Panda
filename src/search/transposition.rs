@@ -135,36 +135,6 @@ impl TranspositionTable {
         }
     }
 
-    pub fn prefetch(&self, hash: u64) {
-        let index = self.index(hash);
-        let entry = unsafe { self.tt.as_ptr().add(index) };
-
-        Self::_prefetch(entry);
-    }
-
-    fn _prefetch<T>(ptr: *const T) {
-        #[cfg(target_arch = "x86_64")]
-        unsafe {
-            use core::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
-
-            _mm_prefetch(ptr as *const i8, _MM_HINT_T0);
-        }
-
-        #[cfg(target_arch = "aarch64")]
-        unsafe {
-            core::arch::asm!(
-                "prfm pldl1keep, [{ptr}]",
-                ptr = in(reg) ptr,
-                options(nostack, preserves_flags, readonly),
-            );
-        }
-
-        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-        {
-            let _ = ptr;
-        }
-    }
-
     pub fn clear(&self) {
         self.tt.iter().for_each(TTEntryInternal::zero);
     }
