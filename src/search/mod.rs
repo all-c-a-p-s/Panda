@@ -155,11 +155,6 @@ impl Thread<'_> {
             // and return beta
             SingularityResult::MultiCut
         } else if tt_score >= beta {
-            SingularityResult::Extension(-2)
-        } else if cutnode {
-            // threshold <= excluded_eval < beta and tt_score < beta and expected cutnode
-            // cutoff is expected to happen but not from the tt move, hence reduce in favour of
-            // other moves
             SingularityResult::Extension(-1)
         } else {
             SingularityResult::NoChange
@@ -173,6 +168,11 @@ impl Thread<'_> {
     /// - Cutnode: a node in which a beta cutoff occurred, value returned >= beta (lower bound)
     /// - All-node: a node in which all moves were searched and value returned <= alpha (upper bound)
     ///   If we can predict the type of a node, we can make better decisions about pruning.
+    ///
+    /// Furthermore, we can reduce more aggresively in cutnodes.
+    /// Since a cutnode follows an all-node, this will indirectly save work done on all nodes. If
+    /// the reduction causes us to fail to produce the expected cutoff, then the move will be
+    /// re-searched by LMR anyway.
     pub fn negamax(&mut self, position: &mut Board, mut depth: u8, mut alpha: i32, beta: i32, cutnode: bool) -> i32 {
         if self.should_exit() {
             return 0;
