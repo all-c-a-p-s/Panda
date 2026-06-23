@@ -17,6 +17,7 @@ use crate::board::r#move::{Move, MoveList, NULL_MOVE};
 use crate::eval::evaluate;
 use crate::search::macros::*;
 use crate::search::tables::OVERALL_HISTORY_MAX;
+use crate::singularity_te;
 use crate::util::helper::{read_param, tuneable_params};
 use crate::util::types::PieceType;
 use crate::util::uci::print_thinking;
@@ -37,6 +38,7 @@ const FULL_DEPTH_MOVES: u8 = 1;
 tuneable_params! {
     // params for search conditions
     SINGULARITY_DE_MARGIN, i32, 12, 10, 150;
+    SINGULARITY_TE_MARGIN, i32, 90, 25, 200;
     ASPIRATION_WINDOW, i32, 17, 10, 70;
     RAZORING_MARGIN, i32, 264, 100, 500;
     MAX_RAZOR_DEPTH, u8, 4, 1, 12;
@@ -80,9 +82,6 @@ tuneable_params! {
     TMAN_DEFAULT_MTG, usize, 20, 10, 40;
     TMAN_IDEAL_MULT, usize, 677, 256, 1024;
 }
-
-const DO_SINGULARITY_EXTENSION: bool = true;
-const DO_SINGULARITY_DE: bool = true;
 
 pub const REPETITION_TABLE_SIZE: usize = 100 + 1;
 
@@ -135,6 +134,7 @@ impl Thread<'_> {
         _alpha: i32,
         beta: i32,
         cutnode: bool,
+        quiet: bool,
     ) -> SingularityResult {
         // undo move already made on board
         let threshold = (tt_score - (depth as i32 * 2 + 20)).max(-INFINITY);
@@ -145,7 +145,9 @@ impl Thread<'_> {
 
         self.info.excluded[self.ply] = None;
 
-        if singularity_de!(self, pv_node, excluded_eval, threshold) {
+        if singularity_te!(self, pv_node, excluded_eval, threshold, quiet) {
+            SingularityResult::Extension(3)
+        } else if singularity_de!(self, pv_node, excluded_eval, threshold) {
             SingularityResult::Extension(2)
         } else if excluded_eval < threshold {
             SingularityResult::Extension(1)
@@ -495,10 +497,10 @@ impl Thread<'_> {
 
             // A singular move is a move which seems to be forced or at least much stronger than
             // others. We should therefore extend to investigate it further.
-            let maybe_singular = maybe_singular!(root, depth, singular, mv, best_move, tt_depth, tt_bound);
+            let maybe_singular = maybe_singular!(root, depth, singular, mv, best_move, tt_depth, tt_bound, tt_score);
 
             let extension = if maybe_singular {
-                match self.singularity(position, best_move, tt_score, depth, pv_node, alpha, beta, cutnode) {
+                match self.singularity(position, best_move, tt_score, depth, pv_node, alpha, beta, cutnode, quiet) {
                     SingularityResult::Extension(ext) => ext,
                     SingularityResult::MultiCut => return tt_score - depth as i32 * 2,
                     SingularityResult::NoChange => (in_check && !root) as i32,
@@ -506,10 +508,6 @@ impl Thread<'_> {
             } else {
                 (in_check && !root) as i32
             };
-
-            if extension == 2 {
-                self.double_extensions += 1;
-            }
 
             // checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
@@ -527,6 +525,10 @@ impl Thread<'_> {
             // update after pruning above
 
             let new_depth = (depth as i32 - 1 + extension).clamp(0, MAX_DEPTH as i32) as u8;
+
+            if extension >= 2 {
+                self.double_extensions += 1;
+            }
 
             let eval = if played == 1 {
                 // Internal Aspiration Window:
@@ -629,7 +631,7 @@ impl Thread<'_> {
             position.undo_move(mv, &commit, Some(&mut self.info.stck));
             self.ply -= 1;
 
-            if extension == 2 {
+            if extension >= 2 {
                 self.double_extensions -= 1;
             }
 

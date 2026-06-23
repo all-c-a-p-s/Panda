@@ -334,6 +334,7 @@ fn set_options(words: &[&str], opts: &mut UciOptions, tt: &mut TranspositionTabl
                     name,
                     x,
                     SINGULARITY_DE_MARGIN,
+                    SINGULARITY_TE_MARGIN,
                     ASPIRATION_WINDOW,
                     RAZORING_MARGIN,
                     MAX_RAZOR_DEPTH,

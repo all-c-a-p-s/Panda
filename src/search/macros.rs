@@ -8,12 +8,19 @@ macro_rules! top {
 }
 
 #[macro_export]
+macro_rules! singularity_te {
+    ($self_:expr, $pv_node:expr, $excluded_eval:expr, $threshold:expr, $quiet: expr) => {
+        !$pv_node
+            && $excluded_eval < $threshold - read_param!(SINGULARITY_TE_MARGIN)
+            && $self_.double_extensions < 4
+            && $quiet
+    };
+}
+
+#[macro_export]
 macro_rules! singularity_de {
     ($self_:expr, $pv_node:expr, $excluded_eval:expr, $threshold:expr) => {
-        DO_SINGULARITY_DE
-            && !$pv_node
-            && $excluded_eval < $threshold - read_param!(SINGULARITY_DE_MARGIN)
-            && $self_.double_extensions < 4
+        !$pv_node && $excluded_eval < $threshold - read_param!(SINGULARITY_DE_MARGIN) && $self_.double_extensions < 4
     };
 }
 
@@ -98,14 +105,14 @@ macro_rules! do_iir {
 #[macro_export]
 macro_rules! maybe_singular {
     ($root:expr, $depth:expr, $singular:expr, $m:expr, $best_move:expr,
-     $tt_depth:expr, $tt_bound:expr) => {
-        DO_SINGULARITY_EXTENSION
-            && !$root
+     $tt_depth:expr, $tt_bound:expr, $tt_score: expr) => {
+        !$root
             && $depth >= 8
             && !$singular
             && $m == $best_move
             && $tt_depth >= $depth - 3
             && $tt_bound != EntryFlag::UpperBound
+            && !is_terminal($tt_score)
     };
 }
 
