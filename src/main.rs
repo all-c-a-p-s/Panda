@@ -34,7 +34,7 @@ enum Mode {
 #[allow(unused)]
 const ONE_HOUR: u64 = 3600;
 #[allow(unused)]
-const DATAGEN_PATH: &str = "/Users/seba/rs/Panda/set-backtracking-003.txt";
+const DATAGEN_PATH: &str = "/Users/seba/rs/Panda/sample.txt";
 
 fn main() -> Result<(), Box<dyn Error>> {
     unsafe {
