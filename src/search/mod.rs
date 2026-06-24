@@ -29,29 +29,27 @@ pub const INFINITY: i32 = 1_000_000_000;
 pub const MAX_DEPTH: usize = 64;
 pub const MATE: i32 = INFINITY - MAX_DEPTH as i32;
 
-pub const REDUCTION_LIMIT: u8 = 2;
-
 const FULL_DEPTH_MOVES: u8 = 1;
 
 // name, type, val, min, max
 
 tuneable_params! {
     // params for search conditions
-    SINGULARITY_DE_MARGIN, i32, 12, 10, 150;
-    SINGULARITY_TE_MARGIN, i32, 90, 25, 200;
+    SINGULARITY_TE_MARGIN, i32, 89, 25, 200;
+    SINGULARITY_DE_MARGIN, i32, 16, 10, 150;
     ASPIRATION_WINDOW, i32, 17, 10, 70;
     RAZORING_MARGIN, i32, 264, 100, 500;
     MAX_RAZOR_DEPTH, u8, 4, 1, 12;
     RFP_DEPTH, u8, 5, 1, 12;
-    RFP_MARGIN, u8, 37, 20, 200;
-    TT_FUTILITY_MARGIN, i32, 142, 40, 400;
-    HISTORY_PRUNING_DEPTH, i32, 4, 1, 12;
-    HISTORY_PRUNING_MARGIN, i32, -5054, -8192, -1024;
+    RFP_MARGIN, u8, 35, 20, 200;
+    TT_FUTILITY_MARGIN, i32, 146, 40, 400;
+    HISTORY_PRUNING_DEPTH, i32, 3, 1, 12;
+    HISTORY_PRUNING_MARGIN, i32, -5163, -8192, -1024;
     SEE_PRUNING_DEPTH, i32, 8, 1, 12;
-    SEE_QUIET_MARGIN, i32, 45, 20, 300;
-    SEE_NOISY_MARGIN, i32, 44, 20, 250;
-    SEE_QSEARCH_MARGIN, i32, 32, 1, 100;
-    QSEARCH_FP_MARGIN, i32, 181, 1, 350;
+    SEE_QUIET_MARGIN, i32, 44, 20, 300;
+    SEE_NOISY_MARGIN, i32, 49, 20, 250;
+    SEE_QSEARCH_MARGIN, i32, 26, 1, 100;
+    QSEARCH_FP_MARGIN, i32, 174, 1, 350;
     LMP_DEPTH, u8, 4, 1, 12;
     IIR_DEPTH_MINIMUM, u8, 9, 1, 12;
 
@@ -64,23 +62,23 @@ tuneable_params! {
     UNDER_PROMOTION, i32, -500_000, -999_999, 999_999;
 
     // factors affecting reductions etc
-    NMP_FACTOR, i32, 23, 1, 100;
-    NMP_BASE, i32, 187, 50, 500;
-    LMR_TACTICAL_BASE, i32, 64, 0, 500;
-    LMR_TACTICAL_DIVISOR, i32, 316, 100, 500;
-    LMR_QUIET_BASE, i32, 131, 0, 500;
-    LMR_QUIET_DIVISOR, i32, 295, 100, 500;
+    NMP_FACTOR, i32, 19, 1, 100;
+    NMP_BASE, i32, 171, 50, 500;
+    LMR_TACTICAL_BASE, i32, 55, 0, 500;
+    LMR_TACTICAL_DIVISOR, i32, 323, 100, 500;
+    LMR_QUIET_BASE, i32, 126, 0, 500;
+    LMR_QUIET_DIVISOR, i32, 290, 100, 500;
 
     // LERP weights
-    RFP_BETA_WEIGHT, i32, 42, 0, 1024;
-    NMP_BETA_WEIGHT, i32, 353, 0, 1024;
-    STAND_PAT_BETA_WEIGHT, i32, 170, 0, 1024;
+    RFP_BETA_WEIGHT, i32, 39, 0, 1024;
+    NMP_BETA_WEIGHT, i32, 360, 0, 1024;
+    STAND_PAT_BETA_WEIGHT, i32, 195, 0, 1024;
 
     // time managament stuff
-    TMAN_NODE_MULT_A, i32, 2344, 512, 8192;
-    TMAN_NODE_MULT_B, i32, 1444, 512, 8192;
-    TMAN_DEFAULT_MTG, usize, 20, 10, 40;
-    TMAN_IDEAL_MULT, usize, 677, 256, 1024;
+    TMAN_NODE_MULT_A, i32, 2400, 512, 8192;
+    TMAN_NODE_MULT_B, i32, 1514, 512, 8192;
+    TMAN_DEFAULT_MTG, usize, 19, 10, 40;
+    TMAN_IDEAL_MULT, usize, 761, 256, 1024;
 }
 
 pub const REPETITION_TABLE_SIZE: usize = 100 + 1;
@@ -480,6 +478,8 @@ impl Thread<'_> {
                     + !improving as i32;
                 let lmr_depth = (depth as i32 - 1 - r).max(1);
 
+                // History Pruning:
+                // at low depths, skip quiet moves with low enough history scores
                 if do_history_pruning!(lmr_depth, hist, quiet, in_check) {
                     movepicker.skip_quiets(&movelist);
                 }
@@ -499,7 +499,7 @@ impl Thread<'_> {
             // others. We should therefore extend to investigate it further.
             let maybe_singular = maybe_singular!(root, depth, singular, mv, best_move, tt_depth, tt_bound, tt_score);
 
-            let extension = if maybe_singular {
+            let mut extension = if maybe_singular {
                 match self.singularity(position, best_move, tt_score, depth, pv_node, alpha, beta, cutnode, quiet) {
                     SingularityResult::Extension(ext) => ext,
                     SingularityResult::MultiCut => return tt_score - depth as i32 * 2,
@@ -508,6 +508,13 @@ impl Thread<'_> {
             } else {
                 (in_check && !root) as i32
             };
+
+            if extension == 0 {
+                let cmh = self.get_cmh(mv, position);
+                if cmh > 3200 {
+                    extension -= 1;
+                }
+            }
 
             // checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
@@ -587,7 +594,7 @@ impl Thread<'_> {
 
                 let mut r_eval = -INFINITY;
                 let do_full_depth_zw =
-                    if should_reduce!(played, pv_node, tt_move_exists, root, tactical, depth, not_mated) {
+                    if should_reduce!(played, pv_node, tt_move_exists, root, tactical, new_depth, not_mated) {
                         let mut r = 1;
                         // fixed reduction of 1 for captures seems to work well
                         if quiet {

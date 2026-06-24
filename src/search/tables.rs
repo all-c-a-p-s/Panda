@@ -8,6 +8,7 @@ use crate::util::helper::piece_type;
 const HISTORY_MAX: i32 = 16_384;
 const CORRELATION_MAX: i32 = 4_096;
 
+// TODO - this should be 2 * CORRELATION_MAX because of followup and counter...
 pub const OVERALL_HISTORY_MAX: i32 = HISTORY_MAX + CORRELATION_MAX;
 
 const CORRHIST_GRAIN: i32 = 256;
@@ -35,27 +36,32 @@ impl Thread<'_> {
         self.info.piece_history[pc][to] + self.info.square_history[side][from][to]
     }
 
-    pub fn get_conthist(&self, mv: Move, b: &Board) -> i32 {
+    pub fn get_cmh(&self, mv: Move, b: &Board) -> i32 {
         let sq = mv.square_to();
-        let mut cont_bonus = if self.ply > 0
+        if self.ply > 0
             && let Some(prev) = self.info.ss[self.ply - 1].square_moved_to
         {
             let side = b.side_to_move;
             self.info.counter_correlation[side][prev][sq]
         } else {
             0
-        };
+        }
+    }
 
-        cont_bonus += if self.ply > 1
+    pub fn get_fmh(&self, mv: Move, b: &Board) -> i32 {
+        let sq = mv.square_to();
+        if self.ply > 1
             && let Some(prev) = self.info.ss[self.ply - 2].square_moved_to
         {
             let side = b.side_to_move;
             self.info.followup_correlation[side][prev][sq]
         } else {
             0
-        };
+        }
+    }
 
-        cont_bonus
+    pub fn get_conthist(&self, mv: Move, b: &Board) -> i32 {
+        self.get_cmh(mv, b) + self.get_fmh(mv, b)
     }
 
     pub fn get_overall_history(&self, mv: Move, b: &Board, pc: Piece) -> i32 {
