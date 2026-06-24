@@ -508,13 +508,6 @@ impl Thread<'_> {
                 (in_check && !root) as i32
             };
 
-            //if extension == 0 {
-            //    let cmh = self.get_cmh(mv, position);
-            //    if cmh > 3200 {
-            //        extension -= 1;
-            //    }
-            //}
-
             // checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
 
