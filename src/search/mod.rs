@@ -17,7 +17,6 @@ use crate::board::r#move::{Move, MoveList, NULL_MOVE};
 use crate::eval::evaluate;
 use crate::search::macros::*;
 use crate::search::tables::OVERALL_HISTORY_MAX;
-use crate::singularity_te;
 use crate::util::helper::{read_param, tuneable_params};
 use crate::util::types::PieceType;
 use crate::util::uci::print_thinking;
@@ -28,8 +27,6 @@ use std::time::{Duration, Instant};
 pub const INFINITY: i32 = 1_000_000_000;
 pub const MAX_DEPTH: usize = 64;
 pub const MATE: i32 = INFINITY - MAX_DEPTH as i32;
-
-pub const REDUCTION_LIMIT: u8 = 2;
 
 const FULL_DEPTH_MOVES: u8 = 1;
 
@@ -480,6 +477,8 @@ impl Thread<'_> {
                     + !improving as i32;
                 let lmr_depth = (depth as i32 - 1 - r).max(1);
 
+                // History Pruning:
+                // at low depths, skip quiet moves with low enough history scores
                 if do_history_pruning!(lmr_depth, hist, quiet, in_check) {
                     movepicker.skip_quiets(&movelist);
                 }
@@ -508,6 +507,13 @@ impl Thread<'_> {
             } else {
                 (in_check && !root) as i32
             };
+
+            //if extension == 0 {
+            //    let cmh = self.get_cmh(mv, position);
+            //    if cmh > 3200 {
+            //        extension -= 1;
+            //    }
+            //}
 
             // checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
@@ -587,7 +593,7 @@ impl Thread<'_> {
 
                 let mut r_eval = -INFINITY;
                 let do_full_depth_zw =
-                    if should_reduce!(played, pv_node, tt_move_exists, root, tactical, depth, not_mated) {
+                    if should_reduce!(played, pv_node, tt_move_exists, root, tactical, new_depth, not_mated) {
                         let mut r = 1;
                         // fixed reduction of 1 for captures seems to work well
                         if quiet {

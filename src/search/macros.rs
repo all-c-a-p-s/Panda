@@ -133,9 +133,9 @@ macro_rules! do_iaw {
 #[macro_export]
 macro_rules! should_reduce {
     ($played:expr, $pv_node:expr, $tt_move:expr, $root:expr, $tactical:expr,
-     $depth:expr, $not_mated:expr) => {
+     $new_depth:expr, $not_mated:expr) => {
         $played > (FULL_DEPTH_MOVES + $pv_node as u8 + !$tt_move as u8 + $root as u8 + $tactical as u8)
-            && $depth >= REDUCTION_LIMIT
+            && $new_depth >= 1
             && $not_mated
     };
 }
@@ -202,6 +202,7 @@ pub(crate) use maybe_singular;
 pub(crate) use should_correct_with_tt;
 pub(crate) use should_reduce;
 pub(crate) use singularity_de;
+pub(crate) use singularity_te;
 pub(crate) use top;
 pub(crate) use try_probcut;
 pub(crate) use tt_cutoff;
