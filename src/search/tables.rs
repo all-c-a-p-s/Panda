@@ -8,8 +8,7 @@ use crate::util::helper::piece_type;
 const HISTORY_MAX: i32 = 16_384;
 const CORRELATION_MAX: i32 = 4_096;
 
-// TODO - this should be 2 * CORRELATION_MAX because of followup and counter...
-pub const OVERALL_HISTORY_MAX: i32 = HISTORY_MAX + CORRELATION_MAX;
+pub const OVERALL_HISTORY_MAX: i32 = HISTORY_MAX + CORRELATION_MAX * 2;
 
 const CORRHIST_GRAIN: i32 = 256;
 const CORRHIST_SCALE: i32 = 256;

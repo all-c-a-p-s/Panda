@@ -17,7 +17,6 @@ use crate::board::r#move::{Move, MoveList, NULL_MOVE};
 use crate::eval::evaluate;
 use crate::search::macros::*;
 use crate::search::tables::OVERALL_HISTORY_MAX;
-use crate::singularity_te;
 use crate::util::helper::{read_param, tuneable_params};
 use crate::util::types::PieceType;
 use crate::util::uci::print_thinking;
@@ -499,7 +498,7 @@ impl Thread<'_> {
             // others. We should therefore extend to investigate it further.
             let maybe_singular = maybe_singular!(root, depth, singular, mv, best_move, tt_depth, tt_bound, tt_score);
 
-            let mut extension = if maybe_singular {
+            let extension = if maybe_singular {
                 match self.singularity(position, best_move, tt_score, depth, pv_node, alpha, beta, cutnode, quiet) {
                     SingularityResult::Extension(ext) => ext,
                     SingularityResult::MultiCut => return tt_score - depth as i32 * 2,
@@ -509,12 +508,12 @@ impl Thread<'_> {
                 (in_check && !root) as i32
             };
 
-            if extension == 0 {
-                let cmh = self.get_cmh(mv, position);
-                if cmh > 3200 {
-                    extension -= 1;
-                }
-            }
+            //if extension == 0 {
+            //    let cmh = self.get_cmh(mv, position);
+            //    if cmh > 3200 {
+            //        extension -= 1;
+            //    }
+            //}
 
             // checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));

@@ -202,6 +202,7 @@ pub(crate) use maybe_singular;
 pub(crate) use should_correct_with_tt;
 pub(crate) use should_reduce;
 pub(crate) use singularity_de;
+pub(crate) use singularity_te;
 pub(crate) use top;
 pub(crate) use try_probcut;
 pub(crate) use tt_cutoff;
