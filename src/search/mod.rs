@@ -28,7 +28,7 @@ pub const INFINITY: i32 = 1_000_000_000;
 pub const MAX_DEPTH: usize = 64;
 pub const MATE: i32 = INFINITY - MAX_DEPTH as i32;
 
-const FULL_DEPTH_MOVES: u8 = 1;
+const FULL_DEPTH_MOVES: u8 = 2;
 
 // name, type, val, min, max
 
@@ -585,7 +585,7 @@ impl Thread<'_> {
                 // moves aren't worth investigating.
 
                 let mut r_eval = -INFINITY;
-                let do_full_depth_zw = if should_reduce!(played, pv_node, root, tactical, new_depth, not_mated) {
+                let do_full_depth_zw = if should_reduce!(played, pv_node, root, new_depth, not_mated) {
                     let mut r = 1;
                     // fixed reduction of 1 for captures seems to work well
                     if quiet {
@@ -595,6 +595,7 @@ impl Thread<'_> {
                         // reduce more when we have reason to expect little from this move
                         r += tt_move_capture as i32;
                         r += !improving as i32;
+                        r += cutnode as i32;
 
                         // reduce less when this move is important/promising
                         r -= pv_node as i32;
