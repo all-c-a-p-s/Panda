@@ -391,7 +391,7 @@ impl Thread<'_> {
                 }
             }
 
-            movepicker.stage = MovePickerStage::HashMove;
+            movepicker.next = MovePickerStage::HashMove;
             movepicker.generated = true;
             movepicker.idx = 0;
         }
@@ -472,8 +472,8 @@ impl Thread<'_> {
                     movepicker.skip_quiets(&movelist);
                 }
 
-                let r = self.info.lmr_table.reduction_table[quiet as usize][depth.min(31) as usize]
-                    [considered.min(31) as usize]
+                let r = self.info.lmr_table.reduction_table[quiet as usize][depth.min(63) as usize]
+                    [considered.min(63) as usize]
                     + !improving as i32;
                 let lmr_depth = (depth as i32 - 1 - r).max(1);
 
@@ -485,7 +485,7 @@ impl Thread<'_> {
 
                 // SEE Pruning:
                 // skip moves that fail SEE by a depth-dependent threshold
-                if do_see_pruning!(lmr_depth, considered, pv_node, movepicker.stage) {
+                if do_see_pruning!(lmr_depth, considered, pv_node, movepicker.this) {
                     let margin = if tactical { read_param!(SEE_NOISY_MARGIN) } else { read_param!(SEE_QUIET_MARGIN) };
                     let threshold = margin * depth as i32;
                     if !mv.see(position, threshold) {
@@ -585,35 +585,34 @@ impl Thread<'_> {
                 // moves aren't worth investigating.
 
                 let mut r_eval = -INFINITY;
-                let do_full_depth_zw =
-                    if should_reduce!(played, pv_node, tt_move_exists, root, tactical, new_depth, not_mated) {
-                        let mut r = 1;
-                        // fixed reduction of 1 for captures seems to work well
-                        if quiet {
-                            r = self.info.lmr_table.reduction_table[quiet as usize][depth.min(31) as usize]
-                                [played.min(31) as usize];
+                let do_full_depth_zw = if should_reduce!(played, pv_node, root, tactical, new_depth, not_mated) {
+                    let mut r = 1;
+                    // fixed reduction of 1 for captures seems to work well
+                    if quiet {
+                        r = self.info.lmr_table.reduction_table[quiet as usize][depth.min(63) as usize]
+                            [played.min(63) as usize];
 
-                            // reduce more when we have reason to expect little from this move
-                            r += tt_move_capture as i32;
-                            r += !improving as i32;
+                        // reduce more when we have reason to expect little from this move
+                        r += tt_move_capture as i32;
+                        r += !improving as i32;
 
-                            // reduce less when this move is important/promising
-                            r -= pv_node as i32;
-                            r -= in_check as i32;
-                            r -= (is_killer || is_counter) as i32;
+                        // reduce less when this move is important/promising
+                        r -= pv_node as i32;
+                        r -= in_check as i32;
+                        r -= (is_killer || is_counter) as i32;
 
-                            // either increase or decrease reduction depending on history score
-                            r -= hist / (OVERALL_HISTORY_MAX / 2);
-                        }
+                        // either increase or decrease reduction depending on history score
+                        r -= hist / (OVERALL_HISTORY_MAX / 2);
+                    }
 
-                        let reduced_depth = (new_depth as i32 - r).clamp(1, new_depth as i32) as u8;
-                        // avoid dropping into qsearch or extending
+                    let reduced_depth = (new_depth as i32 - r).clamp(1, new_depth as i32) as u8;
+                    // avoid dropping into qsearch or extending
 
-                        r_eval = -self.negamax(position, reduced_depth, -alpha - 1, -alpha, true);
-                        r_eval > alpha && reduced_depth < new_depth
-                    } else {
-                        true
-                    };
+                    r_eval = -self.negamax(position, reduced_depth, -alpha - 1, -alpha, true);
+                    r_eval > alpha && reduced_depth < new_depth
+                } else {
+                    true
+                };
 
                 if do_full_depth_zw {
                     // failed to prove that move is bad -> re-search with same depth but still zw
@@ -759,7 +758,7 @@ impl Thread<'_> {
                     && !mv.see(position, SEE_VALUES[PieceType::Knight] - SEE_VALUES[PieceType::Bishop] - 1)
                 {
                     continue;
-                } else if !mv.see(position, read_param!(SEE_QSEARCH_MARGIN)) {
+                } else if movepicker.this >= MovePickerStage::BadCaps {
                     // alternatively just skip any move which fails SEE by this margin
                     // note anything that passes the futility check will pass this so there's no need
                     // to do SEE check twice on such moves

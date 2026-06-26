@@ -110,7 +110,7 @@ impl AccumulatorStack {
 
 #[derive(Copy, Clone)]
 pub struct LMRTable {
-    pub reduction_table: [[[i32; 32]; 32]; 2],
+    pub reduction_table: [[[i32; 64]; 64]; 2],
 }
 
 #[derive(Clone, Copy)]
@@ -143,18 +143,18 @@ impl Default for SearchStackEntry {
 
 impl Default for LMRTable {
     fn default() -> Self {
-        let tb = f64::from(read_param!(LMR_TACTICAL_BASE)) / 100.0;
-        let td = f64::from(read_param!(LMR_TACTICAL_DIVISOR)) / 100.0;
-        let qb = f64::from(read_param!(LMR_QUIET_BASE)) / 100.0;
-        let qd = f64::from(read_param!(LMR_QUIET_DIVISOR)) / 100.0;
-        let mut reduction_table = [[[0; 32]; 32]; 2];
+        let tb = read_param!(LMR_TACTICAL_BASE) as f64 / 100.0;
+        let td = read_param!(LMR_TACTICAL_DIVISOR) as f64 / 100.0;
+        let qb = read_param!(LMR_QUIET_BASE) as f64 / 100.0;
+        let qd = read_param!(LMR_QUIET_DIVISOR) as f64 / 100.0;
+        let mut reduction_table = [[[0; 64]; 64]; 2];
 
         #[allow(clippy::needless_range_loop)]
-        for depth in 0..32 {
-            for played in 0..32 {
-                reduction_table[0][depth][played] = (tb + f64::ln(depth as f64) * f64::ln(played as f64) / td) as i32;
+        for depth in 0..64 {
+            for played in 0..64 {
+                reduction_table[0][depth][played] = (tb + (depth as f64).ln() * (played as f64).ln() / td) as i32;
                 //tactical move
-                reduction_table[1][depth][played] = (qb + f64::ln(depth as f64) * f64::ln(played as f64) / qd) as i32;
+                reduction_table[1][depth][played] = (qb + (depth as f64).ln() * (played as f64).ln() / qd) as i32;
                 //quiet move
             }
         }

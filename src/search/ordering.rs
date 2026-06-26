@@ -323,7 +323,8 @@ pub enum MovePickerStage {
 }
 
 pub struct MovePicker {
-    pub stage: MovePickerStage,
+    pub next: MovePickerStage,
+    pub this: MovePickerStage,
     pub done_probcut: bool,
     pub doing_probcut: bool,
     pub generated: bool,
@@ -337,7 +338,8 @@ impl MovePicker {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
-            stage: MovePickerStage::HashMove,
+            next: MovePickerStage::HashMove,
+            this: MovePickerStage::HashMove,
             done_probcut: false,
             doing_probcut: false,
             generated: false,
@@ -350,7 +352,8 @@ impl MovePicker {
 
     pub fn for_qsearch() -> Self {
         Self {
-            stage: MovePickerStage::HashMove,
+            next: MovePickerStage::HashMove,
+            this: MovePickerStage::HashMove,
             done_probcut: false,
             doing_probcut: false,
             generated: false,
@@ -364,8 +367,8 @@ impl MovePicker {
     pub fn skip_quiets(&mut self, movelist: &MoveList) {
         self.skip_quiets = true;
 
-        if self.stage == MovePickerStage::Quiets {
-            self.stage = MovePickerStage::BadCaps;
+        if self.next == MovePickerStage::Quiets {
+            self.next = MovePickerStage::BadCaps;
             self.idx = movelist.used;
             self.generated = false;
         }
@@ -388,16 +391,17 @@ impl MovePicker {
         pv_node: bool,
         cutnode: bool,
     ) -> Option<Move> {
-        if self.stage == MovePickerStage::HashMove {
-            self.stage = MovePickerStage::NoisyQueenPromotions;
+        if self.next == MovePickerStage::HashMove {
+            self.next = MovePickerStage::NoisyQueenPromotions;
 
             if !hash_move.is_null() && b.is_pseudo_legal(hash_move) {
                 //still check pseudo-legal in case of hash collision
+                self.this = MovePickerStage::HashMove;
                 return Some(hash_move);
             }
         }
 
-        if self.stage == MovePickerStage::NoisyQueenPromotions {
+        if self.next == MovePickerStage::NoisyQueenPromotions {
             if !self.generated {
                 movelist.gen_moves(b, MovegenMode::NoisyQueenPromotions);
                 if self.idx < movelist.used {
@@ -417,7 +421,7 @@ impl MovePicker {
             }
 
             // This is a bit hacky: if we've done probcut, then the "used" count will be too high
-            // for the promotion stage since it will also include good captures. Let's temporarily
+            // for the promotion next since it will also include good captures. Let's temporarily
             // decrease it for now so we don't have to worry about considering those yet.
             // Technically, this means noisy promotions will get mixed with quiet promotions after
             // probcut, but I don't think that should matter too much.
@@ -429,14 +433,15 @@ impl MovePicker {
             if self.idx < movelist.used {
                 let mv = self.get_next_between(self.idx, movelist.used - 1, movelist);
                 self.idx += 1;
+                self.this = MovePickerStage::NoisyQueenPromotions;
                 return Some(mv);
             } else {
-                self.stage = MovePickerStage::QuietQueenPromotions;
+                self.next = MovePickerStage::QuietQueenPromotions;
                 self.generated = self.done_probcut;
             }
         }
 
-        if self.stage == MovePickerStage::QuietQueenPromotions {
+        if self.next == MovePickerStage::QuietQueenPromotions {
             if !self.generated {
                 movelist.gen_moves(b, MovegenMode::QuietQueenPromotions);
                 if self.idx < movelist.used {
@@ -459,14 +464,15 @@ impl MovePicker {
                 let mv = self.get_next_between(self.idx, movelist.used - 1, movelist);
                 self.idx += 1;
 
+                self.this = MovePickerStage::QuietQueenPromotions;
                 return Some(mv);
             } else {
-                self.stage = MovePickerStage::GoodCaps;
+                self.next = MovePickerStage::GoodCaps;
                 self.generated = self.done_probcut;
             }
         }
 
-        if self.stage == MovePickerStage::GoodCaps {
+        if self.next == MovePickerStage::GoodCaps {
             if !self.generated {
                 let mut caps = MoveList::empty();
                 caps.gen_moves(b, MovegenMode::CapsOnly);
@@ -498,6 +504,7 @@ impl MovePicker {
                 let mv = self.get_next_between(self.idx, movelist.used - 1, movelist);
                 self.idx += 1;
 
+                self.this = MovePickerStage::GoodCaps;
                 return Some(mv);
             } else if self.doing_probcut {
                 // signal to break the probcut loop
@@ -505,17 +512,18 @@ impl MovePicker {
                 self.done_probcut = true;
                 return None;
             } else {
-                self.stage = MovePickerStage::Killers;
+                self.next = MovePickerStage::Killers;
                 self.generated = false;
             }
         }
 
-        if self.stage == MovePickerStage::Killers {
-            self.stage = if self.skip_quiets { MovePickerStage::BadCaps } else { MovePickerStage::Quiets };
+        if self.next == MovePickerStage::Killers {
+            self.next = if self.skip_quiets { MovePickerStage::BadCaps } else { MovePickerStage::Quiets };
 
             if let Some(mv) = killer
                 && b.is_pseudo_legal(mv)
             {
+                self.this = MovePickerStage::Killers;
                 return Some(mv);
             }
 
@@ -524,11 +532,12 @@ impl MovePicker {
             {
                 //this way we only try counter if we don't have a killer
                 //could also try always trying counter
+                self.this = MovePickerStage::Killers;
                 return Some(mv);
             }
         }
 
-        if !self.skip_quiets && self.stage == MovePickerStage::Quiets {
+        if !self.skip_quiets && self.next == MovePickerStage::Quiets {
             if !self.generated {
                 movelist.gen_moves(b, MovegenMode::QuietsOnly);
                 if self.idx < movelist.used {
@@ -550,16 +559,17 @@ impl MovePicker {
             if self.idx < movelist.used {
                 let mv = self.get_next_between(self.idx, movelist.used - 1, movelist);
                 self.idx += 1;
+                self.this = MovePickerStage::Quiets;
                 return Some(mv);
             } else {
-                self.stage = MovePickerStage::BadCaps;
+                self.next = MovePickerStage::BadCaps;
                 // don't set to true for probcut because we have generated the moves
                 // but we haven't actually put them into the movelist and scored them
                 self.generated = false;
             }
         }
 
-        if self.stage == MovePickerStage::BadCaps {
+        if self.next == MovePickerStage::BadCaps {
             if !self.generated {
                 movelist.extend_from(bad_caps);
                 if self.idx < movelist.used {
@@ -581,15 +591,16 @@ impl MovePicker {
             if self.idx < movelist.used {
                 let mv = self.get_next_between(self.idx, movelist.used - 1, movelist);
                 self.idx += 1;
+                self.this = MovePickerStage::BadCaps;
                 return Some(mv);
             } else {
-                self.stage = MovePickerStage::NoisyUnderpromotions;
+                self.next = MovePickerStage::NoisyUnderpromotions;
                 self.generated = false;
             }
         }
 
         if !self.skip_quiets {
-            if self.stage == MovePickerStage::NoisyUnderpromotions {
+            if self.next == MovePickerStage::NoisyUnderpromotions {
                 if !self.generated {
                     movelist.gen_moves(b, MovegenMode::NoisyUnderpromotions);
                     if self.idx < movelist.used {
@@ -611,14 +622,15 @@ impl MovePicker {
                 if self.idx < movelist.used {
                     let mv = self.get_next_between(self.idx, movelist.used - 1, movelist);
                     self.idx += 1;
+                    self.this = MovePickerStage::NoisyUnderpromotions;
                     return Some(mv);
                 } else {
-                    self.stage = MovePickerStage::QuietUnderpromotions;
+                    self.next = MovePickerStage::QuietUnderpromotions;
                     self.generated = false;
                 }
             }
 
-            if self.stage == MovePickerStage::QuietUnderpromotions {
+            if self.next == MovePickerStage::QuietUnderpromotions {
                 if !self.generated {
                     movelist.gen_moves(b, MovegenMode::QuietUnderpromotions);
                     if self.idx < movelist.used {
@@ -640,6 +652,7 @@ impl MovePicker {
                 if self.idx < movelist.used {
                     let mv = self.get_next_between(self.idx, movelist.used - 1, movelist);
                     self.idx += 1;
+                    self.this = MovePickerStage::QuietUnderpromotions;
                     return Some(mv);
                 }
             }

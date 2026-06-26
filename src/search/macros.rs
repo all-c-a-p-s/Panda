@@ -132,11 +132,8 @@ macro_rules! do_iaw {
 
 #[macro_export]
 macro_rules! should_reduce {
-    ($played:expr, $pv_node:expr, $tt_move:expr, $root:expr, $tactical:expr,
-     $new_depth:expr, $not_mated:expr) => {
-        $played > (FULL_DEPTH_MOVES + $pv_node as u8 + !$tt_move as u8 + $root as u8 + $tactical as u8)
-            && $new_depth >= 1
-            && $not_mated
+    ($played:expr, $pv_node:expr, $root:expr, $tactical:expr, $new_depth:expr, $not_mated:expr) => {
+        $played > (FULL_DEPTH_MOVES + $pv_node as u8 + $root as u8 + $tactical as u8) && $new_depth >= 1 && $not_mated
     };
 }
 
