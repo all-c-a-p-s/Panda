@@ -58,7 +58,8 @@ pub struct SearchInfo {
 
     pub stck: AccumulatorStack,
 
-    pub corrhist: [[i32; CORRHIST_SIZE]; 2],
+    pub pawn_corrhist: [[i32; CORRHIST_SIZE]; 2],
+    pub knb_corrhist: [[i32; CORRHIST_SIZE]; 2],
 
     pub killer_moves: [Option<Move>; MAX_DEPTH],
     pub counter_moves: [[Option<Move>; 64]; 12],
@@ -178,7 +179,8 @@ impl Default for SearchInfo {
 
             stck: AccumulatorStack::default(),
 
-            corrhist: [[0; CORRHIST_SIZE]; 2],
+            pawn_corrhist: [[0; CORRHIST_SIZE]; 2],
+            knb_corrhist: [[0; CORRHIST_SIZE]; 2],
 
             killer_moves: [None; 64],
             counter_moves: [[None; 64]; 12],

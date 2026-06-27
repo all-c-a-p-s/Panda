@@ -51,6 +51,9 @@ impl Board {
         if piece == Piece::WP || piece == Piece::BP {
             self.pawn_hash ^= PIECE_KEYS[sq_from][piece];
             self.pawn_hash ^= PIECE_KEYS[sq_to][piece];
+        } else if matches!(piece, Piece::WN | Piece::BN | Piece::WB | Piece::BB | Piece::WK | Piece::BK) {
+            self.knb_hash ^= PIECE_KEYS[sq_from][piece];
+            self.knb_hash ^= PIECE_KEYS[sq_to][piece];
         }
 
         if let Some(sq) = self.en_passant {
@@ -64,6 +67,8 @@ impl Board {
 
             if captured_piece == Piece::WP || captured_piece == Piece::BP {
                 self.pawn_hash ^= PIECE_KEYS[sq_to][captured_piece];
+            } else if matches!(captured_piece, Piece::WN | Piece::BN | Piece::WB | Piece::BB) {
+                self.knb_hash ^= PIECE_KEYS[sq_to][captured_piece];
             }
         }
 
@@ -112,6 +117,11 @@ impl Board {
                 Piece::BP => mv.promoted_piece().to_white_piece().opposite(), //only type is encoded in the move
                 _ => unreachable!(),
             };
+
+            if matches!(promoted_piece, Piece::WN | Piece::BN | Piece::WB | Piece::BB) {
+                self.knb_hash ^= PIECE_KEYS[sq_to][promoted_piece];
+            }
+
             self.hash_key ^= PIECE_KEYS[sq_to][promoted_piece];
         }
 
@@ -128,11 +138,26 @@ impl Board {
 
     #[must_use]
     pub fn compute_pawn_hash(&self) -> u64 {
-        let mut hash_key: u64 = 0;
+        let mut hash_key = 0;
 
         for (square, &piece) in self.pieces_array.iter().enumerate() {
             piece.inspect(|&x| {
                 if x == Piece::WP || x == Piece::BP {
+                    hash_key ^= PIECE_KEYS[square][x];
+                }
+            });
+        }
+
+        hash_key
+    }
+
+    #[must_use]
+    pub fn compute_knb_hash(&self) -> u64 {
+        let mut hash_key = 0;
+
+        for (square, &piece) in self.pieces_array.iter().enumerate() {
+            piece.inspect(|&x| {
+                if matches!(x, Piece::WN | Piece::BN | Piece::WB | Piece::BB | Piece::WK | Piece::BK) {
                     hash_key ^= PIECE_KEYS[square][x];
                 }
             });
@@ -184,6 +209,7 @@ mod tests {
 
             let correct_hash = b.compute_hash();
             let correct_pawn_hash = b.compute_pawn_hash();
+            let correct_knb = b.compute_knb_hash();
 
             if b.hash_key != correct_hash {
                 b.print_board();
@@ -195,6 +221,12 @@ mod tests {
                 b.print_board();
                 mv.print_move();
                 panic!("pawn hash update failed");
+            }
+
+            if b.knb_hash != correct_knb {
+                b.print_board();
+                mv.print_move();
+                panic!("knb hash update failed");
             }
 
             total += hash_update_test(depth - 1, b);

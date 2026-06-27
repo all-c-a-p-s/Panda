@@ -260,30 +260,40 @@ impl Thread<'_> {
     }
 
     pub fn update_corrhist(&mut self, b: &Board, depth: u8, diff: i32) {
-        let idx = b.pawn_hash as usize % CORRHIST_SIZE;
+        let pawn_idx = b.pawn_hash as usize % CORRHIST_SIZE;
+        let knb_idx = b.knb_hash as usize % CORRHIST_SIZE;
         let side = b.side_to_move;
 
-        let entry = &mut self.info.corrhist[side][idx];
+        let entries = [&mut self.info.pawn_corrhist[side][pawn_idx], &mut self.info.knb_corrhist[side][knb_idx]];
 
         let new_weight = (depth + 1).min(16) as i32;
 
         let scaled_diff = diff * CORRHIST_GRAIN;
 
-        *entry = (*entry * (CORRHIST_SCALE - new_weight) + scaled_diff * new_weight) / CORRHIST_SCALE;
-        *entry = (*entry).clamp(-CORRHIST_MAX, CORRHIST_MAX);
+        for entry in entries {
+            *entry = (*entry * (CORRHIST_SCALE - new_weight) + scaled_diff * new_weight) / CORRHIST_SCALE;
+            *entry = (*entry).clamp(-CORRHIST_MAX, CORRHIST_MAX);
+        }
     }
 
     pub fn eval_with_corrhist(&self, b: &Board, raw_eval: i32) -> i32 {
-        let idx = b.pawn_hash as usize % CORRHIST_SIZE;
+        let pawn_idx = b.pawn_hash as usize % CORRHIST_SIZE;
+        let knb_idx = b.knb_hash as usize % CORRHIST_SIZE;
         let side = b.side_to_move;
 
-        let entry = self.info.corrhist[side][idx];
-        (raw_eval + entry / CORRHIST_GRAIN).clamp(-MATE + 1, MATE - 1)
+        let e1 = self.info.pawn_corrhist[side][pawn_idx];
+        let e2 = self.info.knb_corrhist[side][knb_idx];
+
+        let correction = (e1 + e2) / 2;
+
+        (raw_eval + correction / CORRHIST_GRAIN).clamp(-MATE + 1, MATE - 1)
     }
 
     pub fn age_corrhist(&mut self) {
-        self.info.corrhist[0].iter_mut().for_each(|x| *x /= 2);
-        self.info.corrhist[1].iter_mut().for_each(|x| *x /= 2);
+        self.info.pawn_corrhist[0].iter_mut().for_each(|x| *x /= 2);
+        self.info.pawn_corrhist[1].iter_mut().for_each(|x| *x /= 2);
+        self.info.knb_corrhist[0].iter_mut().for_each(|x| *x /= 2);
+        self.info.knb_corrhist[1].iter_mut().for_each(|x| *x /= 2);
     }
 
     pub fn reset_thread(&mut self) {
