@@ -1,7 +1,8 @@
 use crate::board::Board;
 use crate::board::r#move::{Move, NULL_MOVE};
+use crate::read_param;
 use crate::search::thread::{CORRHIST_SIZE, NodeTable, Thread};
-use crate::search::{INFINITY, MAX_DEPTH};
+use crate::search::{INFINITY, MAX_DEPTH, params};
 use crate::util::Piece;
 use crate::util::helper::piece_type;
 
@@ -259,9 +260,9 @@ impl Thread<'_> {
     }
 
     pub fn update_corrhist(&mut self, b: &Board, depth: u8, diff: i32) {
-        let pawn_idx = b.pawn_hash as usize % CORRHIST_SIZE;
-        let knb_idx = b.knb_hash as usize % CORRHIST_SIZE;
-        let krq_idx = b.krq_hash as usize % CORRHIST_SIZE;
+        let pawn_idx = b.pawn_hash as usize & (CORRHIST_SIZE - 1);
+        let knb_idx = b.knb_hash as usize & (CORRHIST_SIZE - 1);
+        let krq_idx = b.krq_hash as usize & (CORRHIST_SIZE - 1);
         let side = b.side_to_move;
 
         let entries = [
@@ -282,29 +283,31 @@ impl Thread<'_> {
     }
 
     pub fn eval_with_corrhist(&self, b: &Board, raw_eval: i32) -> i32 {
-        let pawn_idx = b.pawn_hash as usize % CORRHIST_SIZE;
-        let knb_idx = b.knb_hash as usize % CORRHIST_SIZE;
-        let krq_idx = b.krq_hash as usize % CORRHIST_SIZE;
+        let pawn_idx = b.pawn_hash as usize & (CORRHIST_SIZE - 1);
+        let knb_idx = b.knb_hash as usize & (CORRHIST_SIZE - 1);
+        let krq_idx = b.krq_hash as usize & (CORRHIST_SIZE - 1);
         let side = b.side_to_move;
 
-        let e1 = self.info.pawn_corrhist[side][pawn_idx];
-        let e2 = self.info.knb_corrhist[side][knb_idx];
-        let e3 = self.info.krq_corrhist[side][krq_idx];
+        let pawn = self.info.pawn_corrhist[side][pawn_idx];
+        let knb = self.info.knb_corrhist[side][knb_idx];
+        let krq = self.info.krq_corrhist[side][krq_idx];
 
-        let correction = (e1 + e2 + e3) / 3;
+        let u = pawn * read_param!(PAWN_CORRHIST_WEIGHT)
+            + knb * read_param!(KNB_CORRHIST_WEIGHT)
+            + krq * read_param!(KRQ_CORRHIST_WEIGHT);
+
+        let v = read_param!(PAWN_CORRHIST_WEIGHT) + read_param!(KNB_CORRHIST_WEIGHT) + read_param!(KRQ_CORRHIST_WEIGHT);
+
+        let correction = u / v;
 
         (raw_eval + correction / CORRHIST_GRAIN).clamp(-MATE + 1, MATE - 1)
     }
 
     pub fn age_corrhist(&mut self) {
-        self.info.pawn_corrhist[0].iter_mut().for_each(|x| *x /= 2);
-        self.info.pawn_corrhist[1].iter_mut().for_each(|x| *x /= 2);
-
-        self.info.knb_corrhist[0].iter_mut().for_each(|x| *x /= 2);
-        self.info.knb_corrhist[1].iter_mut().for_each(|x| *x /= 2);
-
-        self.info.krq_corrhist[0].iter_mut().for_each(|x| *x /= 2);
-        self.info.krq_corrhist[1].iter_mut().for_each(|x| *x /= 2);
+        for x in [&mut self.info.pawn_corrhist, &mut self.info.knb_corrhist, &mut self.info.krq_corrhist] {
+            x[0].iter_mut().for_each(|y| *y /= 2);
+            x[1].iter_mut().for_each(|y| *y /= 2);
+        }
     }
 
     pub fn reset_thread(&mut self) {
