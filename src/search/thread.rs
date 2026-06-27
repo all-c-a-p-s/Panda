@@ -60,6 +60,7 @@ pub struct SearchInfo {
 
     pub pawn_corrhist: [[i32; CORRHIST_SIZE]; 2],
     pub knb_corrhist: [[i32; CORRHIST_SIZE]; 2],
+    pub krq_corrhist: [[i32; CORRHIST_SIZE]; 2],
 
     pub killer_moves: [Option<Move>; MAX_DEPTH],
     pub counter_moves: [[Option<Move>; 64]; 12],
@@ -181,6 +182,7 @@ impl Default for SearchInfo {
 
             pawn_corrhist: [[0; CORRHIST_SIZE]; 2],
             knb_corrhist: [[0; CORRHIST_SIZE]; 2],
+            krq_corrhist: [[0; CORRHIST_SIZE]; 2],
 
             killer_moves: [None; 64],
             counter_moves: [[None; 64]; 12],

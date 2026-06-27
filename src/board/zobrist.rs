@@ -51,9 +51,16 @@ impl Board {
         if piece == Piece::WP || piece == Piece::BP {
             self.pawn_hash ^= PIECE_KEYS[sq_from][piece];
             self.pawn_hash ^= PIECE_KEYS[sq_to][piece];
-        } else if matches!(piece, Piece::WN | Piece::BN | Piece::WB | Piece::BB | Piece::WK | Piece::BK) {
+        }
+
+        if matches!(piece, Piece::WN | Piece::BN | Piece::WB | Piece::BB | Piece::WK | Piece::BK) {
             self.knb_hash ^= PIECE_KEYS[sq_from][piece];
             self.knb_hash ^= PIECE_KEYS[sq_to][piece];
+        }
+
+        if matches!(piece, Piece::WR | Piece::BR | Piece::WQ | Piece::BQ | Piece::WK | Piece::BK) {
+            self.krq_hash ^= PIECE_KEYS[sq_from][piece];
+            self.krq_hash ^= PIECE_KEYS[sq_to][piece];
         }
 
         if let Some(sq) = self.en_passant {
@@ -69,6 +76,8 @@ impl Board {
                 self.pawn_hash ^= PIECE_KEYS[sq_to][captured_piece];
             } else if matches!(captured_piece, Piece::WN | Piece::BN | Piece::WB | Piece::BB) {
                 self.knb_hash ^= PIECE_KEYS[sq_to][captured_piece];
+            } else if matches!(captured_piece, Piece::WR | Piece::BR | Piece::WQ | Piece::BQ) {
+                self.krq_hash ^= PIECE_KEYS[sq_to][captured_piece];
             }
         }
 
@@ -77,18 +86,30 @@ impl Board {
                 Square::C1 => {
                     self.hash_key ^= PIECE_KEYS[Square::A1][Piece::WR];
                     self.hash_key ^= PIECE_KEYS[Square::D1][Piece::WR];
+
+                    self.krq_hash ^= PIECE_KEYS[Square::A1][Piece::WR];
+                    self.krq_hash ^= PIECE_KEYS[Square::D1][Piece::WR];
                 }
                 Square::G1 => {
                     self.hash_key ^= PIECE_KEYS[Square::H1][Piece::WR];
                     self.hash_key ^= PIECE_KEYS[Square::F1][Piece::WR];
+
+                    self.krq_hash ^= PIECE_KEYS[Square::H1][Piece::WR];
+                    self.krq_hash ^= PIECE_KEYS[Square::F1][Piece::WR];
                 }
                 Square::C8 => {
                     self.hash_key ^= PIECE_KEYS[Square::A8][Piece::BR];
                     self.hash_key ^= PIECE_KEYS[Square::D8][Piece::BR];
+
+                    self.krq_hash ^= PIECE_KEYS[Square::A8][Piece::BR];
+                    self.krq_hash ^= PIECE_KEYS[Square::D8][Piece::BR];
                 }
                 Square::G8 => {
                     self.hash_key ^= PIECE_KEYS[Square::H8][Piece::BR];
                     self.hash_key ^= PIECE_KEYS[Square::F8][Piece::BR];
+
+                    self.krq_hash ^= PIECE_KEYS[Square::H8][Piece::BR];
+                    self.krq_hash ^= PIECE_KEYS[Square::F8][Piece::BR];
                 }
                 _ => unreachable!(),
             }
@@ -120,6 +141,8 @@ impl Board {
 
             if matches!(promoted_piece, Piece::WN | Piece::BN | Piece::WB | Piece::BB) {
                 self.knb_hash ^= PIECE_KEYS[sq_to][promoted_piece];
+            } else if matches!(promoted_piece, Piece::WR | Piece::BR | Piece::WQ | Piece::BQ) {
+                self.krq_hash ^= PIECE_KEYS[sq_to][promoted_piece];
             }
 
             self.hash_key ^= PIECE_KEYS[sq_to][promoted_piece];
@@ -158,6 +181,21 @@ impl Board {
         for (square, &piece) in self.pieces_array.iter().enumerate() {
             piece.inspect(|&x| {
                 if matches!(x, Piece::WN | Piece::BN | Piece::WB | Piece::BB | Piece::WK | Piece::BK) {
+                    hash_key ^= PIECE_KEYS[square][x];
+                }
+            });
+        }
+
+        hash_key
+    }
+
+    #[must_use]
+    pub fn compute_krq_hash(&self) -> u64 {
+        let mut hash_key = 0;
+
+        for (square, &piece) in self.pieces_array.iter().enumerate() {
+            piece.inspect(|&x| {
+                if matches!(x, Piece::WR | Piece::BR | Piece::WQ | Piece::BQ | Piece::WK | Piece::BK) {
                     hash_key ^= PIECE_KEYS[square][x];
                 }
             });
@@ -210,6 +248,7 @@ mod tests {
             let correct_hash = b.compute_hash();
             let correct_pawn_hash = b.compute_pawn_hash();
             let correct_knb = b.compute_knb_hash();
+            let correct_krq = b.compute_krq_hash();
 
             if b.hash_key != correct_hash {
                 b.print_board();
@@ -227,6 +266,12 @@ mod tests {
                 b.print_board();
                 mv.print_move();
                 panic!("knb hash update failed");
+            }
+
+            if b.krq_hash != correct_krq {
+                b.print_board();
+                mv.print_move();
+                panic!("krq hash update failed");
             }
 
             total += hash_update_test(depth - 1, b);

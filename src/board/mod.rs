@@ -35,6 +35,7 @@ pub struct Board {
     pub hash_key: u64,
     pub pawn_hash: u64,
     pub knb_hash: u64,
+    pub krq_hash: u64,
 
     // Repetition Table used indexed by fifty move state to save memory.
     // The crucial invariant is that in ANY board state (including after NMP etc)
@@ -103,6 +104,7 @@ impl Board {
             hash_key: 0,
             pawn_hash: 0,
             knb_hash: 0,
+            krq_hash: 0,
             repetition_table: [0; REPETITION_TABLE_SIZE],
             checkers: 0,
             pinned: 0,
@@ -203,6 +205,7 @@ impl Board {
         new_board.repetition_table[new_board.fifty_move] = new_board.hash_key;
         new_board.pawn_hash = new_board.compute_pawn_hash();
         new_board.knb_hash = new_board.compute_knb_hash();
+        new_board.krq_hash = new_board.compute_krq_hash();
         new_board.compute_checkers_and_pins();
 
         new_board

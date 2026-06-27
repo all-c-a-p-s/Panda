@@ -11,8 +11,7 @@ const CORRELATION_MAX: i32 = 4_096;
 pub const OVERALL_HISTORY_MAX: i32 = HISTORY_MAX + CORRELATION_MAX * 2;
 
 const CORRHIST_GRAIN: i32 = 256;
-const CORRHIST_SCALE: i32 = 256;
-const CORRHIST_MAX: i32 = 256 * 32;
+const CORRHIST_MAX: i32 = 256 * 128;
 
 const MATE: i32 = INFINITY - MAX_DEPTH as i32;
 
@@ -262,16 +261,22 @@ impl Thread<'_> {
     pub fn update_corrhist(&mut self, b: &Board, depth: u8, diff: i32) {
         let pawn_idx = b.pawn_hash as usize % CORRHIST_SIZE;
         let knb_idx = b.knb_hash as usize % CORRHIST_SIZE;
+        let krq_idx = b.krq_hash as usize % CORRHIST_SIZE;
         let side = b.side_to_move;
 
-        let entries = [&mut self.info.pawn_corrhist[side][pawn_idx], &mut self.info.knb_corrhist[side][knb_idx]];
-
-        let new_weight = (depth + 1).min(16) as i32;
+        let entries = [
+            &mut self.info.pawn_corrhist[side][pawn_idx],
+            &mut self.info.knb_corrhist[side][knb_idx],
+            &mut self.info.krq_corrhist[side][krq_idx],
+        ];
 
         let scaled_diff = diff * CORRHIST_GRAIN;
+        let depth = depth as i32;
+
+        let bonus = (scaled_diff * depth / 8).clamp(-CORRHIST_MAX / 4, CORRHIST_MAX / 4);
 
         for entry in entries {
-            *entry = (*entry * (CORRHIST_SCALE - new_weight) + scaled_diff * new_weight) / CORRHIST_SCALE;
+            *entry += bonus - *entry * bonus.abs() / CORRHIST_MAX;
             *entry = (*entry).clamp(-CORRHIST_MAX, CORRHIST_MAX);
         }
     }
@@ -279,12 +284,14 @@ impl Thread<'_> {
     pub fn eval_with_corrhist(&self, b: &Board, raw_eval: i32) -> i32 {
         let pawn_idx = b.pawn_hash as usize % CORRHIST_SIZE;
         let knb_idx = b.knb_hash as usize % CORRHIST_SIZE;
+        let krq_idx = b.krq_hash as usize % CORRHIST_SIZE;
         let side = b.side_to_move;
 
         let e1 = self.info.pawn_corrhist[side][pawn_idx];
         let e2 = self.info.knb_corrhist[side][knb_idx];
+        let e3 = self.info.krq_corrhist[side][krq_idx];
 
-        let correction = (e1 + e2) / 2;
+        let correction = (e1 + e2 + e3) / 3;
 
         (raw_eval + correction / CORRHIST_GRAIN).clamp(-MATE + 1, MATE - 1)
     }
@@ -292,8 +299,12 @@ impl Thread<'_> {
     pub fn age_corrhist(&mut self) {
         self.info.pawn_corrhist[0].iter_mut().for_each(|x| *x /= 2);
         self.info.pawn_corrhist[1].iter_mut().for_each(|x| *x /= 2);
+
         self.info.knb_corrhist[0].iter_mut().for_each(|x| *x /= 2);
         self.info.knb_corrhist[1].iter_mut().for_each(|x| *x /= 2);
+
+        self.info.krq_corrhist[0].iter_mut().for_each(|x| *x /= 2);
+        self.info.krq_corrhist[1].iter_mut().for_each(|x| *x /= 2);
     }
 
     pub fn reset_thread(&mut self) {
