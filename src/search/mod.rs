@@ -34,21 +34,20 @@ const FULL_DEPTH_MOVES: u8 = 2;
 
 tuneable_params! {
     // params for search conditions
-    SINGULARITY_TE_MARGIN, i32, 89, 25, 200;
-    SINGULARITY_DE_MARGIN, i32, 16, 10, 150;
+    SINGULARITY_TE_MARGIN, i32, 91, 25, 200;
+    SINGULARITY_DE_MARGIN, i32, 21, 10, 150;
     ASPIRATION_WINDOW, i32, 17, 10, 70;
-    RAZORING_MARGIN, i32, 264, 100, 500;
+    RAZORING_MARGIN, i32, 271, 100, 500;
     MAX_RAZOR_DEPTH, u8, 4, 1, 12;
-    RFP_DEPTH, u8, 5, 1, 12;
-    RFP_MARGIN, u8, 35, 20, 200;
-    TT_FUTILITY_MARGIN, i32, 146, 40, 400;
+    RFP_DEPTH, u8, 4, 1, 12;
+    RFP_MARGIN, u8, 43, 20, 200;
+    TT_FUTILITY_MARGIN, i32, 143, 40, 400;
     HISTORY_PRUNING_DEPTH, i32, 3, 1, 12;
-    HISTORY_PRUNING_MARGIN, i32, -5163, -8192, -1024;
+    HISTORY_PRUNING_MARGIN, i32, -5252, -8192, -1024;
     SEE_PRUNING_DEPTH, i32, 8, 1, 12;
-    SEE_QUIET_MARGIN, i32, 44, 20, 300;
-    SEE_NOISY_MARGIN, i32, 49, 20, 250;
-    SEE_QSEARCH_MARGIN, i32, 26, 1, 100;
-    QSEARCH_FP_MARGIN, i32, 174, 1, 350;
+    SEE_QUIET_MARGIN, i32, 38, 20, 300;
+    SEE_NOISY_MARGIN, i32, 52, 20, 250;
+    QSEARCH_FP_MARGIN, i32, 178, 1, 350;
     LMP_DEPTH, u8, 4, 1, 12;
     IIR_DEPTH_MINIMUM, u8, 9, 1, 12;
 
@@ -61,23 +60,32 @@ tuneable_params! {
     UNDER_PROMOTION, i32, -500_000, -999_999, 999_999;
 
     // factors affecting reductions etc
-    NMP_FACTOR, i32, 19, 1, 100;
-    NMP_BASE, i32, 171, 50, 500;
-    LMR_TACTICAL_BASE, i32, 55, 0, 500;
-    LMR_TACTICAL_DIVISOR, i32, 323, 100, 500;
+    NMP_FACTOR, i32, 21, 1, 100;
+    NMP_BASE, i32, 194, 50, 500;
+    LMR_TACTICAL_BASE, i32, 47, 0, 500;
+    LMR_TACTICAL_DIVISOR, i32, 321, 100, 500;
     LMR_QUIET_BASE, i32, 126, 0, 500;
-    LMR_QUIET_DIVISOR, i32, 290, 100, 500;
+    LMR_QUIET_DIVISOR, i32, 293, 100, 500;
+
+    LMR_CAP, i32, 1032, 256, 4096;
+    LMR_CUTNODE, i32, 1076, 256, 4096;
+    LMR_TT_NOISY, i32, 1078, 256, 4096;
+    LMR_PV, i32, 901, 256, 4096;
+    LMR_NON_IMP, i32, 1081, 256, 4096;
+    LMR_CHECK, i32, 1016, 256, 4096;
+    LMR_KILLER, i32, 939, 256, 4096;
+    LMR_HIST, i32, 1058, 256, 4096;
 
     // LERP weights
-    RFP_BETA_WEIGHT, i32, 39, 0, 1024;
-    NMP_BETA_WEIGHT, i32, 360, 0, 1024;
-    STAND_PAT_BETA_WEIGHT, i32, 195, 0, 1024;
+    RFP_BETA_WEIGHT, i32, 54, 0, 1024;
+    NMP_BETA_WEIGHT, i32, 370, 0, 1024;
+    STAND_PAT_BETA_WEIGHT, i32, 219, 0, 1024;
 
     // time managament stuff
-    TMAN_NODE_MULT_A, i32, 2400, 512, 8192;
-    TMAN_NODE_MULT_B, i32, 1514, 512, 8192;
+    TMAN_NODE_MULT_A, i32, 1766, 512, 8192;
+    TMAN_NODE_MULT_B, i32, 1491, 512, 8192;
     TMAN_DEFAULT_MTG, usize, 19, 10, 40;
-    TMAN_IDEAL_MULT, usize, 761, 256, 1024;
+    TMAN_IDEAL_MULT, usize, 759, 256, 1024;
 }
 
 pub const REPETITION_TABLE_SIZE: usize = 100 + 1;
@@ -586,25 +594,28 @@ impl Thread<'_> {
 
                 let mut r_eval = -INFINITY;
                 let do_full_depth_zw = if should_reduce!(played, pv_node, root, new_depth, not_mated) {
-                    let mut r = 1;
+                    let mut r = read_param!(LMR_CAP);
                     // fixed reduction of 1 for captures seems to work well
                     if quiet {
                         r = self.info.lmr_table.reduction_table[quiet as usize][depth.min(63) as usize]
-                            [played.min(63) as usize];
+                            [played.min(63) as usize]
+                            * 1024;
 
                         // reduce more when we have reason to expect little from this move
-                        r += tt_move_capture as i32;
-                        r += !improving as i32;
-                        r += cutnode as i32;
+                        r += read_param!(LMR_TT_NOISY) * tt_move_capture as i32;
+                        r += read_param!(LMR_NON_IMP) * !improving as i32;
+                        r += read_param!(LMR_CUTNODE) * cutnode as i32;
 
                         // reduce less when this move is important/promising
-                        r -= pv_node as i32;
-                        r -= in_check as i32;
-                        r -= (is_killer || is_counter) as i32;
+                        r -= read_param!(LMR_PV) * pv_node as i32;
+                        r -= read_param!(LMR_CHECK) * in_check as i32;
+                        r -= read_param!(LMR_KILLER) * (is_killer || is_counter) as i32;
 
                         // either increase or decrease reduction depending on history score
-                        r -= hist / (OVERALL_HISTORY_MAX / 2);
+                        r -= read_param!(LMR_HIST) * (hist / (OVERALL_HISTORY_MAX / 2));
                     }
+
+                    r /= 1024;
 
                     let reduced_depth = (new_depth as i32 - r).clamp(1, new_depth as i32) as u8;
                     // avoid dropping into qsearch or extending
