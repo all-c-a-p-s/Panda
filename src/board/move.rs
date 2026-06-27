@@ -50,6 +50,8 @@ pub struct Commit {
     pub hash_before: u64,
     pub hash_overwritten: u64,
     pub pawn_hash: u64,
+    pub knb_hash: u64,
+    pub krq_hash: u64,
     pub pinned: BitBoard,
     pub checkers: BitBoard,
 }
@@ -211,6 +213,8 @@ impl Board {
         self.side_to_move = self.side_to_move.opponent();
         self.hash_key = c.hash_before;
         self.pawn_hash = c.pawn_hash;
+        self.knb_hash = c.knb_hash;
+        self.krq_hash = c.krq_hash;
 
         let to = mv.square_to();
         let from = mv.square_from();
@@ -344,6 +348,8 @@ impl Board {
             hash_before: self.hash_key,
             hash_overwritten: 0,
             pawn_hash: self.pawn_hash,
+            knb_hash: self.knb_hash,
+            krq_hash: self.krq_hash,
             pinned: self.pinned,
             checkers: self.checkers,
         };
