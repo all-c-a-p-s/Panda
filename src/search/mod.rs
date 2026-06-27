@@ -76,6 +76,11 @@ tuneable_params! {
     LMR_KILLER, i32, 939, 256, 4096;
     LMR_HIST, i32, 1058, 256, 4096;
 
+    // Corrhist weights
+    PAWN_CORRHIST_WEIGHT, i32, 100, 25, 400;
+    KNB_CORRHIST_WEIGHT, i32, 100, 25, 400;
+    KRQ_CORRHIST_WEIGHT, i32, 100, 25, 400;
+
     // LERP weights
     RFP_BETA_WEIGHT, i32, 54, 0, 1024;
     NMP_BETA_WEIGHT, i32, 370, 0, 1024;
@@ -372,6 +377,14 @@ impl Thread<'_> {
                     continue;
                 };
 
+                if self.ply < MAX_DEPTH {
+                    self.info.ss[self.ply].square_moved_to = Some(mv.square_to());
+                    self.info.ss[self.ply].piece_moved = Some(mv.piece_moved(position));
+                    self.info.ss[self.ply].made_capture = mv.is_capture(position);
+                }
+
+                self.ply += 1;
+
                 let mut v = -self.qsearch(position, -probcut_beta, -probcut_beta + 1);
 
                 if v >= probcut_beta {
@@ -379,6 +392,7 @@ impl Thread<'_> {
                 }
 
                 position.undo_move(mv, &commit, Some(&mut self.info.stck));
+                self.ply -= 1;
 
                 if v >= probcut_beta {
                     let hash_entry = TTEntry::new(depth - 3, v, EntryFlag::LowerBound, mv, position.hash_key);
@@ -738,6 +752,11 @@ impl Thread<'_> {
             return lerp(beta, best_score, read_param!(STAND_PAT_BETA_WEIGHT));
         }
 
+        if self.ply < MAX_DEPTH {
+            self.info.ss[self.ply] =
+                SearchStackEntry { eval: static_eval, square_moved_to: None, piece_moved: None, made_capture: false };
+        }
+
         alpha = alpha.max(best_score);
 
         let mut movelist = MoveList::empty();
@@ -781,6 +800,13 @@ impl Thread<'_> {
 
             //checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
+
+            if self.ply < MAX_DEPTH {
+                self.info.ss[self.ply].square_moved_to = Some(mv.square_to());
+                self.info.ss[self.ply].piece_moved = Some(mv.piece_moved(position));
+                self.info.ss[self.ply].made_capture = mv.is_capture(position);
+            }
+
             self.ply += 1;
 
             let eval = -self.qsearch(position, -beta, -alpha);
