@@ -373,15 +373,15 @@ impl Thread<'_> {
                 pv_node,
                 cutnode,
             ) {
-                let Ok(commit) = position.try_move(mv, Some(&mut self.info.stck)) else {
-                    continue;
-                };
-
                 if self.ply < MAX_DEPTH {
                     self.info.ss[self.ply].square_moved_to = Some(mv.square_to());
                     self.info.ss[self.ply].piece_moved = Some(mv.piece_moved(position));
                     self.info.ss[self.ply].made_capture = mv.is_capture(position);
                 }
+
+                let Ok(commit) = position.try_move(mv, Some(&mut self.info.stck)) else {
+                    continue;
+                };
 
                 self.ply += 1;
 
@@ -798,14 +798,14 @@ impl Thread<'_> {
                 }
             }
 
-            //checked to be legal above
-            let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
-
             if self.ply < MAX_DEPTH {
                 self.info.ss[self.ply].square_moved_to = Some(mv.square_to());
                 self.info.ss[self.ply].piece_moved = Some(mv.piece_moved(position));
                 self.info.ss[self.ply].made_capture = mv.is_capture(position);
             }
+
+            //checked to be legal above
+            let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
 
             self.ply += 1;
 
