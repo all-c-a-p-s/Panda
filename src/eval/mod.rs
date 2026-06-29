@@ -62,7 +62,7 @@ pub fn side_has_sufficient_material(b: &Board, side: Colour) -> bool {
 
 #[must_use]
 pub fn evaluate(b: &Board, acc: &Accumulator) -> i32 {
-    let s = acc.evaluate(b.side_to_move);
+    let s = acc.evaluate(b.side_to_move, output_bucket(b));
 
     let side_sm = side_has_sufficient_material(b, b.side_to_move);
     let opp_sm = side_has_sufficient_material(b, b.side_to_move.opponent());

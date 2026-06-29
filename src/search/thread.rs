@@ -156,9 +156,11 @@ impl Default for LMRTable {
         #[allow(clippy::needless_range_loop)]
         for depth in 0..64 {
             for played in 0..64 {
-                reduction_table[0][depth][played] = (tb + (depth as f64).ln() * (played as f64).ln() / td) as i32;
+                reduction_table[0][depth][played] =
+                    (1024.0 * (tb + (depth as f64).ln() * (played as f64).ln() / td)) as i32;
                 //tactical move
-                reduction_table[1][depth][played] = (qb + (depth as f64).ln() * (played as f64).ln() / qd) as i32;
+                reduction_table[1][depth][played] =
+                    (1024.0 * (qb + (depth as f64).ln() * (played as f64).ln() / qd)) as i32;
                 //quiet move
             }
         }
