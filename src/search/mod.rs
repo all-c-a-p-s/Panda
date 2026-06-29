@@ -496,6 +496,7 @@ impl Thread<'_> {
 
                 let r = self.info.lmr_table.reduction_table[quiet as usize][depth.min(63) as usize]
                     [considered.min(63) as usize]
+                    / 1024
                     + !improving as i32;
                 let lmr_depth = (depth as i32 - 1 - r).max(1);
 
@@ -612,8 +613,7 @@ impl Thread<'_> {
                     // fixed reduction of 1 for captures seems to work well
                     if quiet {
                         r = self.info.lmr_table.reduction_table[quiet as usize][depth.min(63) as usize]
-                            [played.min(63) as usize]
-                            * 1024;
+                            [played.min(63) as usize];
 
                         // reduce more when we have reason to expect little from this move
                         r += read_param!(LMR_TT_NOISY) * tt_move_capture as i32;

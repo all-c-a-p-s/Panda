@@ -4,11 +4,12 @@ use crate::eval::MIRROR;
 use crate::util::STARTPOS;
 use crate::{Board, Colour, lsfb, pop_bit};
 
-use crate::util::types::{OccupancyIndex, PIECES, Piece, Square};
+use crate::util::types::{OccupancyIndex, Piece, Square};
 
 // ON or OFF for each piece / colour / square
 const NUM_FEATURES: usize = 6 * 2 * 64;
-const HL_SIZE: usize = 384;
+const HL_SIZE: usize = 512;
+const OUTPUT_BUCKETS: usize = 8;
 
 const CR_MIN: i16 = 0;
 const CR_MAX: i16 = 255;
@@ -21,15 +22,22 @@ const SCALE: i32 = 400;
 // The code in this file is very heavily inspired on the excellent and clear NNUE code form Carp and Viridithas,
 // without which I wouldn't have been able to figure out how to implement NNUE.
 
-#[repr(C)]
+#[repr(C, align(64))]
 struct Network {
     feature_weights: [i16; NUM_FEATURES * HL_SIZE],
     feature_biases: [i16; HL_SIZE],
-    output_weights: [i16; HL_SIZE * 2],
-    output_bias: i16,
+    output_weights: [i16; OUTPUT_BUCKETS * HL_SIZE * 2],
+    output_biases: [i16; OUTPUT_BUCKETS],
 }
 
-static MODEL: Network = unsafe { mem::transmute(*include_bytes!("../nets/hl_384.bin")) };
+static MODEL: Network = unsafe { mem::transmute(*include_bytes!("../nets/output_buckets.bin")) };
+
+pub fn output_bucket(board: &Board) -> usize {
+    let divisor = 32usize.div_ceil(OUTPUT_BUCKETS);
+    let pcs = board.occupancies[OccupancyIndex::BothOccupancies].count_ones() as usize;
+
+    (pcs - 2) / divisor
+}
 
 type SideAccumulator = [i16; HL_SIZE];
 
@@ -171,32 +179,30 @@ impl Accumulator {
         }
     }
 
-    pub fn set_to_position(&mut self, board: &Board) {
-        for piece in PIECES {
-            let mut occ = board.bitboards[piece];
-            while let Some(sq) = lsfb(occ) {
-                self.set_weight::<ON>(piece, sq);
-                occ = pop_bit(sq, occ);
-            }
-        }
-    }
-
     #[must_use]
-    pub fn evaluate(&self, side: Colour) -> i32 {
+    pub fn evaluate(&self, side: Colour, bucket: usize) -> i32 {
         let (us, them) = match side {
             Colour::White => (self.white.iter(), self.black.iter()),
             Colour::Black => (self.black.iter(), self.white.iter()),
         };
 
+        let bucket = bucket.min(OUTPUT_BUCKETS - 1);
+
+        let weights_start = bucket * HL_SIZE * 2;
+        let us_weights = &MODEL.output_weights[weights_start..weights_start + HL_SIZE];
+        let them_weights = &MODEL.output_weights[weights_start + HL_SIZE..weights_start + 2 * HL_SIZE];
+
         let mut out = 0;
-        for (&value, &weight) in us.zip(&MODEL.output_weights[..HL_SIZE]) {
-            out += squared_crelu(value) * weight as i32;
-        }
-        for (&value, &weight) in them.zip(&MODEL.output_weights[HL_SIZE..]) {
+
+        for (&value, &weight) in us.zip(us_weights) {
             out += squared_crelu(value) * weight as i32;
         }
 
-        (out / QA + MODEL.output_bias as i32) * SCALE / QAB
+        for (&value, &weight) in them.zip(them_weights) {
+            out += squared_crelu(value) * weight as i32;
+        }
+
+        (out / QA + MODEL.output_biases[bucket] as i32) * SCALE / QAB
     }
 }
 
