@@ -564,6 +564,7 @@ impl Thread<'_> {
 
             // checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
+            inc_stat!(moves_played);
 
             if self.ply < MAX_DEPTH {
                 self.info.ss[self.ply].square_moved_to = Some(mv.square_to());
