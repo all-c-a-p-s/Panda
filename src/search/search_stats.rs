@@ -225,7 +225,7 @@ singularity:
   reductions:          {:>10}  ({:>6.2}% of checks)
 
 iaw:
-  entries:             {:>10}  ({:>6.2}% of moveloop entries)
+  entries:             {:>10}  ({:>6.2}% of pv nodes)
   pointless:           {:>10}  ({:>6.2}% of entries)
   exact exits:         {:>10}  ({:>6.2}% of entries)
   low exits:           {:>10}  ({:>6.2}% of entries)
@@ -305,7 +305,7 @@ qsearch:
                 load!(singularity_reductions),
                 Self::pct(load!(singularity_reductions), load!(singularity_checks)),
                 load!(iaw_entries),
-                Self::pct(load!(iaw_entries), moveloop_entries),
+                Self::pct(load!(iaw_entries), load!(pv_nodes)),
                 load!(iaw_pointless),
                 Self::pct(load!(iaw_pointless), load!(iaw_entries)),
                 load!(iaw_exact_exits),
