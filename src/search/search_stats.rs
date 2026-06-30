@@ -51,6 +51,7 @@ pub mod stats {
 
         pub moveloop_entries: AtomicU32,
         pub moves_considered: AtomicU32,
+        pub moves_played: AtomicU32,
         pub alpha_raises: AtomicU32,
         pub beta_cutoffs: AtomicU32,
 
@@ -113,6 +114,7 @@ pub mod stats {
 
                 moveloop_entries: AtomicU32::new(0),
                 moves_considered: AtomicU32::new(0),
+                moves_played: AtomicU32::new(0),
                 alpha_raises: AtomicU32::new(0),
                 beta_cutoffs: AtomicU32::new(0),
 
@@ -158,6 +160,7 @@ pub mod stats {
 
             let moveloop_entries = load!(moveloop_entries);
             let moves_considered = load!(moves_considered);
+            let moves_played = load!(moves_played);
 
             let qs_moveloop_entries = load!(qs_moveloop_entries);
             let qs_moves_considered = load!(qs_moves_considered);
@@ -188,6 +191,7 @@ early exits:
 main move loop:
   entries:             {moveloop_entries:>10}  ({:>6.2}% of main nodes)
   moves considered:    {moves_considered:>10}  ({:>6.2} per moveloop entry)
+  moves played:        {moves_played:>10}  ({:>6.2}% of moves considered)
   alpha raises:        {:>10}  ({:>6.2}% of moveloop entries)
   beta cutoffs:        {:>10}  ({:>6.2}% of moveloop entries)
 
@@ -200,14 +204,17 @@ null move pruning:
   attempts:            {:>10}  ({:>6.2}% of main nodes)
   cutoffs:             {:>10}  ({:>6.2}% of attempts, {:>6.2}% of main nodes)
 
+iir:
+  reductions           {:>10}  ({:>6.2}% of main nodes)
+
 probcut:
   attempts:            {:>10}  ({:>6.2}% of main nodes)
   cutoffs:             {:>10}  ({:>6.2}% of attempts, {:>6.2}% of main nodes)
 
 lmr:
-  attempts:            {:>10}  ({:>6.2}% of moves considered)
-  researches:          {:>10}  ({:>6.2}% of attempts, {:>6.2}% of moves considered)
-  pv exits:            {:>10}  ({:>6.2}% of attempts, {:>6.2}% of moves considered)
+  attempts:            {:>10}  ({:>6.2}% of moves played)
+  full depth:          {:>10}  ({:>6.2}% of attempts, {:>6.2}% of moves played)
+  pv exits:            {:>10}  ({:>6.2}% of attempts, {:>6.2}% of moves played)
 
 singularity:
   checks:              {:>10}  ({:>6.2}% of main nodes)
@@ -226,7 +233,7 @@ iaw:
   fails:               {:>10}  ({:>6.2}% of entries)
 
 qsearch:
-  moveloop entries:   {qs_moveloop_entries:>10}  ({:>6.2}% of qnodes)
+  moveloop entries:    {qs_moveloop_entries:>10}  ({:>6.2}% of qnodes)
   moves considered:    {qs_moves_considered:>10}  ({:>6.2} per qsearch moveloop entry)
   stand-pat cutoffs:   {:>10}  ({:>6.2}% of qnodes)
   fp skips:            {:>10}  ({:>6.2}% of qsearch moves considered)
@@ -254,6 +261,7 @@ qsearch:
                 Self::pct(load!(razoring_cutoffs), nodes),
                 Self::pct(moveloop_entries, nodes),
                 if moveloop_entries == 0 { 0.0 } else { moves_considered as f64 / moveloop_entries as f64 },
+                Self::pct(moves_played, moves_considered),
                 load!(alpha_raises),
                 Self::pct(load!(alpha_raises), moveloop_entries),
                 load!(beta_cutoffs),
@@ -269,19 +277,21 @@ qsearch:
                 load!(nmp_cutoffs),
                 Self::pct(load!(nmp_cutoffs), load!(nmp_attempts)),
                 Self::pct(load!(nmp_cutoffs), nodes),
+                load!(iir_reductions),
+                Self::pct(load!(iir_reductions), nodes),
                 load!(probcut_attempts),
                 Self::pct(load!(probcut_attempts), nodes),
                 load!(probcut_cutoffs),
                 Self::pct(load!(probcut_cutoffs), load!(probcut_attempts)),
                 Self::pct(load!(probcut_cutoffs), nodes),
                 load!(lmr_attempts),
-                Self::pct(load!(lmr_attempts), moves_considered),
+                Self::pct(load!(lmr_attempts), moves_played),
                 load!(lmr_full_depth),
                 Self::pct(load!(lmr_full_depth), load!(lmr_attempts)),
-                Self::pct(load!(lmr_full_depth), moves_considered),
+                Self::pct(load!(lmr_full_depth), moves_played),
                 load!(lmr_pv_exits),
                 Self::pct(load!(lmr_pv_exits), load!(lmr_attempts)),
-                Self::pct(load!(lmr_pv_exits), moves_considered),
+                Self::pct(load!(lmr_pv_exits), moves_played),
                 load!(singularity_checks),
                 Self::pct(load!(singularity_checks), nodes),
                 load!(singularity_exts),
