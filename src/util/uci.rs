@@ -32,6 +32,7 @@ pub enum CommandType {
     Quit,
     D,
     Play,
+    Stats,
 }
 
 pub const DEFAULT_HASH_SIZE: usize = 16;
@@ -97,6 +98,7 @@ pub fn recognise_command(words: &[&str]) -> CommandType {
         "quit" => CommandType::Quit,
         "d" => CommandType::D,
         "play" => CommandType::Play,
+        "stats" => CommandType::Stats,
         _ => CommandType::Unknown,
     }
 }
@@ -485,6 +487,16 @@ pub fn print_thinking(depth: u8, eval: i32, s: &Thread, start: Instant) {
     }
 }
 
+#[cfg(feature = "stats")]
+fn print_stats() {
+    println!("{}", crate::search::search_stats::stats::STATS);
+}
+
+#[cfg(not(feature = "stats"))]
+fn print_stats() {
+    println!("info string stats feature is not enabled");
+}
+
 pub fn uci_loop() {
     let mut board = Board::from(STARTPOS);
     let mut tt = TranspositionTable::in_megabytes(DEFAULT_HASH_SIZE);
@@ -550,6 +562,9 @@ pub fn uci_loop() {
                 board = Board::from(STARTPOS);
                 info = SearchInfo::default();
                 tt.clear();
+            }
+            CommandType::Stats => {
+                print_stats();
             }
             _ => {}
         }

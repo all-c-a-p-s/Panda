@@ -55,6 +55,10 @@ datagen:
 	cargo rustc --release --features datagen -- -C target-cpu=native --emit link=$(NAME)
 	./$(NAME) datagen
 
+stats:
+	cargo rustc --release --features stats -- -C target-cpu=native --emit link=$(NAME)
+	./$(NAME)
+
 profile:
 	cargo rustc --release -- -C target-cpu=native --emit link=$(NAME)
 	./$(NAME) profile

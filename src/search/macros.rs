@@ -47,6 +47,19 @@ macro_rules! tt_cutoff {
 }
 
 #[macro_export]
+macro_rules! not_direct_cutoff {
+    ($depth: expr, $entry: expr, $alpha: expr, $beta: expr) => {
+        !($depth <= $entry.depth
+            && match $entry.flag {
+                EntryFlag::Exact => true,
+                EntryFlag::LowerBound => $entry.eval >= $beta,
+                EntryFlag::UpperBound => $entry.eval <= $alpha,
+                EntryFlag::Missing => false,
+            })
+    };
+}
+
+#[macro_export]
 macro_rules! can_static_prune {
     ($self_:expr, $in_check:expr, $singular:expr, $pv_node:expr) => {
         !$in_check && !$singular && $self_.do_pruning && !$pv_node
@@ -185,6 +198,20 @@ macro_rules! do_history_pruning {
     };
 }
 
+#[cfg(feature = "stats")]
+#[macro_export]
+macro_rules! inc_stat {
+    ($field:ident) => {{
+        $crate::search::search_stats::stats::STATS.$field.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }};
+}
+
+#[cfg(not(feature = "stats"))]
+#[macro_export]
+macro_rules! inc_stat {
+    ($field:ident) => {{}};
+}
+
 pub(crate) use can_nmp;
 pub(crate) use can_razor;
 pub(crate) use can_rfp;
@@ -195,7 +222,9 @@ pub(crate) use do_iaw;
 pub(crate) use do_iir;
 pub(crate) use do_lmp;
 pub(crate) use do_see_pruning;
+pub(crate) use inc_stat;
 pub(crate) use maybe_singular;
+pub(crate) use not_direct_cutoff;
 pub(crate) use should_correct_with_tt;
 pub(crate) use should_reduce;
 pub(crate) use singularity_de;
