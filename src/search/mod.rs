@@ -146,7 +146,6 @@ impl Thread<'_> {
         cutnode: bool,
         quiet: bool,
     ) -> SingularityResult {
-        // undo move already made on board
         let threshold = (tt_score - (depth as i32 * 2 + 20)).max(-INFINITY);
 
         self.info.excluded[self.ply] = Some(best_move);
@@ -247,7 +246,7 @@ impl Thread<'_> {
         let tt_move_exists = !best_move.is_null();
         let tt_move_capture = if tt_move_exists { best_move.is_capture(position) } else { false };
 
-        // reset killers for child nodes
+        // reset killer for child nodes
         self.info.killer_moves[self.ply + 1] = None;
 
         let mut static_eval = -INFINITY;
@@ -610,7 +609,7 @@ impl Thread<'_> {
                 let mut r_eval = -INFINITY;
                 let do_full_depth_zw = if should_reduce!(played, pv_node, root, new_depth, not_mated) {
                     let mut r = read_param!(LMR_CAP);
-                    // fixed reduction of 1 for captures seems to work well
+                    // fixed reduction for captures seems to work well
                     if quiet {
                         r = self.info.lmr_table.reduction_table[quiet as usize][depth.min(63) as usize]
                             [played.min(63) as usize];
@@ -790,10 +789,7 @@ impl Thread<'_> {
                 {
                     continue;
                 } else if movepicker.this >= MovePickerStage::BadCaps {
-                    // alternatively just skip any move which fails SEE by this margin
-                    // note anything that passes the futility check will pass this so there's no need
-                    // to do SEE check twice on such moves
-
+                    // alternatively just skip any bad capture
                     continue;
                 }
             }
