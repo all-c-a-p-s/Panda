@@ -254,15 +254,7 @@ impl Move {
     /// - Quiets      |----- these are also subject to continuation bonuses
     /// - Losing Captures
     /// - Underpromotion
-    pub fn score_move(
-        self,
-        b: &mut Board,
-        s: &Thread,
-        hash_move: &Move,
-        depth: u8,
-        pv_node: bool,
-        cutnode: bool,
-    ) -> i32 {
+    pub fn score_move(self, b: &mut Board, s: &Thread, hash_move: &Move, depth: u8, pv_node: bool, temp: i32) -> i32 {
         let sq = self.square_to();
 
         if self.is_null() {
@@ -282,7 +274,7 @@ impl Move {
 
             //at high depths we can put more effort into our move ordering because there's a
             //greater reward for optimal order
-            if depth >= 16 && (pv_node || cutnode) {
+            if depth >= 16 && (pv_node || temp > read_param!(MOVEPICKER_CUTNODE_TEMP_MINIMUM)) {
                 let v = self.exact_see(b);
 
                 v * 10 + hist
@@ -389,7 +381,7 @@ impl MovePicker {
         s: &Thread,
         depth: u8,
         pv_node: bool,
-        cutnode: bool,
+        temp: i32,
     ) -> Option<Move> {
         if self.next == MovePickerStage::HashMove {
             self.next = MovePickerStage::NoisyQueenPromotions;
@@ -405,17 +397,7 @@ impl MovePicker {
             if !self.generated {
                 movelist.gen_moves(b, MovegenMode::NoisyQueenPromotions);
                 if self.idx < movelist.used {
-                    self.score_between(
-                        movelist,
-                        self.idx,
-                        movelist.used - 1,
-                        b,
-                        &hash_move,
-                        s,
-                        depth,
-                        pv_node,
-                        cutnode,
-                    );
+                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s, depth, pv_node, temp);
                 }
                 self.generated = true;
             }
@@ -445,17 +427,7 @@ impl MovePicker {
             if !self.generated {
                 movelist.gen_moves(b, MovegenMode::QuietQueenPromotions);
                 if self.idx < movelist.used {
-                    self.score_between(
-                        movelist,
-                        self.idx,
-                        movelist.used - 1,
-                        b,
-                        &hash_move,
-                        s,
-                        depth,
-                        pv_node,
-                        cutnode,
-                    );
+                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s, depth, pv_node, temp);
                 }
                 self.generated = true;
             }
@@ -479,17 +451,7 @@ impl MovePicker {
                 (*good_caps, *bad_caps) = caps.separate_captures(b);
                 movelist.extend_from(good_caps);
                 if self.idx < movelist.used {
-                    self.score_between(
-                        movelist,
-                        self.idx,
-                        movelist.used - 1,
-                        b,
-                        &hash_move,
-                        s,
-                        depth,
-                        pv_node,
-                        cutnode,
-                    );
+                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s, depth, pv_node, temp);
                 }
                 self.generated = true;
             }
@@ -541,17 +503,7 @@ impl MovePicker {
             if !self.generated {
                 movelist.gen_moves(b, MovegenMode::QuietsOnly);
                 if self.idx < movelist.used {
-                    self.score_between(
-                        movelist,
-                        self.idx,
-                        movelist.used - 1,
-                        b,
-                        &hash_move,
-                        s,
-                        depth,
-                        pv_node,
-                        cutnode,
-                    );
+                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s, depth, pv_node, temp);
                 }
                 self.generated = true;
             }
@@ -573,17 +525,7 @@ impl MovePicker {
             if !self.generated {
                 movelist.extend_from(bad_caps);
                 if self.idx < movelist.used {
-                    self.score_between(
-                        movelist,
-                        self.idx,
-                        movelist.used - 1,
-                        b,
-                        &hash_move,
-                        s,
-                        depth,
-                        pv_node,
-                        cutnode,
-                    );
+                    self.score_between(movelist, self.idx, movelist.used - 1, b, &hash_move, s, depth, pv_node, temp);
                 }
                 self.generated = true;
             }
@@ -613,7 +555,7 @@ impl MovePicker {
                             s,
                             depth,
                             pv_node,
-                            cutnode,
+                            temp,
                         );
                     }
                     self.generated = true;
@@ -643,7 +585,7 @@ impl MovePicker {
                             s,
                             depth,
                             pv_node,
-                            cutnode,
+                            temp,
                         );
                     }
                     self.generated = true;
@@ -672,10 +614,10 @@ impl MovePicker {
         s: &Thread,
         depth: u8,
         pv_node: bool,
-        cutnode: bool,
+        temp: i32,
     ) {
         for i in l..=r {
-            self.scores[i] = movelist.moves[i].score_move(b, s, hash_move, depth, pv_node, cutnode);
+            self.scores[i] = movelist.moves[i].score_move(b, s, hash_move, depth, pv_node, temp);
         }
     }
 

@@ -13,6 +13,7 @@ pub use transposition::*;
 
 use arrayvec::ArrayVec;
 
+use crate::binary_dt;
 use crate::board::Board;
 use crate::board::r#move::{Move, MoveList, NULL_MOVE};
 use crate::eval::evaluate;
@@ -28,6 +29,8 @@ use std::time::{Duration, Instant};
 pub const INFINITY: i32 = 1_000_000_000;
 pub const MAX_DEPTH: usize = 64;
 pub const MATE: i32 = INFINITY - MAX_DEPTH as i32;
+
+const MAX_TEMP: i32 = 1024;
 
 const FULL_DEPTH_MOVES: u8 = 2;
 
@@ -87,6 +90,25 @@ tuneable_params! {
     NMP_BETA_WEIGHT, i32, 345, 0, 1024;
     STAND_PAT_BETA_WEIGHT, i32, 209, 0, 1024;
 
+    // Temperature Bonus parameters
+    LMR_TEMP_SCALE, i32, 512, 0, 1024;
+    STATIC_EVAL_TEMP_BONUS, i32, 256, 0, 1024;
+    TT_SCORE_TEMP_BONUS, i32, 256, 0, 1024;
+    IMPROVING_TEMP_BONUS, i32, 256, 0, 1024;
+    OPP_WORSENING_TEMP_BONUS, i32, 128, 0, 1024;
+    RAZOR_HIGH_TEMP_BONUS, i32, 128, 0, 1024;
+    PROBCUT_HIGH_TEMP_BONUS, i32, 256, 0, 1024;
+    BAD_STAGE_TEMP_MALUS, i32, -384, -1024, 0;
+
+    // Tempterature entry cutoffs
+    TT_FP_TEMP_MINIMUM, i32, 0, -1024, 1024;
+    IIR_TEMP_MINIMUM, i32, 0, -1024, 1024;
+    NMP_TEMP_MINIMUM, i32, 0, -1024, 1024;
+    PROBCUT_TEMP_MINIMUM, i32, 0, -1024, 1024;
+    LMR_TEMP_REDUCTION_MINIMUM, i32, 0, -1024, 1024;
+    MOVEPICKER_CUTNODE_TEMP_MINIMUM, i32, 0, -1024, 1024;
+    RAZORING_TEMP_MAXIMUM, i32, 0, -1024, 1024;
+
     // time managament stuff
     TMAN_NODE_MULT_A, i32, 1525, 512, 8192;
     TMAN_NODE_MULT_B, i32, 1452, 512, 8192;
@@ -102,6 +124,18 @@ fn lerp(u: i32, v: i32, w1: i32) -> i32 {
 
 fn is_terminal(x: i32) -> bool {
     x.abs() > INFINITY / 2
+}
+
+fn update_temp(temp: &mut i32, bonus: i32) {
+    let bonus = bonus.clamp(-MAX_TEMP, MAX_TEMP);
+    let delta = bonus - *temp * bonus.abs() / MAX_TEMP;
+    *temp += delta;
+}
+
+fn lmr_temp(played: u8) -> i32 {
+    let k = (played - 1) as f64 / 10.0;
+
+    -(read_param!(LMR_TEMP_SCALE) as f64 * (k / (1.0 + k))) as i32
 }
 
 enum SingularityResult {
@@ -144,15 +178,15 @@ impl Thread<'_> {
         pv_node: bool,
         _alpha: i32,
         beta: i32,
-        cutnode: bool,
         quiet: bool,
+        temp: i32,
     ) -> SingularityResult {
         inc_stat!(singularity_checks);
         let threshold = (tt_score - (depth as i32 * 2 + 20)).max(-INFINITY);
 
         self.info.excluded[self.ply] = Some(best_move);
 
-        let excluded_eval = self.negamax(position, depth / 2, threshold - 1, threshold, cutnode);
+        let excluded_eval = self.negamax(position, depth / 2, threshold - 1, threshold, temp);
 
         self.info.excluded[self.ply] = None;
 
@@ -191,7 +225,13 @@ impl Thread<'_> {
     /// Since a cutnode follows an all-node, this will indirectly save work done on all nodes. If
     /// the reduction causes us to fail to produce the expected cutoff, then the move will be
     /// re-searched by LMR anyway.
-    pub fn negamax(&mut self, position: &mut Board, mut depth: u8, mut alpha: i32, beta: i32, cutnode: bool) -> i32 {
+    ///
+    /// To predict the node type of the current node, we use the parameter 'temperature', which is
+    /// a value in [-1024, 1024]. High temperature indicates we expect to fail high, and low
+    /// temperature indicates we expect to fail low. We can update the temperature based on various
+    /// pieces of information we gather about the node, and then use the value of the temperature
+    /// parameter to affect pruning decisions.
+    pub fn negamax(&mut self, position: &mut Board, mut depth: u8, mut alpha: i32, beta: i32, mut temp: i32) -> i32 {
         if self.should_exit() {
             return 0;
         }
@@ -206,10 +246,11 @@ impl Thread<'_> {
         }
 
         let pv_node = beta - alpha != 1;
+        let original_alpha = alpha;
 
         if pv_node {
             inc_stat!(pv_nodes);
-        } else if cutnode {
+        } else if temp > 0 {
             inc_stat!(cutnodes);
         } else {
             inc_stat!(all_nodes);
@@ -243,6 +284,7 @@ impl Thread<'_> {
             let r_beta = beta.min(INFINITY - self.ply as i32 - 1);
             if r_alpha >= r_beta {
                 inc_stat!(mdp_cutoffs);
+                inc_temp_stat!(temp_fail_highs, record_temp_bucket!(temp));
                 return r_alpha;
             }
         }
@@ -257,15 +299,19 @@ impl Thread<'_> {
             // We accept values from the TT if:
             //      (1) the depth of the entry >= our depth, with the correct bound
             // OR   (2) we are in an expected cutnode, and the eval is well above beta
-            if tt_cutoff!(singular, root, pv_node, depth, entry, beta, alpha, cutnode, in_check) {
+            if tt_cutoff!(singular, root, pv_node, depth, entry, beta, alpha, temp, in_check) {
                 inc_stat!(tt_cutoffs);
 
                 if not_direct_cutoff!(depth, entry, alpha, beta) {
+                    inc_temp_stat!(temp_fail_highs, record_temp_bucket!(temp));
                     inc_stat!(tt_fp_cutoffs);
                 }
 
                 return entry.eval;
             }
+
+            let dt = ternary_dt!(tt_score, alpha, beta, TT_SCORE_TEMP_BONUS);
+            update_temp(&mut temp, dt);
         }
 
         let tt_move_exists = !best_move.is_null();
@@ -287,6 +333,9 @@ impl Thread<'_> {
                 let corrected = self.eval_with_corrhist(position, static_eval);
                 static_eval = corrected;
             }
+
+            let dt = ternary_dt!(static_eval, alpha, beta, STATIC_EVAL_TEMP_BONUS);
+            update_temp(&mut temp, dt);
         }
 
         if self.ply < MAX_DEPTH {
@@ -306,6 +355,12 @@ impl Thread<'_> {
             self.ply >= 3 && better(self.info.ss[self.ply - 3].eval, self.info.ss[self.ply - 1].eval);
         let opponent_captured = self.ply > 0 && self.info.ss[self.ply - 1].made_capture;
 
+        let dt = binary_dt!(improving, IMPROVING_TEMP_BONUS);
+        update_temp(&mut temp, dt);
+
+        let dt = binary_dt!(opponent_worsening, OPP_WORSENING_TEMP_BONUS);
+        update_temp(&mut temp, dt);
+
         // Static pruning: here we attempt to show that the position does not require any further
         // search
         if can_static_prune!(self, in_check, singular, pv_node) {
@@ -313,24 +368,29 @@ impl Thread<'_> {
             // If eval >= beta + some margin, assume that we can achieve at least beta
             if can_rfp!(depth, static_eval, improving, beta) {
                 inc_stat!(rfp_cutoffs);
+                inc_temp_stat!(temp_fail_highs, record_temp_bucket!(temp));
                 return lerp(beta, static_eval, read_param!(RFP_BETA_WEIGHT));
             }
 
             // Razoring:
             // If our opponent just captured and the static eval is far below alpha, it's likely
             // that only captures can raise alpha. Hence, we just run a qsearch.
-            if can_razor!(depth, static_eval, improving, opponent_captured, opponent_worsening, alpha) {
+            if can_razor!(temp, depth, static_eval, improving, opponent_captured, opponent_worsening, alpha) {
                 let qeval = self.qsearch(position, alpha, beta);
                 if qeval < alpha {
                     inc_stat!(razoring_cutoffs);
+                    inc_temp_stat!(temp_fail_lows, record_temp_bucket!(temp));
                     return qeval;
+                } else if qeval >= beta {
+                    let dt = read_param!(RAZOR_HIGH_TEMP_BONUS);
+                    update_temp(&mut temp, dt);
                 }
             }
 
             // Null Move Pruning (NMP):
             // If we are still able to reach an eval >= beta if we give our opponent
             // another move, then their previous move was probably bad
-            if can_nmp!(position, static_eval, depth, beta, root) {
+            if can_nmp!(temp, position, static_eval, depth, beta, root) {
                 inc_stat!(nmp_attempts);
                 let undo = position.make_null_move();
                 self.ply += 1;
@@ -340,12 +400,13 @@ impl Thread<'_> {
                     + improving as i32
                     + opponent_worsening as i32;
                 let reduced_depth = (depth as i32 - r).max(1) as u8;
-                let null_move_eval = -self.negamax(position, reduced_depth, -beta, -beta + 1, !cutnode);
+                let null_move_eval = -self.negamax(position, reduced_depth, -beta, -beta + 1, -temp);
                 // null window used because all that matters is whether the search result is better than beta
                 position.undo_null_move(&undo);
                 self.ply -= 1;
                 if null_move_eval >= beta && !is_terminal(null_move_eval) {
                     inc_stat!(nmp_cutoffs);
+                    inc_temp_stat!(temp_fail_highs, record_temp_bucket!(temp));
                     return lerp(beta, null_move_eval, read_param!(NMP_BETA_WEIGHT));
                 }
             }
@@ -354,7 +415,7 @@ impl Thread<'_> {
         // Internal Iterative Reduction (IIR):
         // if we don't have a TT hit then move ordering here will be terrible
         // so its better to reduce and set up TT move for next iteration
-        if do_iir!(pv_node, cutnode, depth, tt_move_exists) {
+        if do_iir!(pv_node, temp, depth, tt_move_exists) {
             inc_stat!(iir_reductions);
             depth -= 1;
         }
@@ -381,7 +442,7 @@ impl Thread<'_> {
         // chance it can work.
         let probcut_beta = beta + 250;
 
-        if try_probcut!(cutnode, depth, beta, tt_hit, tt_depth, tt_score, tt_move_exists, tt_move_capture) {
+        if try_probcut!(temp, depth, beta, tt_hit, tt_depth, tt_score, tt_move_exists, tt_move_capture) {
             movepicker.doing_probcut = true;
             inc_stat!(probcut_attempts);
 
@@ -396,7 +457,7 @@ impl Thread<'_> {
                 self,
                 depth,
                 pv_node,
-                cutnode,
+                temp,
             ) {
                 if self.ply < MAX_DEPTH {
                     self.info.ss[self.ply].square_moved_to = Some(mv.square_to());
@@ -413,7 +474,7 @@ impl Thread<'_> {
                 let mut v = -self.qsearch(position, -probcut_beta, -probcut_beta + 1);
 
                 if v >= probcut_beta {
-                    v = -self.negamax(position, depth - 4, -probcut_beta, -probcut_beta + 1, !cutnode);
+                    v = -self.negamax(position, depth - 4, -probcut_beta, -probcut_beta + 1, -temp);
                 }
 
                 position.undo_move(mv, &commit, Some(&mut self.info.stck));
@@ -423,7 +484,11 @@ impl Thread<'_> {
                     let hash_entry = TTEntry::new(depth - 3, v, EntryFlag::LowerBound, mv, position.hash_key);
                     self.tt.write(position.hash_key, hash_entry);
                     inc_stat!(probcut_cutoffs);
+                    inc_temp_stat!(temp_fail_highs, record_temp_bucket!(temp));
                     return v;
+                } else if v >= beta {
+                    let dt = read_param!(PROBCUT_HIGH_TEMP_BONUS);
+                    update_temp(&mut temp, dt);
                 }
 
                 if movepicker.done_probcut {
@@ -472,7 +537,7 @@ impl Thread<'_> {
             self,
             depth,
             pv_node,
-            cutnode,
+            temp,
         ) {
             if mv == best_move && considered > 0 {
                 // hash move being generated in a later stage, but we've considered it already
@@ -553,7 +618,7 @@ impl Thread<'_> {
             let maybe_singular = maybe_singular!(root, depth, singular, mv, best_move, tt_depth, tt_bound, tt_score);
 
             let extension = if maybe_singular {
-                match self.singularity(position, best_move, tt_score, depth, pv_node, alpha, beta, cutnode, quiet) {
+                match self.singularity(position, best_move, tt_score, depth, pv_node, alpha, beta, quiet, temp) {
                     SingularityResult::Extension(ext) => ext,
                     SingularityResult::MultiCut => return tt_score - depth as i32 * 2,
                     SingularityResult::NoChange => (in_check && !root) as i32,
@@ -584,6 +649,15 @@ impl Thread<'_> {
                 self.double_extensions += 1;
             }
 
+            let mut nt = temp;
+            let dt = lmr_temp(played);
+            update_temp(&mut nt, dt);
+
+            if movepicker.this >= MovePickerStage::BadCaps {
+                let dt = read_param!(BAD_STAGE_TEMP_MALUS);
+                update_temp(&mut temp, dt);
+            }
+
             let eval = if played == 1 {
                 // Internal Aspiration Window:
                 // Assume the value of our lower-depth search has some merit, so we may be able to search on
@@ -600,10 +674,10 @@ impl Thread<'_> {
                     loop {
                         if (w_alpha == alpha && w_beta == beta) || w_beta - w_alpha == 1 {
                             inc_stat!(iaw_pointless);
-                            break -self.negamax(position, new_depth, -w_beta, -w_alpha, false);
+                            break -self.negamax(position, new_depth, -w_beta, -w_alpha, -nt);
                         }
 
-                        let w_eval = -self.negamax(position, new_depth, -w_beta, -w_alpha, false);
+                        let w_eval = -self.negamax(position, new_depth, -w_beta, -w_alpha, -nt);
 
                         if w_eval > w_alpha && w_eval < w_beta {
                             inc_stat!(iaw_exact_exits);
@@ -633,11 +707,11 @@ impl Thread<'_> {
 
                         if fails >= 2 {
                             inc_stat!(iaw_fails);
-                            break -self.negamax(position, new_depth, -beta, -alpha, false);
+                            break -self.negamax(position, new_depth, -beta, -alpha, -nt);
                         }
                     }
                 } else {
-                    -self.negamax(position, new_depth, -beta, -alpha, false)
+                    -self.negamax(position, new_depth, -beta, -alpha, -nt)
                 }
             } else {
                 // Principle Variation Search (PVS):
@@ -657,7 +731,7 @@ impl Thread<'_> {
                         // reduce more when we have reason to expect little from this move
                         r += read_param!(LMR_TT_NOISY) * tt_move_capture as i32;
                         r += read_param!(LMR_NON_IMP) * !improving as i32;
-                        r += read_param!(LMR_CUTNODE) * cutnode as i32;
+                        r += read_param!(LMR_CUTNODE) * (temp > read_param!(LMR_TEMP_REDUCTION_MINIMUM)) as i32;
 
                         // reduce less when this move is important/promising
                         r -= read_param!(LMR_PV) * pv_node as i32;
@@ -673,7 +747,7 @@ impl Thread<'_> {
                     let reduced_depth = (new_depth as i32 - r).clamp(1, new_depth as i32) as u8;
                     // avoid dropping into qsearch or extending
 
-                    r_eval = -self.negamax(position, reduced_depth, -alpha - 1, -alpha, true);
+                    r_eval = -self.negamax(position, reduced_depth, -alpha - 1, -alpha, -nt);
                     r_eval > alpha && reduced_depth < new_depth
                 } else {
                     true
@@ -682,13 +756,13 @@ impl Thread<'_> {
                 if do_full_depth_zw {
                     inc_stat!(lmr_full_depth);
                     // failed to prove that move is bad -> re-search with same depth but still zw
-                    r_eval = -self.negamax(position, new_depth, -alpha - 1, -alpha, !cutnode);
+                    r_eval = -self.negamax(position, new_depth, -alpha - 1, -alpha, -nt);
                 }
 
                 if pv_node && r_eval > alpha {
                     inc_stat!(lmr_pv_exits);
                     // move actually inside PV window -> search at full depth
-                    r_eval = -self.negamax(position, new_depth, -beta, -alpha, false);
+                    r_eval = -self.negamax(position, new_depth, -beta, -alpha, -nt);
                 }
                 r_eval
             };
@@ -745,6 +819,14 @@ impl Thread<'_> {
             if corrhist_update_allowed!(in_check, best_move, position, hash_flag, best_score, static_eval) {
                 self.update_corrhist(position, depth, best_score - static_eval);
             }
+        }
+
+        if best_score >= beta {
+            inc_temp_stat!(temp_fail_highs, record_temp_bucket!(temp));
+        } else if best_score > original_alpha {
+            inc_temp_stat!(temp_exact, record_temp_bucket!(temp));
+        } else {
+            inc_temp_stat!(temp_fail_lows, record_temp_bucket!(temp));
         }
 
         best_score
@@ -823,7 +905,7 @@ impl Thread<'_> {
             self,
             0,
             false,
-            false,
+            0,
         ) {
             if !position.is_legal(mv) {
                 continue;
@@ -943,7 +1025,7 @@ fn aspiration_window(position: &mut Board, s: &mut Thread, id: &mut IterDeepData
             (id.alpha, id.beta) = (-INFINITY, INFINITY);
         }
 
-        let eval = s.negamax(position, id.depth.max(1), id.alpha, id.beta, false);
+        let eval = s.negamax(position, id.depth.max(1), id.alpha, id.beta, 0);
 
         if s.is_stopped() || Instant::now() >= s.timer.end_time {
             if s.moves_fully_searched > 0 {
