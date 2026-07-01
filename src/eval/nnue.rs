@@ -30,7 +30,7 @@ struct Network {
     output_biases: [i16; OUTPUT_BUCKETS],
 }
 
-static MODEL: Network = unsafe { mem::transmute(*include_bytes!("../nets/output_buckets.bin")) };
+static MODEL: Network = unsafe { mem::transmute(*include_bytes!("../nets/bamboo_stick.bin")) };
 
 pub fn output_bucket(board: &Board) -> usize {
     let divisor = 32usize.div_ceil(OUTPUT_BUCKETS);
