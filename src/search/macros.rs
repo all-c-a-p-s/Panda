@@ -27,7 +27,7 @@ macro_rules! singularity_de {
 #[macro_export]
 macro_rules! tt_cutoff {
     ($singular:expr, $root:expr, $pv_node:expr, $depth:expr, $entry:expr,
-     $beta:expr, $alpha:expr, $cutnode:expr, $in_check:expr) => {
+     $beta:expr, $alpha:expr, $temp:expr, $in_check:expr) => {
         !$singular
             && !$root
             && (!$pv_node
@@ -38,7 +38,7 @@ macro_rules! tt_cutoff {
                     EntryFlag::UpperBound => $entry.eval <= $alpha,
                     EntryFlag::Missing => false,
                 }
-                || ($cutnode
+                || ($temp > read_param!(TT_FP_TEMP_MINIMUM)
                     && $entry.eval - read_param!(TT_FUTILITY_MARGIN) * ($depth as i32 - $entry.depth as i32).max(1)
                         >= $beta
                     && $entry.flag != EntryFlag::UpperBound
@@ -77,9 +77,10 @@ macro_rules! can_rfp {
 
 #[macro_export]
 macro_rules! can_razor {
-    ($depth:expr, $static_eval:expr, $improving:expr, $opponent_captured:expr,
+    ($temp: expr, $depth:expr, $static_eval:expr, $improving:expr, $opponent_captured:expr,
      $opponent_worsening:expr, $alpha:expr) => {
-        $depth <= read_param!(MAX_RAZOR_DEPTH)
+        $temp < read_param!(RAZORING_TEMP_MAXIMUM)
+            && $depth <= read_param!(MAX_RAZOR_DEPTH)
             && $opponent_captured
             && $static_eval
                 + read_param!(RAZORING_MARGIN) * ($depth as i32 + $improving as i32 - $opponent_worsening as i32)
@@ -89,8 +90,9 @@ macro_rules! can_razor {
 
 #[macro_export]
 macro_rules! can_nmp {
-    ($position:expr, $static_eval:expr, $depth:expr, $beta:expr, $root:expr) => {
-        !$position.is_kp_endgame()
+    ($temp: expr, $position:expr, $static_eval:expr, $depth:expr, $beta:expr, $root:expr) => {
+        $temp > read_param!(NMP_TEMP_MINIMUM)
+            && !$position.is_kp_endgame()
             && !$position.last_move_null
             && $static_eval + read_param!(NMP_FACTOR) * $depth as i32 - read_param!(NMP_BASE) >= $beta
             && !$root
@@ -99,8 +101,8 @@ macro_rules! can_nmp {
 
 #[macro_export]
 macro_rules! try_probcut {
-    ($cutnode: expr, $depth: expr, $beta: expr, $tt_hit: expr, $tt_depth: expr, $tt_score: expr, $tt_move_exists: expr, $tt_move_capture: expr) => {
-        $cutnode
+    ($temp: expr, $depth: expr, $beta: expr, $tt_hit: expr, $tt_depth: expr, $tt_score: expr, $tt_move_exists: expr, $tt_move_capture: expr) => {
+        $temp > read_param!(PROBCUT_TEMP_MINIMUM)
             && $depth >= 5
             && !is_terminal($beta)
             && !($tt_hit && $tt_depth + 6 >= $depth && $tt_score < $beta + 200)
@@ -110,8 +112,8 @@ macro_rules! try_probcut {
 
 #[macro_export]
 macro_rules! do_iir {
-    ($pv_node:expr, $cutnode:expr, $depth:expr, $tt_move:expr) => {
-        ($pv_node || $cutnode) && $depth >= read_param!(IIR_DEPTH_MINIMUM) && !$tt_move
+    ($pv_node:expr, $temp:expr, $depth:expr, $tt_move:expr) => {
+        ($pv_node || $temp > read_param!(IIR_TEMP_MINIMUM)) && $depth >= read_param!(IIR_DEPTH_MINIMUM) && !$tt_move
     };
 }
 
@@ -212,6 +214,57 @@ macro_rules! inc_stat {
     ($field:ident) => {{}};
 }
 
+#[macro_export]
+macro_rules! binary_dt {
+    ($cond: expr, $bonus: ident) => {
+        if $cond { read_param!($bonus) } else { -read_param!($bonus) }
+    };
+}
+
+#[macro_export]
+macro_rules! ternary_dt {
+    ($eval: expr, $alpha: expr, $beta: expr, $bonus: ident) => {
+        if $eval >= $beta {
+            read_param!($bonus)
+        } else if $eval < $alpha {
+            -read_param!($bonus)
+        } else {
+            0
+        }
+    };
+}
+
+#[cfg(feature = "stats")]
+#[macro_export]
+macro_rules! record_temp_bucket {
+    ($temp:expr) => {{
+        let bucket = $crate::search::search_stats::stats::temp_bucket($temp);
+        $crate::search::search_stats::stats::STATS.temp_entries[bucket]
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        bucket
+    }};
+}
+
+#[cfg(not(feature = "stats"))]
+#[macro_export]
+macro_rules! record_temp_bucket {
+    ($temp:expr) => {{ 0usize }};
+}
+
+#[cfg(feature = "stats")]
+#[macro_export]
+macro_rules! inc_temp_stat {
+    ($field:ident, $bucket:expr) => {{
+        $crate::search::search_stats::stats::STATS.$field[$bucket].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }};
+}
+
+#[cfg(not(feature = "stats"))]
+#[macro_export]
+macro_rules! inc_temp_stat {
+    ($field:ident, $bucket:expr) => {{}};
+}
+
 pub(crate) use can_nmp;
 pub(crate) use can_razor;
 pub(crate) use can_rfp;
@@ -223,12 +276,16 @@ pub(crate) use do_iir;
 pub(crate) use do_lmp;
 pub(crate) use do_see_pruning;
 pub(crate) use inc_stat;
+pub(crate) use inc_temp_stat;
 pub(crate) use maybe_singular;
 pub(crate) use not_direct_cutoff;
+#[allow(unused)]
+pub(crate) use record_temp_bucket;
 pub(crate) use should_correct_with_tt;
 pub(crate) use should_reduce;
 pub(crate) use singularity_de;
 pub(crate) use singularity_te;
+pub(crate) use ternary_dt;
 pub(crate) use top;
 pub(crate) use try_probcut;
 pub(crate) use tt_cutoff;

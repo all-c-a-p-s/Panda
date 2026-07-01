@@ -118,7 +118,7 @@ impl Node {
             // because we don't want to just hit them and return zero
             let mut t = Thread::new(Instant::now() + Duration::from_millis(10), INFINITY as usize, tt, info, &stop);
 
-            let score = -t.negamax(&mut self.board, 4, -INFINITY, INFINITY, false);
+            let score = -t.negamax(&mut self.board, 4, -INFINITY, INFINITY, 0);
 
             scores.push((score, mv));
             best_score = best_score.max(score);

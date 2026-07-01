@@ -3,6 +3,32 @@ pub mod stats {
     use std::fmt;
     use std::sync::atomic::{AtomicU32, Ordering};
 
+    pub const TEMP_BUCKETS: usize = 9;
+
+    pub const TEMP_BUCKET_RANGES: [(i32, i32); TEMP_BUCKETS] = [
+        (-1024, -797), // 228
+        (-796, -569),  // 228
+        (-568, -341),  // 228
+        (-340, -113),  // 228
+        (-112, 115),   // 228
+        (116, 343),    // 228
+        (344, 570),    // 227
+        (571, 797),    // 227
+        (798, 1024),   // 227
+    ];
+
+    pub fn temp_bucket(temp: i32) -> usize {
+        let temp = temp.clamp(-1024, 1024);
+
+        for (i, &(lo, hi)) in TEMP_BUCKET_RANGES.iter().enumerate() {
+            if lo <= temp && temp <= hi {
+                return i;
+            }
+        }
+
+        unreachable!()
+    }
+
     pub struct SearchStats {
         pub nodes: AtomicU32,
         pub qnodes: AtomicU32,
@@ -10,6 +36,11 @@ pub mod stats {
         pub pv_nodes: AtomicU32,
         pub cutnodes: AtomicU32,
         pub all_nodes: AtomicU32,
+
+        pub temp_entries: [AtomicU32; TEMP_BUCKETS],
+        pub temp_fail_lows: [AtomicU32; TEMP_BUCKETS],
+        pub temp_exact: [AtomicU32; TEMP_BUCKETS],
+        pub temp_fail_highs: [AtomicU32; TEMP_BUCKETS],
 
         pub mxd_nodes: AtomicU32,
         pub mdp_cutoffs: AtomicU32,
@@ -73,6 +104,11 @@ pub mod stats {
                 pv_nodes: AtomicU32::new(0),
                 cutnodes: AtomicU32::new(0),
                 all_nodes: AtomicU32::new(0),
+
+                temp_entries: [const { AtomicU32::new(0) }; TEMP_BUCKETS],
+                temp_fail_lows: [const { AtomicU32::new(0) }; TEMP_BUCKETS],
+                temp_exact: [const { AtomicU32::new(0) }; TEMP_BUCKETS],
+                temp_fail_highs: [const { AtomicU32::new(0) }; TEMP_BUCKETS],
 
                 mxd_nodes: AtomicU32::new(0),
                 mdp_cutoffs: AtomicU32::new(0),
@@ -165,10 +201,45 @@ pub mod stats {
             let qs_moveloop_entries = load!(qs_moveloop_entries);
             let qs_moves_considered = load!(qs_moves_considered);
 
+            writeln!(f, "\nSEARCH STATS:")?;
+            writeln!(f, "\ntemperature distribution at exit:")?;
+            writeln!(f, "  {:>14} {:>10} {:>9}  {}", "range", "nodes", "nodes%", "bar")?;
+
+            let max_bucket = (0..TEMP_BUCKETS).map(|i| self.temp_entries[i].load(Ordering::Relaxed)).max().unwrap_or(0);
+
+            for i in 0..TEMP_BUCKETS {
+                let n = self.temp_entries[i].load(Ordering::Relaxed);
+                let (lo, hi) = TEMP_BUCKET_RANGES[i];
+
+                let bar_len = if max_bucket == 0 { 0 } else { (40 * n / max_bucket) as usize };
+
+                let bar = "#".repeat(bar_len);
+
+                writeln!(f, "  [{lo:>5},{hi:>5}] {n:>10} {:>8.2}%  {bar}", Self::pct(n, nodes),)?;
+            }
+
+            writeln!(f, "\ntemperature outcomes:")?;
+            writeln!(f, "  {:>14} {:>10} {:>9} {:>9} {:>9}", "range", "nodes", "low%", "exact%", "high%",)?;
+            for i in 0..TEMP_BUCKETS {
+                let n = self.temp_entries[i].load(Ordering::Relaxed);
+                let low = self.temp_fail_lows[i].load(Ordering::Relaxed);
+                let exact = self.temp_exact[i].load(Ordering::Relaxed);
+                let high = self.temp_fail_highs[i].load(Ordering::Relaxed);
+
+                let (lo, hi) = TEMP_BUCKET_RANGES[i];
+
+                writeln!(
+                    f,
+                    "  [{lo:>5},{hi:>5}] {n:>10} {:>8.2}% {:>8.2}% {:>8.2}%",
+                    Self::pct(low, n),
+                    Self::pct(exact, n),
+                    Self::pct(high, n),
+                )?;
+            }
+
             write!(
                 f,
-                "\
-Search stats
+                "
 
 nodes:
   main nodes:          {nodes}
