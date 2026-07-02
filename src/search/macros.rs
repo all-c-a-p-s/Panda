@@ -265,6 +265,7 @@ macro_rules! inc_temp_stat {
     ($field:ident, $bucket:expr) => {{}};
 }
 
+pub(crate) use binary_dt;
 pub(crate) use can_nmp;
 pub(crate) use can_razor;
 pub(crate) use can_rfp;

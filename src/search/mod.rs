@@ -13,7 +13,6 @@ pub use transposition::*;
 
 use arrayvec::ArrayVec;
 
-use crate::binary_dt;
 use crate::board::Board;
 use crate::board::r#move::{Move, MoveList, NULL_MOVE};
 use crate::eval::evaluate;
@@ -97,8 +96,8 @@ tuneable_params! {
     IMPROVING_TEMP_BONUS, i32, 398, 0, 1024;
     OPP_WORSENING_TEMP_BONUS, i32, 157, 0, 1024;
     RAZOR_HIGH_TEMP_BONUS, i32, 157, 0, 1024;
-    PROBCUT_HIGH_TEMP_BONUS, i32, 289, 0, 1024;
-    BAD_STAGE_TEMP_MALUS, i32, -336, -1024, 0;
+    PROBCUT_HIGH_TEMP_BONUS, i32, 320, 0, 1024;
+    BAD_STAGE_TEMP_MALUS, i32, -433, -1024, 0;
 
     // Tempterature entry cutoffs
     TT_FP_TEMP_MINIMUM, i32, -237, -1024, 1024;
@@ -132,10 +131,14 @@ fn update_temp(temp: &mut i32, bonus: i32) {
     *temp += delta;
 }
 
+fn softsign(x: f64) -> f64 {
+    x / (1.0 + x.abs())
+}
+
 fn lmr_temp(played: u8) -> i32 {
     let k = (played - 1) as f64 / 10.0;
 
-    -(read_param!(LMR_TEMP_SCALE) as f64 * (k / (1.0 + k))) as i32
+    -(read_param!(LMR_TEMP_SCALE) as f64 * softsign(k)) as i32
 }
 
 enum SingularityResult {
@@ -655,7 +658,7 @@ impl Thread<'_> {
 
             if movepicker.this >= MovePickerStage::BadCaps {
                 let dt = read_param!(BAD_STAGE_TEMP_MALUS);
-                update_temp(&mut temp, dt);
+                update_temp(&mut nt, dt);
             }
 
             let eval = if played == 1 {
