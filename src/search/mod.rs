@@ -90,23 +90,25 @@ tuneable_params! {
     STAND_PAT_BETA_WEIGHT, i32, 209, 0, 1024;
 
     // Temperature Bonus parameters
-    LMR_TEMP_SCALE, i32, 611, 0, 1024;
-    STATIC_EVAL_TEMP_BONUS, i32, 146, 0, 1024;
-    TT_SCORE_TEMP_BONUS, i32, 194, 0, 1024;
-    IMPROVING_TEMP_BONUS, i32, 398, 0, 1024;
-    OPP_WORSENING_TEMP_BONUS, i32, 157, 0, 1024;
-    RAZOR_HIGH_TEMP_BONUS, i32, 157, 0, 1024;
-    PROBCUT_HIGH_TEMP_BONUS, i32, 320, 0, 1024;
-    BAD_STAGE_TEMP_MALUS, i32, -433, -1024, 0;
+    LMR_TEMP_SCALE, i32, 540, 0, 1024;
+    LMR_TEMP_HIGH_A, i32, 207, 0, 1024;
+    LMR_TEMP_HIGH_B, i32, 338, 0, 1024;
+    STATIC_EVAL_TEMP_BONUS, i32, 163, 0, 1024;
+    TT_SCORE_TEMP_BONUS, i32, 213, 0, 1024;
+    IMPROVING_TEMP_BONUS, i32, 306, 0, 1024;
+    OPP_WORSENING_TEMP_BONUS, i32, 163, 0, 1024;
+    RAZOR_HIGH_TEMP_BONUS, i32, 120, 0, 1024;
+    PROBCUT_HIGH_TEMP_BONUS, i32, 296, 0, 1024;
+    BAD_STAGE_TEMP_MALUS, i32, -429, -1024, 0;
 
     // Tempterature entry cutoffs
-    TT_FP_TEMP_MINIMUM, i32, -237, -1024, 1024;
-    IIR_TEMP_MINIMUM, i32, -20, -1024, 1024;
-    NMP_TEMP_MINIMUM, i32, -190, -1024, 1024;
-    PROBCUT_TEMP_MINIMUM, i32, -180, -1024, 1024;
-    LMR_TEMP_REDUCTION_MINIMUM, i32, -116, -1024, 1024;
-    MOVEPICKER_CUTNODE_TEMP_MINIMUM, i32, 209, -1024, 1024;
-    RAZORING_TEMP_MAXIMUM, i32, 44, -1024, 1024;
+    TT_FP_TEMP_MINIMUM, i32, -7, -1024, 1024;
+    IIR_TEMP_MINIMUM, i32, -259, -1024, 1024;
+    NMP_TEMP_MINIMUM, i32, -137, -1024, 1024;
+    PROBCUT_TEMP_MINIMUM, i32, -314, -1024, 1024;
+    LMR_TEMP_REDUCTION_MINIMUM, i32, -65, -1024, 1024;
+    MOVEPICKER_CUTNODE_TEMP_MINIMUM, i32, 249, -1024, 1024;
+    RAZORING_TEMP_MAXIMUM, i32, 102, -1024, 1024;
 
     // time managament stuff
     TMAN_NODE_MULT_A, i32, 1525, 512, 8192;
@@ -135,10 +137,23 @@ fn softsign(x: f64) -> f64 {
     x / (1.0 + x.abs())
 }
 
-fn lmr_temp(played: u8) -> i32 {
+#[derive(Clone, Copy)]
+enum LMRStage {
+    LDZW,
+    ZW,
+    PV,
+}
+
+fn lmr_temp(played: u8, stg: LMRStage) -> i32 {
     let k = (played - 1) as f64 / 10.0;
 
-    -(read_param!(LMR_TEMP_SCALE) as f64 * softsign(k)) as i32
+    let p = match stg {
+        LMRStage::LDZW => -read_param!(LMR_TEMP_SCALE),
+        LMRStage::ZW => read_param!(LMR_TEMP_HIGH_A),
+        LMRStage::PV => read_param!(LMR_TEMP_HIGH_B),
+    } as f64;
+
+    (p * softsign(k)) as i32
 }
 
 enum SingularityResult {
@@ -313,7 +328,7 @@ impl Thread<'_> {
                 return entry.eval;
             }
 
-            let dt = ternary_dt!(tt_score, alpha, beta, TT_SCORE_TEMP_BONUS);
+            let dt = tt_dt!(tt_score, alpha, beta, entry, TT_SCORE_TEMP_BONUS);
             update_temp(&mut temp, dt);
         }
 
@@ -624,10 +639,10 @@ impl Thread<'_> {
                 match self.singularity(position, best_move, tt_score, depth, pv_node, alpha, beta, quiet, temp) {
                     SingularityResult::Extension(ext) => ext,
                     SingularityResult::MultiCut => return tt_score - depth as i32 * 2,
-                    SingularityResult::NoChange => (in_check && !root) as i32,
+                    SingularityResult::NoChange => 0,
                 }
             } else {
-                (in_check && !root) as i32
+                0
             };
 
             // checked to be legal above
@@ -653,7 +668,7 @@ impl Thread<'_> {
             }
 
             let mut nt = temp;
-            let dt = lmr_temp(played);
+            let dt = lmr_temp(played, LMRStage::LDZW);
             update_temp(&mut nt, dt);
 
             if movepicker.this >= MovePickerStage::BadCaps {
@@ -757,12 +772,17 @@ impl Thread<'_> {
                 };
 
                 if do_full_depth_zw {
+                    let dt = lmr_temp(played, LMRStage::ZW);
+                    update_temp(&mut nt, dt);
                     inc_stat!(lmr_full_depth);
                     // failed to prove that move is bad -> re-search with same depth but still zw
                     r_eval = -self.negamax(position, new_depth, -alpha - 1, -alpha, -nt);
                 }
 
                 if pv_node && r_eval > alpha {
+                    let dt = lmr_temp(played, LMRStage::PV);
+                    update_temp(&mut nt, dt);
+
                     inc_stat!(lmr_pv_exits);
                     // move actually inside PV window -> search at full depth
                     r_eval = -self.negamax(position, new_depth, -beta, -alpha, -nt);

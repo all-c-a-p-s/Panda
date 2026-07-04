@@ -222,6 +222,19 @@ macro_rules! binary_dt {
 }
 
 #[macro_export]
+macro_rules! tt_dt {
+    ($eval: expr, $alpha: expr, $beta: expr, $entry: expr, $bonus: ident) => {
+        match ($eval, $entry.flag) {
+            (x, y) if x >= $beta && y != EntryFlag::UpperBound => read_param!($bonus),
+            (x, y) if x >= $alpha && y != EntryFlag::UpperBound => read_param!($bonus) / 4,
+            (x, y) if x < $alpha && y != EntryFlag::LowerBound => -read_param!($bonus),
+            (x, y) if x < $alpha && y != EntryFlag::LowerBound => -read_param!($bonus) / 4,
+            _ => 0,
+        }
+    };
+}
+
+#[macro_export]
 macro_rules! ternary_dt {
     ($eval: expr, $alpha: expr, $beta: expr, $bonus: ident) => {
         if $eval >= $beta {
@@ -290,3 +303,4 @@ pub(crate) use ternary_dt;
 pub(crate) use top;
 pub(crate) use try_probcut;
 pub(crate) use tt_cutoff;
+pub(crate) use tt_dt;
