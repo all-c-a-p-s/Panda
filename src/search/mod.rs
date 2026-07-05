@@ -635,15 +635,16 @@ impl Thread<'_> {
             // others. We should therefore extend to investigate it further.
             let maybe_singular = maybe_singular!(root, depth, singular, mv, best_move, tt_depth, tt_bound, tt_score);
 
-            let extension = if maybe_singular {
-                match self.singularity(position, best_move, tt_score, depth, pv_node, alpha, beta, quiet, temp) {
-                    SingularityResult::Extension(ext) => ext,
-                    SingularityResult::MultiCut => return tt_score - depth as i32 * 2,
-                    SingularityResult::NoChange => 0,
-                }
-            } else {
-                0
-            };
+            let mut extension = 0;
+
+            if maybe_singular {
+                extension =
+                    match self.singularity(position, best_move, tt_score, depth, pv_node, alpha, beta, quiet, temp) {
+                        SingularityResult::Extension(ext) => ext,
+                        SingularityResult::MultiCut => return tt_score - depth as i32 * 2,
+                        SingularityResult::NoChange => 0,
+                    };
+            }
 
             // checked to be legal above
             let commit = position.play_unchecked(mv, Some(&mut self.info.stck));
@@ -823,7 +824,8 @@ impl Thread<'_> {
 
                 if eval >= beta {
                     inc_stat!(beta_cutoffs);
-                    self.update_search_tables(position, &quiets, &caps, mv, tactical, depth);
+                    let can_be_killer = movepicker.this > MovePickerStage::GoodCaps;
+                    self.update_search_tables(position, &quiets, &caps, mv, tactical, can_be_killer, depth);
                     hash_flag = EntryFlag::LowerBound;
                     break;
                 }

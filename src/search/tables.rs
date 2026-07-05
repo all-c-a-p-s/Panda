@@ -74,12 +74,13 @@ impl Thread<'_> {
         tacticals: &[Move],
         cutoff_move: Move,
         tactical: bool,
+        can_be_killer: bool,
         depth: u8,
     ) {
         self.update_history(b, quiets, tacticals, cutoff_move, tactical, depth);
         self.update_counter_correlation(cutoff_move, depth, tactical, tacticals, quiets, b);
         self.update_followup_correlation(cutoff_move, depth, tactical, tacticals, quiets, b);
-        if !tactical {
+        if can_be_killer {
             self.update_killer_moves(cutoff_move);
         }
     }
