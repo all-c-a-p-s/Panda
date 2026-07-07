@@ -90,25 +90,26 @@ tuneable_params! {
     STAND_PAT_BETA_WEIGHT, i32, 209, 0, 1024;
 
     // Temperature Bonus parameters
-    LMR_TEMP_SCALE, i32, 540, 0, 1024;
-    LMR_TEMP_HIGH_A, i32, 207, 0, 1024;
-    LMR_TEMP_HIGH_B, i32, 338, 0, 1024;
-    STATIC_EVAL_TEMP_BONUS, i32, 163, 0, 1024;
-    TT_SCORE_TEMP_BONUS, i32, 213, 0, 1024;
-    IMPROVING_TEMP_BONUS, i32, 306, 0, 1024;
-    OPP_WORSENING_TEMP_BONUS, i32, 163, 0, 1024;
-    RAZOR_HIGH_TEMP_BONUS, i32, 120, 0, 1024;
-    PROBCUT_HIGH_TEMP_BONUS, i32, 296, 0, 1024;
-    BAD_STAGE_TEMP_MALUS, i32, -429, -1024, 0;
+    LMR_TEMP_SCALE_A, i32, 512, 0, 1024;
+    LMR_TEMP_SCALE_B, i32, 118, 0, 1024;
+    LMR_TEMP_HIGH_A, i32, 143, 0, 1024;
+    LMR_TEMP_HIGH_B, i32, 408, 0, 1024;
+    STATIC_EVAL_TEMP_BONUS, i32, 188, 0, 1024;
+    TT_SCORE_TEMP_BONUS, i32, 235, 0, 1024;
+    IMPROVING_TEMP_BONUS, i32, 383, 0, 1024;
+    OPP_WORSENING_TEMP_BONUS, i32, 178, 0, 1024;
+    RAZOR_HIGH_TEMP_BONUS, i32, 145, 0, 1024;
+    PROBCUT_HIGH_TEMP_BONUS, i32, 391, 0, 1024;
+    BAD_STAGE_TEMP_MALUS, i32, -386, -1024, 0;
 
     // Tempterature entry cutoffs
-    TT_FP_TEMP_MINIMUM, i32, -7, -1024, 1024;
-    IIR_TEMP_MINIMUM, i32, -259, -1024, 1024;
-    NMP_TEMP_MINIMUM, i32, -137, -1024, 1024;
-    PROBCUT_TEMP_MINIMUM, i32, -314, -1024, 1024;
-    LMR_TEMP_REDUCTION_MINIMUM, i32, -65, -1024, 1024;
-    MOVEPICKER_CUTNODE_TEMP_MINIMUM, i32, 249, -1024, 1024;
-    RAZORING_TEMP_MAXIMUM, i32, 102, -1024, 1024;
+    TT_FP_TEMP_MINIMUM, i32, 103, -1024, 1024;
+    IIR_TEMP_MINIMUM, i32, -466, -1024, 1024;
+    NMP_TEMP_MINIMUM, i32, -84, -1024, 1024;
+    PROBCUT_TEMP_MINIMUM, i32, -288, -1024, 1024;
+    LMR_TEMP_REDUCTION_MINIMUM, i32, 46, -1024, 1024;
+    MOVEPICKER_CUTNODE_TEMP_MINIMUM, i32, 139, -1024, 1024;
+    RAZORING_TEMP_MAXIMUM, i32, 57, -1024, 1024;
 
     // time managament stuff
     TMAN_NODE_MULT_A, i32, 1525, 512, 8192;
@@ -145,10 +146,10 @@ enum LMRStage {
 }
 
 fn lmr_temp(played: u8, stg: LMRStage) -> i32 {
-    let k = (played - 1) as f64 / 10.0;
+    let k = (played - 1) as f64 * read_param!(LMR_TEMP_SCALE_B) as f64 / 1024.0;
 
     let p = match stg {
-        LMRStage::LDZW => -read_param!(LMR_TEMP_SCALE),
+        LMRStage::LDZW => -read_param!(LMR_TEMP_SCALE_A),
         LMRStage::ZW => read_param!(LMR_TEMP_HIGH_A),
         LMRStage::PV => read_param!(LMR_TEMP_HIGH_B),
     } as f64;
