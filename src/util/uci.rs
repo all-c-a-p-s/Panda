@@ -373,6 +373,8 @@ fn set_options(words: &[&str], opts: &mut UciOptions, tt: &mut TranspositionTabl
                     PAWN_CORRHIST_WEIGHT,
                     KNB_CORRHIST_WEIGHT,
                     KRQ_CORRHIST_WEIGHT,
+                    HISTORY_PC_SQ_WEIGHT,
+                    HISTORY_SQ_SQ_WEIGHT,
                     LMR_TEMP_SCALE_A,
                     LMR_TEMP_SCALE_B,
                     LMR_TEMP_HIGH_A,

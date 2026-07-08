@@ -32,7 +32,12 @@ impl Thread<'_> {
         let from = mv.square_from();
         let to = mv.square_to();
 
-        self.info.piece_history[pc][to] + self.info.square_history[side][from][to]
+        let pc_sq = read_param!(HISTORY_PC_SQ_WEIGHT);
+        let sq_sq = read_param!(HISTORY_SQ_SQ_WEIGHT);
+
+        let s = pc_sq + sq_sq;
+
+        (pc_sq * self.info.piece_history[pc][to] + sq_sq * self.info.square_history[side][from][to]) / s
     }
 
     pub fn get_cmh(&self, mv: Move, b: &Board) -> i32 {

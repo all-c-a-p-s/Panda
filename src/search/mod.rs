@@ -79,10 +79,12 @@ tuneable_params! {
     LMR_KILLER, i32, 924, 256, 4096;
     LMR_HIST, i32, 1090, 256, 4096;
 
-    // Corrhist weights
+    // Corrhist/History weights
     PAWN_CORRHIST_WEIGHT, i32, 99, 25, 400;
     KNB_CORRHIST_WEIGHT, i32, 109, 25, 400;
     KRQ_CORRHIST_WEIGHT, i32, 104, 25, 400;
+    HISTORY_PC_SQ_WEIGHT, i32, 107, 25, 400;
+    HISTORY_SQ_SQ_WEIGHT, i32, 100, 25, 400;
 
     // LERP weights
     RFP_BETA_WEIGHT, i32, 67, 0, 1024;
