@@ -828,7 +828,10 @@ impl Thread<'_> {
                 if eval >= beta {
                     inc_stat!(beta_cutoffs);
                     let can_be_killer = movepicker.this > MovePickerStage::GoodCaps;
-                    self.update_search_tables(position, &quiets, &caps, mv, tactical, can_be_killer, depth);
+
+                    let hist_depth = depth + (static_eval <= alpha - 20) as u8;
+                    self.update_search_tables(position, &quiets, &caps, mv, tactical, can_be_killer, hist_depth);
+
                     hash_flag = EntryFlag::LowerBound;
                     break;
                 }
