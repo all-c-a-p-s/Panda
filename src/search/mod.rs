@@ -859,6 +859,10 @@ impl Thread<'_> {
         }
 
         if played == 0 {
+            if singular {
+                return alpha;
+            }
+
             return (-INFINITY + self.ply as i32) * in_check as i32;
         }
 
