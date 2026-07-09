@@ -34,12 +34,13 @@ macro_rules! tt_cutoff {
                 && $depth <= $entry.depth
                 && match $entry.flag {
                     EntryFlag::Exact => true,
-                    EntryFlag::LowerBound => $entry.eval >= $beta,
-                    EntryFlag::UpperBound => $entry.eval <= $alpha,
+                    EntryFlag::LowerBound => $entry.eval as i32 >= $beta,
+                    EntryFlag::UpperBound => $entry.eval as i32 <= $alpha,
                     EntryFlag::Missing => false,
                 }
                 || ($temp > read_param!(TT_FP_TEMP_MINIMUM)
-                    && $entry.eval - read_param!(TT_FUTILITY_MARGIN) * ($depth as i32 - $entry.depth as i32).max(1)
+                    && $entry.eval as i32
+                        - read_param!(TT_FUTILITY_MARGIN) * ($depth as i32 - $entry.depth as i32).max(1)
                         >= $beta
                     && $entry.flag != EntryFlag::UpperBound
                     && !$in_check))
@@ -52,8 +53,8 @@ macro_rules! not_direct_cutoff {
         !($depth <= $entry.depth
             && match $entry.flag {
                 EntryFlag::Exact => true,
-                EntryFlag::LowerBound => $entry.eval >= $beta,
-                EntryFlag::UpperBound => $entry.eval <= $alpha,
+                EntryFlag::LowerBound => $entry.eval as i32 >= $beta,
+                EntryFlag::UpperBound => $entry.eval as i32 <= $alpha,
                 EntryFlag::Missing => false,
             })
     };

@@ -26,6 +26,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
 
 pub const INFINITY: i32 = 32_000;
+const NO_EVAL: i32 = -INFINITY;
 pub const MAX_DEPTH: usize = 64;
 pub const MATE: i32 = INFINITY - MAX_DEPTH as i32;
 
@@ -134,6 +135,10 @@ fn update_temp(temp: &mut i32, bonus: i32) {
     let bonus = bonus.clamp(-MAX_TEMP, MAX_TEMP);
     let delta = bonus - *temp * bonus.abs() / MAX_TEMP;
     *temp += delta;
+}
+
+fn is_valid(eval: i32) -> bool {
+    eval != NO_EVAL
 }
 
 fn softsign(x: f64) -> f64 {
@@ -288,7 +293,8 @@ impl Thread<'_> {
 
         let mut hash_flag = EntryFlag::UpperBound;
 
-        let (mut tt_depth, mut tt_bound, mut tt_score, mut tt_hit) = (0, EntryFlag::Missing, 0, false);
+        let (mut tt_depth, mut tt_bound, mut tt_score, mut tt_static_eval, mut tt_hit) =
+            (0, EntryFlag::Missing, 0, NO_EVAL, false);
         let mut best_move = NULL_MOVE;
 
         let in_check = position.checkers != 0;
@@ -313,7 +319,8 @@ impl Thread<'_> {
         if let Some(entry) = self.tt.lookup(position.hash_key) {
             best_move = entry.best_move;
             tt_hit = true;
-            tt_score = entry.eval;
+            tt_score = entry.eval as i32;
+            tt_static_eval = entry.static_eval as i32;
             tt_depth = entry.depth;
             tt_bound = entry.flag;
 
@@ -328,10 +335,10 @@ impl Thread<'_> {
                     inc_stat!(tt_fp_cutoffs);
                 }
 
-                return entry.eval;
+                return tt_score;
             }
 
-            let dt = tt_dt!(tt_score, alpha, beta, entry, TT_SCORE_TEMP_BONUS);
+            let dt = tt_dt!(tt_score as i32, alpha, beta, entry, TT_SCORE_TEMP_BONUS);
             update_temp(&mut temp, dt);
         }
 
@@ -345,7 +352,13 @@ impl Thread<'_> {
         let mut tt_correction = 0;
 
         if !in_check {
-            static_eval = evaluate(position, &top!(self.info.stck));
+            static_eval = if singular {
+                self.info.ss[self.ply].eval
+            } else if is_valid(tt_static_eval) {
+                tt_static_eval
+            } else {
+                evaluate(position, &top!(self.info.stck))
+            };
 
             if should_correct_with_tt!(tt_hit, static_eval, tt_score, tt_bound) {
                 tt_correction = (tt_score - static_eval).abs();
@@ -502,7 +515,14 @@ impl Thread<'_> {
                 self.ply -= 1;
 
                 if v >= probcut_beta {
-                    let hash_entry = TTEntry::new(depth - 3, v, EntryFlag::LowerBound, mv, position.hash_key);
+                    let hash_entry = TTEntry::new(
+                        depth - 3,
+                        v as i16,
+                        static_eval as i16,
+                        EntryFlag::LowerBound,
+                        mv,
+                        position.hash_key,
+                    );
                     self.tt.write(position.hash_key, hash_entry);
                     inc_stat!(probcut_cutoffs);
                     inc_temp_stat!(temp_fail_highs, record_temp_bucket!(temp));
@@ -843,7 +863,8 @@ impl Thread<'_> {
         }
 
         if !self.is_stopped() && !singular {
-            let hash_entry = TTEntry::new(depth, best_score, hash_flag, best_move, position.hash_key);
+            let hash_entry =
+                TTEntry::new(depth, best_score as i16, static_eval as i16, hash_flag, best_move, position.hash_key);
 
             self.tt.write(position.hash_key, hash_entry);
 
@@ -890,11 +911,11 @@ impl Thread<'_> {
             best_move = entry.best_move;
             if match entry.flag {
                 EntryFlag::Exact => true,
-                EntryFlag::LowerBound => entry.eval >= beta,
-                EntryFlag::UpperBound => entry.eval <= alpha,
+                EntryFlag::LowerBound => entry.eval as i32 >= beta,
+                EntryFlag::UpperBound => entry.eval as i32 <= alpha,
                 EntryFlag::Missing => false,
             } {
-                return entry.eval;
+                return entry.eval as i32;
             }
         }
 
@@ -999,7 +1020,8 @@ impl Thread<'_> {
         }
 
         if !self.is_stopped() {
-            let hash_entry = TTEntry::new(0, best_score, hash_flag, best_move, position.hash_key);
+            let hash_entry =
+                TTEntry::new(0, best_score as i16, static_eval as i16, hash_flag, best_move, position.hash_key);
             self.tt.write(position.hash_key, hash_entry);
         }
 
