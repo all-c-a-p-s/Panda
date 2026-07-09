@@ -25,7 +25,7 @@ use crate::util::uci::print_thinking;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::{Duration, Instant};
 
-pub const INFINITY: i32 = 1_000_000_000;
+pub const INFINITY: i32 = 32_000;
 pub const MAX_DEPTH: usize = 64;
 pub const MATE: i32 = INFINITY - MAX_DEPTH as i32;
 
