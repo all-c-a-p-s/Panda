@@ -335,7 +335,13 @@ impl<'a> Searcher<'a> {
             );
         }
 
-        let mut infos = (0..threads - 1).map(|_| SearchInfo::default()).collect::<Vec<_>>();
+        let mut infos = (0..threads.saturating_sub(1))
+            .map(|_| {
+                let mut info = SearchInfo::default();
+                info.stck.set_to(position);
+                info
+            })
+            .collect::<Vec<_>>();
 
         #[cfg(not(feature = "datagen"))]
         std::thread::scope(|s| {
