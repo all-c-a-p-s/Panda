@@ -8,6 +8,11 @@ use crate::{Board, Colour, MAX_MOVES, get_bishop_attacks, get_rook_attacks, lsfb
 
 const MVV: [i32; 6] = [0, 2400, 2400, 4800, 9600, 0];
 
+const HASH_MOVE_SCORE: i32 = 1_000_000;
+const QUEEN_PROMOTION: i32 = 750_000;
+const FIRST_KILLER_MOVE: i32 = 100_000;
+const UNDER_PROMOTION: i32 = -500_000;
+
 //same as MG evaluation weights (haven't updated these in a while)
 pub const SEE_VALUES: [i32; 6] = [85, 306, 322, 490, 925, 0];
 
@@ -262,7 +267,7 @@ impl Move {
             //important for this to come before checking hash move
             //otherwise null move can get given hash move score
         } else if self == *hash_move {
-            read_param!(HASH_MOVE_SCORE)
+            HASH_MOVE_SCORE
         } else if self.is_capture(b) || self.is_en_passant() {
             //we are already in the segment of good/bad captures
             //and we only care about scores relative to the rest of the segment
@@ -284,17 +289,17 @@ impl Move {
         } else if self.is_promotion() {
             match self.promoted_piece() {
                 //promotions sorted by likelihood to be good
-                PieceType::Queen => read_param!(QUEEN_PROMOTION),
-                PieceType::Knight => read_param!(UNDER_PROMOTION),
-                PieceType::Rook => read_param!(UNDER_PROMOTION),
-                PieceType::Bishop => read_param!(UNDER_PROMOTION),
+                PieceType::Queen => QUEEN_PROMOTION,
+                PieceType::Knight => UNDER_PROMOTION,
+                PieceType::Rook => UNDER_PROMOTION,
+                PieceType::Bishop => UNDER_PROMOTION,
                 _ => unreachable!(),
             }
         } else {
             let mut score = s.get_overall_history(self, b, self.piece_moved(b));
 
             if s.info.killer_moves[s.ply] == Some(self) {
-                score += read_param!(FIRST_KILLER_MOVE);
+                score += FIRST_KILLER_MOVE;
             }
             score
         }

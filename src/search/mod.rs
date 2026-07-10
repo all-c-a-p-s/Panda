@@ -55,14 +55,6 @@ tuneable_params! {
     LMP_DEPTH, u8, 4, 1, 12;
     IIR_DEPTH_MINIMUM, u8, 9, 1, 12;
 
-    // move ordering scores
-    HASH_MOVE_SCORE, i32, 1_000_000, 1_000_000, 1_000_000;
-    QUEEN_PROMOTION, i32, 750_000, -999_999, 999_999;
-    WINNING_CAPTURE, i32, 500_000, -999_999, 999_999;
-    FIRST_KILLER_MOVE, i32, 100_000, -999_999, 999_999;
-    LOSING_CAPTURE, i32, -300_000, -999_999, 999_999;
-    UNDER_PROMOTION, i32, -500_000, -999_999, 999_999;
-
     // factors affecting reductions etc
     NMP_FACTOR, i32, 21, 1, 100;
     NMP_BASE, i32, 165, 50, 500;
@@ -81,9 +73,9 @@ tuneable_params! {
     LMR_HIST, i32, 1090, 256, 4096;
 
     // Corrhist/History weights
-    PAWN_CORRHIST_WEIGHT, i32, 99, 25, 400;
-    KNB_CORRHIST_WEIGHT, i32, 109, 25, 400;
-    KRQ_CORRHIST_WEIGHT, i32, 104, 25, 400;
+    PAWN_CORRHIST_WEIGHT, i32, 106, 25, 400;
+    KNB_CORRHIST_WEIGHT, i32, 128, 25, 400;
+    KRQ_CORRHIST_WEIGHT, i32, 115, 25, 400;
     HISTORY_PC_SQ_WEIGHT, i32, 107, 25, 400;
     HISTORY_SQ_SQ_WEIGHT, i32, 100, 25, 400;
 
@@ -92,27 +84,28 @@ tuneable_params! {
     NMP_BETA_WEIGHT, i32, 345, 0, 1024;
     STAND_PAT_BETA_WEIGHT, i32, 209, 0, 1024;
 
-    // Temperature Bonus parameters
-    LMR_TEMP_SCALE_A, i32, 512, 0, 1024;
-    LMR_TEMP_SCALE_B, i32, 118, 0, 1024;
-    LMR_TEMP_HIGH_A, i32, 143, 0, 1024;
-    LMR_TEMP_HIGH_B, i32, 408, 0, 1024;
-    STATIC_EVAL_TEMP_BONUS, i32, 188, 0, 1024;
-    TT_SCORE_TEMP_BONUS, i32, 235, 0, 1024;
-    IMPROVING_TEMP_BONUS, i32, 383, 0, 1024;
-    OPP_WORSENING_TEMP_BONUS, i32, 178, 0, 1024;
-    RAZOR_HIGH_TEMP_BONUS, i32, 145, 0, 1024;
-    PROBCUT_HIGH_TEMP_BONUS, i32, 391, 0, 1024;
-    BAD_STAGE_TEMP_MALUS, i32, -386, -1024, 0;
+    // Temperature bonus parameters
+    LMR_TEMP_SCALE_A, i32, 450, 0, 1024;
+    LMR_TEMP_SCALE_B, i32, 148, 0, 1024;
+    LMR_TEMP_HIGH_A, i32, 118, 0, 1024;
+    LMR_TEMP_HIGH_B, i32, 494, 0, 1024;
+    STATIC_EVAL_TEMP_BONUS, i32, 32, 0, 1024;
+    TT_SCORE_TEMP_BONUS, i32, 269, 0, 1024;
+    IMPROVING_TEMP_BONUS, i32, 245, 0, 1024;
+    OPP_WORSENING_TEMP_BONUS, i32, 50, 0, 1024;
+    RAZOR_HIGH_TEMP_BONUS, i32, 151, 0, 1024;
+    PROBCUT_HIGH_TEMP_BONUS, i32, 332, 0, 1024;
+    BAD_STAGE_TEMP_MALUS, i32, -420, -1024, 0;
+    TEMP_FAILING_LOW_SCALE, i32, -273, -1024, 0;
 
-    // Tempterature entry cutoffs
-    TT_FP_TEMP_MINIMUM, i32, 103, -1024, 1024;
-    IIR_TEMP_MINIMUM, i32, -466, -1024, 1024;
-    NMP_TEMP_MINIMUM, i32, -84, -1024, 1024;
-    PROBCUT_TEMP_MINIMUM, i32, -288, -1024, 1024;
-    LMR_TEMP_REDUCTION_MINIMUM, i32, 46, -1024, 1024;
-    MOVEPICKER_CUTNODE_TEMP_MINIMUM, i32, 139, -1024, 1024;
-    RAZORING_TEMP_MAXIMUM, i32, 57, -1024, 1024;
+    // Temperature entry cutoffs
+    TT_FP_TEMP_MINIMUM, i32, 213, -1024, 1024;
+    IIR_TEMP_MINIMUM, i32, -419, -1024, 1024;
+    NMP_TEMP_MINIMUM, i32, -185, -1024, 1024;
+    PROBCUT_TEMP_MINIMUM, i32, -360, -1024, 1024;
+    LMR_TEMP_REDUCTION_MINIMUM, i32, 274, -1024, 1024;
+    MOVEPICKER_CUTNODE_TEMP_MINIMUM, i32, -54, -1024, 1024;
+    RAZORING_TEMP_MAXIMUM, i32, 1, -1024, 1024;
 
     // time managament stuff
     TMAN_NODE_MULT_A, i32, 1525, 512, 8192;
@@ -855,6 +848,14 @@ impl Thread<'_> {
                     hash_flag = EntryFlag::LowerBound;
                     break;
                 }
+            }
+
+            if best_score < original_alpha {
+                // total dt converges to SCALE * LN(played)
+                // I think there's hardly any point specifying how the temp should be updated for
+                // values between alpha and beta since almost all nodes are zw anyway.
+                let dt = read_param!(TEMP_FAILING_LOW_SCALE) / played as i32;
+                update_temp(&mut temp, dt);
             }
         }
 
