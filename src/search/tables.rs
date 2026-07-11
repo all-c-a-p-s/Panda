@@ -98,9 +98,13 @@ impl Thread<'_> {
 
     pub fn get_correlation_history(&self, mv: Move, b: &Board, pc: Piece) -> i32 {
         let pawn_idx = b.pawn_hash as usize & (CORRHIST_SIZE - 1);
+        let knb_idx = b.knb_hash as usize & (CORRHIST_SIZE - 1);
+        let krq_idx = b.krq_hash as usize & (CORRHIST_SIZE - 1);
         let sq = mv.square_to();
 
         self.info.pawn_correlation[pawn_idx][pc][sq]
+            + self.info.knb_correlation[knb_idx][pc][sq]
+            + self.info.krq_correlation[krq_idx][pc][sq]
     }
 
     pub fn update_conthist(
@@ -213,6 +217,8 @@ impl Thread<'_> {
         depth: u8,
     ) {
         let pawn_idx = b.pawn_hash as usize & (CORRHIST_SIZE - 1);
+        let knb_idx = b.knb_hash as usize & (CORRHIST_SIZE - 1);
+        let krq_idx = b.krq_hash as usize & (CORRHIST_SIZE - 1);
 
         let bonus = (150 * depth as i32 - 125).clamp(-HISTORY_MAX, HISTORY_MAX);
         //penalise all moves that have been checked and have not caused beta cutoff
@@ -229,8 +235,13 @@ impl Thread<'_> {
                 let piece = mv.piece_moved(b);
                 let to = mv.square_to();
 
-                let entry = &mut self.info.pawn_correlation[pawn_idx][piece][to];
-                update(entry, mv);
+                for entry in [
+                    &mut self.info.pawn_correlation[pawn_idx][piece][to],
+                    &mut self.info.knb_correlation[knb_idx][piece][to],
+                    &mut self.info.krq_correlation[krq_idx][piece][to],
+                ] {
+                    update(entry, mv);
+                }
             }
         }
     }

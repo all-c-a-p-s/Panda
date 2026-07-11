@@ -84,24 +84,36 @@ impl Zero for CorrelationHistory {
 
 #[derive(Clone)]
 pub struct SearchInfo {
+    // Search stack to retrieve information about what happened previously
     pub ss: [SearchStackEntry; MAX_DEPTH],
+
+    // Reduction / Root Move Nodecount tables
     pub lmr_table: LMRTable,
     pub nodetable: NodeTable,
+
+    // Regular History tables
     pub piece_history: PieceHistory,
     pub square_history: SquareHistory,
     pub caphist: CapHist,
 
+    // Continuation History tables
     pub conthist_1ply: Box<ContHist>,
     pub conthist_2ply: Box<ContHist>,
 
+    // Stored Accumulators so we only have to update forwards
     pub stck: AccumulatorStack,
 
+    // Correction History tables
     pub pawn_corrhist: [[i32; CORRHIST_SIZE]; 2],
     pub knb_corrhist: [[i32; CORRHIST_SIZE]; 2],
     pub krq_corrhist: [[i32; CORRHIST_SIZE]; 2],
 
+    // Correlation History Tables (history specific to features of this board)
     pub pawn_correlation: Box<CorrelationHistory>,
+    pub knb_correlation: Box<CorrelationHistory>,
+    pub krq_correlation: Box<CorrelationHistory>,
 
+    // Moves to store for various purposes
     pub killer_moves: [Option<Move>; MAX_DEPTH],
     pub counter_moves: [[Option<Move>; 64]; 12],
     pub excluded: [Option<Move>; MAX_DEPTH],
@@ -211,8 +223,10 @@ impl Default for SearchInfo {
     fn default() -> Self {
         Self {
             ss: [SearchStackEntry::default(); MAX_DEPTH],
+
             lmr_table: LMRTable::default(),
             nodetable: NodeTable::default(),
+
             piece_history: PieceHistory::ZERO,
             square_history: SquareHistory::ZERO,
             caphist: CapHist::ZERO,
@@ -227,6 +241,8 @@ impl Default for SearchInfo {
             krq_corrhist: [[0; CORRHIST_SIZE]; 2],
 
             pawn_correlation: Box::new(CorrelationHistory::ZERO),
+            knb_correlation: Box::new(CorrelationHistory::ZERO),
+            krq_correlation: Box::new(CorrelationHistory::ZERO),
 
             killer_moves: [None; 64],
             counter_moves: [[None; 64]; 12],
