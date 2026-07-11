@@ -44,18 +44,46 @@ pub struct SearchStackEntry {
     pub eval: i32,
 }
 
+trait Zero {
+    const ZERO: Self;
+}
+
 /// Indexed by [old piece][old sq][new piece][new sq]
 type ContHist = [[[[i32; 64]; 12]; 64]; 12];
-const CONTHIST_ZEROED: ContHist = [[[[0; 64]; 12]; 64]; 12];
+
+impl Zero for ContHist {
+    const ZERO: Self = [[[[0; 64]; 12]; 64]; 12];
+}
+
+/// Indexed by [side][from][to]
+type SquareHistory = [[[i32; 64]; 64]; 2];
+
+impl Zero for SquareHistory {
+    const ZERO: Self = [[[0; 64]; 64]; 2];
+}
+
+/// Indexed by [piece][square to]
+type PieceHistory = [[i32; 64]; 12];
+
+impl Zero for PieceHistory {
+    const ZERO: Self = [[0; 64]; 12];
+}
+
+/// Indexed by [capturing piece][square][captured piece]
+type CapHist = [[[i32; 5]; 64]; 12];
+
+impl Zero for CapHist {
+    const ZERO: Self = [[[0; 5]; 64]; 12];
+}
 
 #[derive(Clone)]
 pub struct SearchInfo {
     pub ss: [SearchStackEntry; MAX_DEPTH],
     pub lmr_table: LMRTable,
     pub nodetable: NodeTable,
-    pub piece_history: [[i32; 64]; 12],
-    pub square_history: [[[i32; 64]; 64]; 2],
-    pub caphist: [[[i32; 5]; 64]; 12],
+    pub piece_history: PieceHistory,
+    pub square_history: SquareHistory,
+    pub caphist: CapHist,
 
     pub conthist_1ply: Box<ContHist>,
     pub conthist_2ply: Box<ContHist>,
@@ -177,12 +205,12 @@ impl Default for SearchInfo {
             ss: [SearchStackEntry::default(); MAX_DEPTH],
             lmr_table: LMRTable::default(),
             nodetable: NodeTable::default(),
-            piece_history: [[0; 64]; 12],
-            square_history: [[[0; 64]; 64]; 2],
-            caphist: [[[0; 5]; 64]; 12],
+            piece_history: PieceHistory::ZERO,
+            square_history: SquareHistory::ZERO,
+            caphist: CapHist::ZERO,
 
-            conthist_1ply: Box::new(CONTHIST_ZEROED),
-            conthist_2ply: Box::new(CONTHIST_ZEROED),
+            conthist_1ply: Box::new(ContHist::ZERO),
+            conthist_2ply: Box::new(ContHist::ZERO),
 
             stck: AccumulatorStack::default(),
 
