@@ -17,7 +17,7 @@ use crate::board::Board;
 use crate::board::r#move::{Move, MoveList, NULL_MOVE};
 use crate::eval::evaluate;
 use crate::search::macros::*;
-use crate::search::tables::OVERALL_HISTORY_MAX;
+use crate::search::tables::EFFECTIVE_HISTORY_MAX;
 use crate::util::helper::{read_param, tuneable_params};
 use crate::util::types::PieceType;
 use crate::util::uci::print_thinking;
@@ -774,7 +774,7 @@ impl Thread<'_> {
                         r -= read_param!(LMR_KILLER) * (is_killer || is_counter) as i32;
 
                         // either increase or decrease reduction depending on history score
-                        r -= read_param!(LMR_HIST) * (hist / (OVERALL_HISTORY_MAX / 2));
+                        r -= read_param!(LMR_HIST) * (hist / (EFFECTIVE_HISTORY_MAX / 2));
                     }
 
                     r /= 1024;

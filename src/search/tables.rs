@@ -9,7 +9,10 @@ use crate::util::helper::piece_type;
 const HISTORY_MAX: i32 = 16_384;
 const CONTHIST_MAX: i32 = 4_096;
 
-pub const OVERALL_HISTORY_MAX: i32 = HISTORY_MAX + CONTHIST_MAX * 2;
+/// This is not the actual maximum value attainable by a history score, but in practice extremely
+/// high history scores won't be reached, so setting this to the maximum attainable history score
+/// will dilute results significantly.
+pub const EFFECTIVE_HISTORY_MAX: i32 = HISTORY_MAX + CONTHIST_MAX * 2;
 
 const CORRHIST_GRAIN: i32 = 256;
 const CORRHIST_MAX: i32 = 256 * 128;
@@ -29,7 +32,7 @@ impl Thread<'_> {
     }
 
     pub fn get_overall_history(&self, mv: Move, b: &Board, pc: Piece) -> i32 {
-        self.get_history(mv, pc) + self.get_conthist(mv, b)
+        self.get_history(mv, pc) + self.get_conthist(mv, b) + self.get_correlation_history(mv, b, pc)
     }
 
     pub fn update_search_tables(
@@ -44,6 +47,7 @@ impl Thread<'_> {
     ) {
         self.update_history(b, quiets, tacticals, cutoff_move, tactical, depth);
         self.update_conthist(cutoff_move, depth, tactical, tacticals, quiets, b);
+        self.update_correlation_history(b, quiets, cutoff_move, tactical, depth);
         if can_be_killer {
             self.update_killer_moves(cutoff_move);
         }
@@ -90,6 +94,13 @@ impl Thread<'_> {
         }
 
         r
+    }
+
+    pub fn get_correlation_history(&self, mv: Move, b: &Board, pc: Piece) -> i32 {
+        let pawn_idx = b.pawn_hash as usize & (CORRHIST_SIZE - 1);
+        let sq = mv.square_to();
+
+        self.info.pawn_correlation[pawn_idx][pc][sq]
     }
 
     pub fn update_conthist(
@@ -167,9 +178,6 @@ impl Thread<'_> {
 
         // penalise all captures that failed to cause cutoff
         for &mv in tacticals {
-            if !mv.is_capture(b) {
-                continue;
-            }
             let piece = mv.piece_moved(b);
             let to = mv.square_to();
             let captured = piece_type(mv.piece_captured(b));
@@ -191,6 +199,37 @@ impl Thread<'_> {
                 let side = b.side_to_move;
 
                 let entry = &mut self.info.square_history[side][from][to];
+                update(entry, mv);
+            }
+        }
+    }
+
+    pub fn update_correlation_history(
+        &mut self,
+        b: &Board,
+        quiets: &[Move],
+        cutoff_move: Move,
+        tactical: bool,
+        depth: u8,
+    ) {
+        let pawn_idx = b.pawn_hash as usize & (CORRHIST_SIZE - 1);
+
+        let bonus = (150 * depth as i32 - 125).clamp(-HISTORY_MAX, HISTORY_MAX);
+        //penalise all moves that have been checked and have not caused beta cutoff
+
+        let update = |entry: &mut i32, mv: Move| {
+            let sign = if mv == cutoff_move { 1 } else { -1 };
+            let delta = (sign * bonus) - *entry * bonus.abs() / HISTORY_MAX;
+            *entry += delta;
+        };
+
+        if !tactical {
+            // penalise all moves quiets that failed to cause cutoff
+            for &mv in quiets {
+                let piece = mv.piece_moved(b);
+                let to = mv.square_to();
+
+                let entry = &mut self.info.pawn_correlation[pawn_idx][piece][to];
                 update(entry, mv);
             }
         }

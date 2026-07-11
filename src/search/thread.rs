@@ -76,6 +76,12 @@ impl Zero for CapHist {
     const ZERO: Self = [[[0; 5]; 64]; 12];
 }
 
+type CorrelationHistory = [PieceHistory; CORRHIST_SIZE];
+
+impl Zero for CorrelationHistory {
+    const ZERO: Self = [PieceHistory::ZERO; CORRHIST_SIZE];
+}
+
 #[derive(Clone)]
 pub struct SearchInfo {
     pub ss: [SearchStackEntry; MAX_DEPTH],
@@ -93,6 +99,8 @@ pub struct SearchInfo {
     pub pawn_corrhist: [[i32; CORRHIST_SIZE]; 2],
     pub knb_corrhist: [[i32; CORRHIST_SIZE]; 2],
     pub krq_corrhist: [[i32; CORRHIST_SIZE]; 2],
+
+    pub pawn_correlation: Box<CorrelationHistory>,
 
     pub killer_moves: [Option<Move>; MAX_DEPTH],
     pub counter_moves: [[Option<Move>; 64]; 12],
@@ -217,6 +225,8 @@ impl Default for SearchInfo {
             pawn_corrhist: [[0; CORRHIST_SIZE]; 2],
             knb_corrhist: [[0; CORRHIST_SIZE]; 2],
             krq_corrhist: [[0; CORRHIST_SIZE]; 2],
+
+            pawn_correlation: Box::new(CorrelationHistory::ZERO),
 
             killer_moves: [None; 64],
             counter_moves: [[None; 64]; 12],
