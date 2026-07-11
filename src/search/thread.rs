@@ -44,7 +44,11 @@ pub struct SearchStackEntry {
     pub eval: i32,
 }
 
-#[derive(Copy, Clone)]
+/// Indexed by [old piece][old sq][new piece][new sq]
+type ContHist = [[[[i32; 64]; 12]; 64]; 12];
+const CONTHIST_ZEROED: ContHist = [[[[0; 64]; 12]; 64]; 12];
+
+#[derive(Clone)]
 pub struct SearchInfo {
     pub ss: [SearchStackEntry; MAX_DEPTH],
     pub lmr_table: LMRTable,
@@ -53,8 +57,8 @@ pub struct SearchInfo {
     pub square_history: [[[i32; 64]; 64]; 2],
     pub caphist: [[[i32; 5]; 64]; 12],
 
-    pub counter_correlation: [[[i32; 64]; 64]; 2],
-    pub followup_correlation: [[[i32; 64]; 64]; 2],
+    pub conthist_1ply: Box<ContHist>,
+    pub conthist_2ply: Box<ContHist>,
 
     pub stck: AccumulatorStack,
 
@@ -177,8 +181,8 @@ impl Default for SearchInfo {
             square_history: [[[0; 64]; 64]; 2],
             caphist: [[[0; 5]; 64]; 12],
 
-            counter_correlation: [[[0; 64]; 64]; 2],
-            followup_correlation: [[[0; 64]; 64]; 2],
+            conthist_1ply: Box::new(CONTHIST_ZEROED),
+            conthist_2ply: Box::new(CONTHIST_ZEROED),
 
             stck: AccumulatorStack::default(),
 

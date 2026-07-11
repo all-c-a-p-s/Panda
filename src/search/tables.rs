@@ -7,9 +7,9 @@ use crate::util::Piece;
 use crate::util::helper::piece_type;
 
 const HISTORY_MAX: i32 = 16_384;
-const CORRELATION_MAX: i32 = 4_096;
+const CONTHIST_MAX: i32 = 4_096;
 
-pub const OVERALL_HISTORY_MAX: i32 = HISTORY_MAX + CORRELATION_MAX * 2;
+pub const OVERALL_HISTORY_MAX: i32 = HISTORY_MAX + CONTHIST_MAX * 2;
 
 const CORRHIST_GRAIN: i32 = 256;
 const CORRHIST_MAX: i32 = 256 * 128;
@@ -17,6 +17,7 @@ const CORRHIST_MAX: i32 = 256 * 128;
 const MATE: i32 = INFINITY - MAX_DEPTH as i32;
 
 impl Thread<'_> {
+    const NUM_CONTHISTS: usize = 2;
     pub fn update_pv(&mut self, mv: Move) {
         let next_ply = self.ply + 1;
         self.pv[self.ply][self.ply] = mv;
@@ -25,47 +26,6 @@ impl Thread<'_> {
             //copy from next row in pv table
         }
         self.pv_length[self.ply] = self.pv_length[next_ply];
-    }
-
-    pub fn get_history(&self, mv: Move, pc: Piece) -> i32 {
-        let side = pc.colour();
-        let from = mv.square_from();
-        let to = mv.square_to();
-
-        let pc_sq = read_param!(HISTORY_PC_SQ_WEIGHT);
-        let sq_sq = read_param!(HISTORY_SQ_SQ_WEIGHT);
-
-        let s = pc_sq + sq_sq;
-
-        (pc_sq * self.info.piece_history[pc][to] + sq_sq * self.info.square_history[side][from][to]) / s
-    }
-
-    pub fn get_cmh(&self, mv: Move, b: &Board) -> i32 {
-        let sq = mv.square_to();
-        if self.ply > 0
-            && let Some(prev) = self.info.ss[self.ply - 1].square_moved_to
-        {
-            let side = b.side_to_move;
-            self.info.counter_correlation[side][prev][sq]
-        } else {
-            0
-        }
-    }
-
-    pub fn get_fmh(&self, mv: Move, b: &Board) -> i32 {
-        let sq = mv.square_to();
-        if self.ply > 1
-            && let Some(prev) = self.info.ss[self.ply - 2].square_moved_to
-        {
-            let side = b.side_to_move;
-            self.info.followup_correlation[side][prev][sq]
-        } else {
-            0
-        }
-    }
-
-    pub fn get_conthist(&self, mv: Move, b: &Board) -> i32 {
-        self.get_cmh(mv, b) + self.get_fmh(mv, b)
     }
 
     pub fn get_overall_history(&self, mv: Move, b: &Board, pc: Piece) -> i32 {
@@ -83,8 +43,7 @@ impl Thread<'_> {
         depth: u8,
     ) {
         self.update_history(b, quiets, tacticals, cutoff_move, tactical, depth);
-        self.update_counter_correlation(cutoff_move, depth, tactical, tacticals, quiets, b);
-        self.update_followup_correlation(cutoff_move, depth, tactical, tacticals, quiets, b);
+        self.update_conthist(cutoff_move, depth, tactical, tacticals, quiets, b);
         if can_be_killer {
             self.update_killer_moves(cutoff_move);
         }
@@ -94,57 +53,46 @@ impl Thread<'_> {
         self.info.killer_moves[self.ply] = Some(cutoff_move);
     }
 
-    pub fn update_followup_correlation(
-        &mut self,
-        cutoff_move: Move,
-        depth: u8,
-        tactical: bool,
-        tacticals: &[Move],
-        quiets: &[Move],
-        b: &Board,
-    ) {
-        if self.ply <= 1 {
-            return;
-        }
-        let bonus = (30 * depth as i32 - 20).clamp(-CORRELATION_MAX, CORRELATION_MAX);
+    pub fn get_history(&self, mv: Move, pc: Piece) -> i32 {
+        let side = pc.colour();
+        let from = mv.square_from();
+        let to = mv.square_to();
 
-        let update = |entry: &mut i32, mv: Move| {
-            let sign = if mv == cutoff_move { 1 } else { -1 };
-            let delta = (sign * bonus) - *entry * bonus / CORRELATION_MAX;
-            *entry += delta;
-        };
+        let pc_sq = read_param!(HISTORY_PC_SQ_WEIGHT);
+        let sq_sq = read_param!(HISTORY_SQ_SQ_WEIGHT);
 
-        let Some(prev) = self.info.ss[self.ply - 2].square_moved_to else {
-            return;
-        };
+        let s = pc_sq + sq_sq;
 
-        let side = b.side_to_move;
-
-        if tactical {
-            for &mv in tacticals {
-                let sq = mv.square_to();
-
-                let entry = &mut self.info.followup_correlation[side][prev][sq];
-                update(entry, mv);
-            }
-        } else {
-            for &mv in tacticals {
-                let sq = mv.square_to();
-
-                let entry = &mut self.info.followup_correlation[side][prev][sq];
-                update(entry, mv);
-            }
-
-            for &mv in quiets {
-                let sq = mv.square_to();
-
-                let entry = &mut self.info.followup_correlation[side][prev][sq];
-                update(entry, mv);
-            }
-        }
+        (pc_sq * self.info.piece_history[pc][to] + sq_sq * self.info.square_history[side][from][to]) / s
     }
 
-    pub fn update_counter_correlation(
+    pub fn get_conthist(&self, mv: Move, b: &Board) -> i32 {
+        let tables = [&self.info.conthist_1ply, &self.info.conthist_2ply];
+        let back = [1, 2];
+
+        let sq = mv.square_to();
+        let pc = mv.piece_moved(b);
+
+        let mut r = 0;
+
+        for i in 0..Self::NUM_CONTHISTS {
+            if self.ply < back[i] {
+                break;
+            }
+
+            let Some(old_sq) = self.info.ss[self.ply - back[i]].square_moved_to else {
+                break;
+            };
+
+            let old_pc = self.info.ss[self.ply - back[i]].piece_moved.unwrap();
+
+            r += tables[i][old_pc][old_sq][pc][sq];
+        }
+
+        r
+    }
+
+    pub fn update_conthist(
         &mut self,
         cutoff_move: Move,
         depth: u8,
@@ -153,52 +101,48 @@ impl Thread<'_> {
         quiets: &[Move],
         b: &Board,
     ) {
-        if self.ply == 0 {
-            return;
-        }
-        let bonus = (100 * depth as i32 - 50).clamp(-CORRELATION_MAX, CORRELATION_MAX);
+        let tables = [&mut self.info.conthist_1ply, &mut self.info.conthist_2ply];
+        let back = [1, 2];
+        let mult = [100, 50];
 
-        let update = |entry: &mut i32, mv: Move| {
+        let update = |entry: &mut i32, mv: Move, bonus: i32| {
             let sign = if mv == cutoff_move { 1 } else { -1 };
-            let delta = (sign * bonus) - *entry * bonus / CORRELATION_MAX;
+            let delta = (sign * bonus) - *entry * bonus.abs() / CONTHIST_MAX;
             *entry += delta;
         };
 
-        let Some(prev) = self.info.ss[self.ply - 1].square_moved_to else {
-            return;
-        };
+        for i in 0..Self::NUM_CONTHISTS {
+            if self.ply < back[i] {
+                break;
+            }
 
-        if !tactical {
-            let Some(pc) = self.info.ss[self.ply - 1].piece_moved else {
-                return;
+            let bonus = (mult[i] * depth as i32 - mult[i] / 2).clamp(-CONTHIST_MAX, CONTHIST_MAX);
+
+            let Some(old_sq) = self.info.ss[self.ply - back[i]].square_moved_to else {
+                break;
             };
+            let old_pc = self.info.ss[self.ply - back[i]].piece_moved.unwrap();
 
-            self.info.counter_moves[pc][prev] = Some(cutoff_move);
-        }
-
-        let side = b.side_to_move;
-
-        if tactical {
-            for &mv in tacticals {
-                let sq = mv.square_to();
-
-                let entry = &mut self.info.counter_correlation[side][prev][sq];
-                update(entry, mv);
-            }
-        } else {
-            for &mv in tacticals {
-                let sq = mv.square_to();
-
-                let entry = &mut self.info.counter_correlation[side][prev][sq];
-                update(entry, mv);
+            if back[i] == 1 && !tactical {
+                self.info.counter_moves[old_pc][old_sq] = Some(cutoff_move);
             }
 
-            for &mv in quiets {
+            for &mv in tacticals {
                 let sq = mv.square_to();
+                let pc = mv.piece_moved(b);
 
-                let entry = &mut self.info.counter_correlation[side][prev][sq];
+                let entry = &mut tables[i][old_pc][old_sq][pc][sq];
+                update(entry, mv, bonus);
+            }
 
-                update(entry, mv);
+            if !tactical {
+                for &mv in quiets {
+                    let sq = mv.square_to();
+                    let pc = mv.piece_moved(b);
+
+                    let entry = &mut tables[i][old_pc][old_sq][pc][sq];
+                    update(entry, mv, bonus);
+                }
             }
         }
     }
@@ -212,31 +156,29 @@ impl Thread<'_> {
         tactical: bool,
         depth: u8,
     ) {
-        const SHM: i32 = HISTORY_MAX / 2; // max for history entry in a single table
-
-        let bonus = (150 * depth as i32 - 125).clamp(-SHM, SHM);
+        let bonus = (150 * depth as i32 - 125).clamp(-HISTORY_MAX, HISTORY_MAX);
         //penalise all moves that have been checked and have not caused beta cutoff
 
         let update = |entry: &mut i32, mv: Move| {
             let sign = if mv == cutoff_move { 1 } else { -1 };
-            let delta = (sign * bonus) - *entry * bonus / SHM;
+            let delta = (sign * bonus) - *entry * bonus.abs() / HISTORY_MAX;
             *entry += delta;
         };
 
-        if tactical {
-            // penalise all captures that failed to cause cutoff
-            for &mv in tacticals {
-                if !mv.is_capture(b) {
-                    continue;
-                }
-                let piece = mv.piece_moved(b);
-                let to = mv.square_to();
-                let captured = piece_type(mv.piece_captured(b));
-
-                let entry = &mut self.info.caphist[piece][to][captured];
-                update(entry, mv);
+        // penalise all captures that failed to cause cutoff
+        for &mv in tacticals {
+            if !mv.is_capture(b) {
+                continue;
             }
-        } else {
+            let piece = mv.piece_moved(b);
+            let to = mv.square_to();
+            let captured = piece_type(mv.piece_captured(b));
+
+            let entry = &mut self.info.caphist[piece][to][captured];
+            update(entry, mv);
+        }
+
+        if !tactical {
             // penalise all moves quiets that failed to cause cutoff
             for &mv in quiets {
                 let piece = mv.piece_moved(b);
@@ -249,17 +191,6 @@ impl Thread<'_> {
                 let side = b.side_to_move;
 
                 let entry = &mut self.info.square_history[side][from][to];
-                update(entry, mv);
-            }
-
-            for &mv in tacticals {
-                if !mv.is_capture(b) {
-                    continue;
-                }
-                let piece = mv.piece_moved(b);
-                let to = mv.square_to();
-                let captured = piece_type(mv.piece_captured(b));
-                let entry = &mut self.info.caphist[piece][to][captured];
                 update(entry, mv);
             }
         }
