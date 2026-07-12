@@ -8,21 +8,22 @@ Panda is a chess engine written in Rust (still a work in progress). I like worki
 ## Stats
 |                           Version                            |     Release Date    | [CCRL 40/15](https://www.computerchess.org.uk/ccrl/4040/) | [CCRL Blitz](https://computerchess.org.uk/ccrl/404/) | Notes |
 | :-----------------------------------------------------------:|:-------------------:|:---------:|:----:|:---------------------------:|
+| [2.0](https://github.com/all-c-a-p-s/Panda/releases/tag/1.2) |  12th     July 2026 | 3450 (est.) |  | New Net + Big Move Ordering Improvements  |
 | [1.2](https://github.com/all-c-a-p-s/Panda/releases/tag/1.2) |  10th     June 2026 | 3338      |  3397   | Search Improvements + New Net  |
 | [1.1](https://github.com/all-c-a-p-s/Panda/releases/tag/1.1) |  5th    August 2025 | 3227      |  -   | Major Search Improvements   |
 | [1.0](https://github.com/all-c-a-p-s/Panda/releases/tag/1.0) |  20th    April 2025 | 3134      |  -   |       First Release         |
 
 
 ## What Makes Panda Interesting?
-Panda definitely isn't anything revolutionary but its code contains some good ideas and some original ideas. Hopefully, it even includes some ideas which fall into both of those categories.
+Panda definitely isn't anything revolutionary but its code contains some good ideas and some original ideas. Hopefully, it even includes some ideas which fall into both of those categories :).
 
-In particular, two major original ideas which Panda uses:
+In particular, here are a few original ideas which Panda uses:
+- a unique system to predict whether a given node will be a cut- of all-node: rather than a binary prediction variable, Panda uses a `temperature` parameter in `[-1024, 1024]`. This parameter can be updated based on various things we find out about the node, and used to make decisions about which pruning.
 - internal aspiration windows (aspiration windows inside the recursive alpha-beta search)
+- feature-specific history tables using corrhist indices. As far as I know, some engines do use "pawn structure buckets" for history, but no engine uses this approach.
 - custom datagen method which uses hindsight to re-evaluate positions from the game.
 
-As far as I know, these techniques are completely unique to this engine.
-
-There are also many smaller ideas which (as far as I'm aware) are new, such as Panda's razoring approach and some of Panda's move ordering heuristics.
+There are also many smaller original ideas/implementations in Panda's code.
 
 By far the most exciting game I've seen it play is [this one](https://www.chess.com/analysis/library/22UV4Zu2Bg), played by a pre-1.0 version of Panda against a really cool MCTS engine called [Javelin](https://github.com/TomaszJaworski777/Javelin).
 
@@ -30,7 +31,7 @@ By far the most exciting game I've seen it play is [this one](https://www.chess.
 - UCI compliant (no GUI)
 - magic bitboard move generation
 - Alpha-Beta search with various enhancements
-- NNUE with architecture `(768->384)x2 -> 1`, trained on self-play
+- NNUE with architecture `(768->512)x2 -> 1x8`, trained on self-play
 - custom datagen method
 
 
