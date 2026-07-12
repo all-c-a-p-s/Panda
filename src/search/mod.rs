@@ -842,7 +842,9 @@ impl Thread<'_> {
                     inc_stat!(beta_cutoffs);
                     let can_be_killer = movepicker.this > MovePickerStage::GoodCaps;
 
-                    let hist_depth = depth + (static_eval <= alpha - 20) as u8;
+                    let mut hist_depth = depth + (!in_check && static_eval <= alpha - 20) as u8;
+                    hist_depth += depth + (!in_check && static_eval <= alpha - 80) as u8;
+
                     self.update_search_tables(position, &quiets, &caps, mv, tactical, can_be_killer, hist_depth);
 
                     hash_flag = EntryFlag::LowerBound;
