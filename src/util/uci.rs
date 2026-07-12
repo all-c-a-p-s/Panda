@@ -263,6 +263,12 @@ pub fn parse_go(
 
             return s.start_search(position, 0, 0, 0, &limits, opts.threads);
         }
+        "infinite" => {
+            let mut s = Searcher::new(tt, info);
+            let limits = Limits::infinite();
+
+            return s.start_search(position, 0, 0, 0, &limits, opts.threads);
+        }
         // otherwise we're in the regular case which looks something like
         // go wtime x btime x winc x binc x movestogo x
         // which we handle below

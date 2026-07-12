@@ -317,9 +317,11 @@ pub struct Limits {
     pub max_depth: Option<u8>,
 }
 
+const MAX_MOVE_TIME: usize = 24 * 60 * 60 * 1000;
+
 impl Limits {
     pub fn depth_only(d: u8) -> Self {
-        Self { max_nodes: None, max_time: Some(INFINITY as usize), max_depth: Some(d) }
+        Self { max_nodes: None, max_time: Some(MAX_MOVE_TIME as usize), max_depth: Some(d) }
     }
 
     pub fn time_only(time: usize) -> Self {
@@ -327,11 +329,15 @@ impl Limits {
     }
 
     pub fn nodes_only(nodes: usize) -> Self {
-        Self { max_nodes: Some(nodes), max_time: Some(INFINITY as usize), max_depth: None }
+        Self { max_nodes: Some(nodes), max_time: Some(MAX_MOVE_TIME as usize), max_depth: None }
     }
 
     pub fn time_and_nodes(time: usize, nodes: usize) -> Self {
         Self { max_nodes: Some(nodes), max_time: Some(time), max_depth: None }
+    }
+
+    pub fn infinite() -> Self {
+        Self { max_nodes: None, max_time: Some(MAX_MOVE_TIME as usize), max_depth: None }
     }
 }
 
