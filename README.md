@@ -8,7 +8,7 @@ Panda is a chess engine written in Rust (still a work in progress). I like worki
 ## Stats
 |                           Version                            |     Release Date    | [CCRL 40/15](https://www.computerchess.org.uk/ccrl/4040/) | [CCRL Blitz](https://computerchess.org.uk/ccrl/404/) | Notes |
 | :-----------------------------------------------------------:|:-------------------:|:---------:|:----:|:---------------------------:|
-| [2.0](https://github.com/all-c-a-p-s/Panda/releases/tag/1.2) |  12th     July 2026 | 3450 (est.) |  | New Net + Big Move Ordering Improvements  |
+| [2.0](https://github.com/all-c-a-p-s/Panda/releases/tag/1.2) |  12th     July 2026 | 3443 | 3531 | New Net + Big Move Ordering Improvements  |
 | [1.2](https://github.com/all-c-a-p-s/Panda/releases/tag/1.2) |  10th     June 2026 | 3338      |  3397   | Search Improvements + New Net  |
 | [1.1](https://github.com/all-c-a-p-s/Panda/releases/tag/1.1) |  5th    August 2025 | 3227      |  -   | Major Search Improvements   |
 | [1.0](https://github.com/all-c-a-p-s/Panda/releases/tag/1.0) |  20th    April 2025 | 3134      |  -   |       First Release         |
